@@ -1,0 +1,16 @@
+# --- Security: Never upload your private keys ---
+.streamlit/secrets.toml
+.env
+*.env
+
+# --- Python Junk: Temporary files your computer makes ---
+__pycache__/
+*.pyc
+
+# --- Local Data: Prevent your personal test data from leaking ---
+data/*.json
+!data/market_intel.json  # (Optional: the '!' tells Git to upload this specific file anyway)
+
+# --- Operating System Junk ---
+.DS_Store
+Thumbs.db
