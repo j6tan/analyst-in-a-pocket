@@ -21,14 +21,15 @@ api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
 def create_plaid_link():
-    """Generates a Hosted Link URL for the user to login"""
+    # Using a dictionary for 'hosted_link' avoids 'ModuleNotFoundError' 
+    # for specific sub-models while achieving the same result.
     request = LinkTokenCreateRequest(
-        user=LinkTokenCreateRequestUser(client_user_id=st.session_state.get('user_id', 'user_123')),
+        user={'client_user_id': st.session_state.get('user_id', 'user_123')},
         client_name="Analyst in a Pocket",
-        products=[Products('liabilities')], # Focus on debt for affordability
+        products=[Products('liabilities')],
         country_codes=[CountryCode('CA')],
         language='en',
-        hosted_link=LinkTokenCreateRequestHostedLink(enabled=True)
+        hosted_link={'enabled': True} # Flexible dictionary approach
     )
     response = client.link_token_create(request)
     return response['hosted_link_url']
@@ -150,4 +151,5 @@ else:
     if os.path.exists(file_path):
 
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
