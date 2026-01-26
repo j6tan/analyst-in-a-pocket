@@ -11,38 +11,44 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
 def sync_plaid_data():
-    if 'current_link_token' not in st.session_state:
-        st.error("No active session found. Please click the connect button first.")
+    # 1. Check if we still have the link_token in memory
+    link_token = st.session_state.get('current_link_token')
+    if not link_token:
+        st.error("Session lost. Please click 'Connect Bank' again.")
         return
 
     try:
-        # 1. Get the session status to find the 'public_token'
-        get_request = LinkTokenGetRequest(link_token=st.session_state['current_link_token'])
+        # 2. Ask Plaid for the results of that session
+        get_request = LinkTokenGetRequest(link_token=link_token)
         get_response = client.link_token_get(get_request)
-        public_token = get_response['sessions'][0]['public_token']
-
-        # 2. Exchange for access_token and fetch debt
-        exchange_resp = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-        liabilities_resp = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange_resp['access_token']))
-
-        # 3. AUTO-MAPPING: Link Plaid data to your specific UI boxes
-        # Plaid Sandbox 'user_good' usually has a student loan and a credit card
-        liabilities = liabilities_resp['liabilities']
         
-        # Mapping Credit Card Minimum Payments
-        if liabilities.get('credit'):
-            total_cc = sum(cc.get('last_payment_amount', 0) for cc in liabilities['credit'])
-            st.session_state.user_profile['cc_pmt'] = float(total_cc)
+        # Hosted Link stores the public_token in the 'results' object
+        # We grab the first session ([0]) from the results
+        public_token = get_response['results']['item_add_results'][0]['public_token']
 
-        # Mapping Student/Car Loans
-        if liabilities.get('student'):
-            total_student = sum(s.get('last_payment_amount', 0) for s in liabilities['student'])
-            st.session_state.user_profile['student_loan'] = float(total_student)
+        # 3. Exchange for an Access Token
+        exchange_resp = client.item_public_token_exchange(
+            ItemPublicTokenExchangeRequest(public_token=public_token)
+        )
+        access_token = exchange_resp['access_token']
 
-        st.success("✅ Bank Data Synced Successfully!")
-        st.rerun() # Refresh the UI to show the new numbers in the boxes
+        # 4. Fetch the Debt Data
+        liabilities_resp = client.liabilities_get(
+            LiabilitiesGetRequest(access_token=access_token)
+        )
+        
+        # 5. MAPPING TO YOUR CALCULATOR
+        # Sandbox 'user_good' usually has a credit card with a $410 balance
+        # We will assume a 3% minimum payment for the calculation
+        credit_accounts = liabilities_resp['liabilities'].get('credit', [])
+        if credit_accounts:
+            total_bal = sum(acc['last_statement_balance'] for acc in credit_accounts)
+            st.session_state.user_profile['cc_pmt'] = round(total_bal * 0.03, 2)
+            
+        st.success("✅ Bank data fetched! Calculator updated.")
+        
     except Exception as e:
-        st.error(f"Sync failed: {e}")
+        st.error(f"Sync Error: {e}")
 
 # --- 1. INITIALIZE PLAID CLIENT ---
 configuration = plaid.Configuration(
@@ -193,6 +199,7 @@ else:
 if st.button("🔄 Pull Data from Bank"):
     sync_plaid_data()
     st.rerun() # Refresh the page to show the new numbers
+
 
 
 
