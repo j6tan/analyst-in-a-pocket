@@ -1,6 +1,37 @@
 import streamlit as st
 import json
 import os
+import plaid
+from plaid.api import plaid_api
+from plaid.model.link_token_create_request import LinkTokenCreateRequest
+from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
+from plaid.model.products import Products
+from plaid.model.country_code import CountryCode
+from plaid.model.link_token_create_request_hosted_link import LinkTokenCreateRequestHostedLink
+
+# --- 1. INITIALIZE PLAID CLIENT ---
+configuration = plaid.Configuration(
+    host=plaid.Environment.Sandbox,
+    api_key={
+        'clientId': st.secrets["PLAID_CLIENT_ID"],
+        'secret': st.secrets["PLAID_SECRET"],
+    }
+)
+api_client = plaid.ApiClient(configuration)
+client = plaid_api.PlaidApi(api_client)
+
+def create_plaid_link():
+    """Generates a Hosted Link URL for the user to login"""
+    request = LinkTokenCreateRequest(
+        user=LinkTokenCreateRequestUser(client_user_id=st.session_state.get('user_id', 'user_123')),
+        client_name="Analyst in a Pocket",
+        products=[Products('liabilities')], # Focus on debt for affordability
+        country_codes=[CountryCode('CA')],
+        language='en',
+        hosted_link=LinkTokenCreateRequestHostedLink(enabled=True)
+    )
+    response = client.link_token_create(request)
+    return response['hosted_link_url']
 
 # --- 1. GLOBAL CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -90,6 +121,16 @@ if selection == "👤 Client Profile":
 
     st.divider()
     st.subheader("💳 Monthly Liabilities")
+    # --- PLAID INTEGRATION BUTTON ---
+if st.button("🔗 Auto-Sync Liabilities via Bank"):
+    try:
+        link_url = create_plaid_link()
+        st.success("Link Generated!")
+        st.markdown(f"### [Click here to Securely Connect Bank]({link_url})")
+        st.info("After connecting, Plaid will provide your debt data automatically.")
+    except Exception as e:
+        st.error(f"Plaid Error: {e}")
+
     l1, l2, l3 = st.columns(3)
     with l1:
         st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile['car_loan']))
@@ -109,3 +150,4 @@ else:
     if os.path.exists(file_path):
 
         exec(open(file_path, encoding="utf-8").read(), globals())
+
