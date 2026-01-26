@@ -11,57 +11,58 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
 def sync_plaid_data():
-    # 1. Check if we still have the link_token in memory
     link_token = st.session_state.get('current_link_token')
     if not link_token:
         st.error("Session lost. Please click 'Connect Bank' again.")
         return
 
     try:
-        # 2. Ask Plaid for the results of that session
         get_request = LinkTokenGetRequest(link_token=link_token)
         get_response = client.link_token_get(get_request)
-        
-        # --- THE FIX: Convert object to dictionary to find the token ---
         res_dict = get_response.to_dict()
+        
+        # --- IMPROVED SEARCH LOGIC ---
+        public_token = None
+        
+        # Check Place 1: item_add_results
         results = res_dict.get('results', {})
         item_add_results = results.get('item_add_results', [])
         
-        if not item_add_results:
-            st.warning("Plaid session found, but no bank was linked yet.")
+        if item_add_results:
+            public_token = item_add_results[0]['public_token']
+        else:
+            # Check Place 2: the sessions list (backup)
+            sessions = res_dict.get('sessions', [])
+            if sessions and 'public_token' in sessions[0]:
+                public_token = sessions[0]['public_token']
+
+        if not public_token:
+            st.warning("Plaid didn't return a bank connection. Did you reach the 'Success' screen?")
             return
+        # --- END IMPROVED SEARCH ---
 
-        public_token = item_add_results[0]['public_token']
-
-        # 3. Exchange for an Access Token
         exchange_resp = client.item_public_token_exchange(
             ItemPublicTokenExchangeRequest(public_token=public_token)
         )
         access_token = exchange_resp['access_token']
 
-        # 4. Fetch the Debt Data
         liabilities_resp = client.liabilities_get(
             LiabilitiesGetRequest(access_token=access_token)
         )
         liab_dict = liabilities_resp.to_dict()
-        
-        # 5. MAPPING TO YOUR CALCULATOR
         debts = liab_dict.get('liabilities', {})
         
-        # Mapping Sandbox 'user_good' Credit Card data
-        credit_accounts = debts.get('credit', [])
-        if credit_accounts:
-            total_bal = sum(acc.get('last_statement_balance', 0) for acc in credit_accounts)
+        # Update your profile variables
+        if debts.get('credit'):
+            total_bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
             st.session_state.user_profile['cc_pmt'] = round(total_bal * 0.03, 2)
             
-        # Mapping Sandbox Student Loans
-        student_loans = debts.get('student', [])
-        if student_loans:
-            total_pmt = sum(s.get('last_payment_amount', 0) for s in student_loans)
+        if debts.get('student'):
+            total_pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
             st.session_state.user_profile['student_loan'] = float(total_pmt)
 
-        st.success("✅ Bank data fetched! Calculator updated.")
-        st.rerun() # Refresh page to show the numbers
+        st.success("✅ Bank data fetched!")
+        st.rerun() 
         
     except Exception as e:
         st.error(f"Sync Error: {e}")
@@ -209,3 +210,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
