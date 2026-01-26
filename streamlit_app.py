@@ -56,12 +56,20 @@ api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
 def create_plaid_link():
-    # ... existing request code ...
-    response = client.link_token_create(request)
+    # 1. You MUST define 'request' here first!
+    plaid_request = LinkTokenCreateRequest(
+        user={'client_user_id': st.session_state.get('user_id', 'user_123')},
+        client_name="Analyst in a Pocket",
+        products=[Products('liabilities')],
+        country_codes=[CountryCode('CA')],
+        language='en',
+        hosted_link={} 
+    )
     
-    # CRITICAL: Save this token so the Pull button can find it later
+    # 2. Now 'request' is defined and can be passed to the client
+    response = client.link_token_create(plaid_request)
+    
     st.session_state['current_link_token'] = response['link_token']
-    
     return response['hosted_link_url']
 
 # --- 1. GLOBAL CONFIG ---
@@ -185,6 +193,7 @@ else:
 if st.button("🔄 Pull Data from Bank"):
     sync_plaid_data()
     st.rerun() # Refresh the page to show the new numbers
+
 
 
 
