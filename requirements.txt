@@ -3,5 +3,6 @@ pandas
 plotly
 numpy
 numpy-financial
-plaid-python
+plaid-python>=38.0.0
 requests
+
