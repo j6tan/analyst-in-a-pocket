@@ -10,32 +10,31 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
+# --- SESSION PERSISTENCE FIX ---
+if 'current_link_token' not in st.session_state:
+    st.session_state['current_link_token'] = None
+
 def sync_plaid_data():
     # 1. Check if the token exists
     link_token = st.session_state.get('current_link_token')
     
     if not link_token:
-        st.error("No Link Token found in memory. You may need to click 'Connect Bank' again.")
+        st.error("No Link Token found. Please click 'Connect Bank' again.")
         return
 
     try:
         # 2. Get the session status
         get_request = LinkTokenGetRequest(link_token=link_token)
         get_response = client.link_token_get(get_request)
-        
-        # Convert to dictionary immediately for easier reading
         res = get_response.to_dict()
-        
-        # DEBUG: This will show you exactly what is happening under the hood
-        # st.write("Debug Info:", res) 
 
         public_token = None
         
-        # Look for the public token in the most common place
+        # Priority 1: Check results for public_token
         if 'results' in res and res['results'].get('item_add_results'):
             public_token = res['results']['item_add_results'][0].get('public_token')
         
-        # Backup: Look in the session history
+        # Priority 2: Check session history if results aren't ready yet
         if not public_token and res.get('sessions'):
             for s in res['sessions']:
                 if s.get('status') == 'success' and s.get('public_token'):
@@ -43,9 +42,8 @@ def sync_plaid_data():
                     break
 
         if not public_token:
-            # Check the actual status of the link
-            current_status = res.get('status', 'not_started')
-            st.warning(f"Handshake failed. Plaid says: {current_status}. Ensure you clicked 'Continue' after Success.")
+            status = res.get('status', 'not_started')
+            st.warning(f"Handshake failed. Status: {status}. (Please ensure you completed the Plaid login fully)")
             return
 
         # 3. Exchange and Fetch
@@ -59,18 +57,20 @@ def sync_plaid_data():
         )
         liab_data = liabilities_resp.to_dict()
         
-        # 4. Map to your variables
+        # 4. Map to your user_profile variables
         debts = liab_data.get('liabilities', {})
+        
+        # Credit Card Mapping
         if debts.get('credit'):
-            # Sandbox usually returns around $410
             cc_balance = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
             st.session_state.user_profile['cc_pmt'] = round(cc_balance * 0.03, 2)
         
+        # Student Loan Mapping
         if debts.get('student'):
             student_pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
             st.session_state.user_profile['student_loan'] = float(student_pmt)
 
-        st.success("✅ Success! Your bank data has been pulled.")
+        st.success("✅ Bank data synced!")
         st.rerun()
 
     except Exception as e:
@@ -219,6 +219,3 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
-
-
-
