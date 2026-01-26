@@ -10,73 +10,12 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- SESSION PERSISTENCE FIX ---
+# --- 1. SESSION PERSISTENCE FIX ---
+# This ensures the token survives even if the app refreshes
 if 'current_link_token' not in st.session_state:
     st.session_state['current_link_token'] = None
 
-def sync_plaid_data():
-    # 1. Check if the token exists
-    link_token = st.session_state.get('current_link_token')
-    
-    if not link_token:
-        st.error("No Link Token found. Please click 'Connect Bank' again.")
-        return
-
-    try:
-        # 2. Get the session status
-        get_request = LinkTokenGetRequest(link_token=link_token)
-        get_response = client.link_token_get(get_request)
-        res = get_response.to_dict()
-
-        public_token = None
-        
-        # Priority 1: Check results for public_token
-        if 'results' in res and res['results'].get('item_add_results'):
-            public_token = res['results']['item_add_results'][0].get('public_token')
-        
-        # Priority 2: Check session history if results aren't ready yet
-        if not public_token and res.get('sessions'):
-            for s in res['sessions']:
-                if s.get('status') == 'success' and s.get('public_token'):
-                    public_token = s['public_token']
-                    break
-
-        if not public_token:
-            status = res.get('status', 'not_started')
-            st.warning(f"Handshake failed. Status: {status}. (Please ensure you completed the Plaid login fully)")
-            return
-
-        # 3. Exchange and Fetch
-        exchange_resp = client.item_public_token_exchange(
-            ItemPublicTokenExchangeRequest(public_token=public_token)
-        )
-        access_token = exchange_resp['access_token']
-
-        liabilities_resp = client.liabilities_get(
-            LiabilitiesGetRequest(access_token=access_token)
-        )
-        liab_data = liabilities_resp.to_dict()
-        
-        # 4. Map to your user_profile variables
-        debts = liab_data.get('liabilities', {})
-        
-        # Credit Card Mapping
-        if debts.get('credit'):
-            cc_balance = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-            st.session_state.user_profile['cc_pmt'] = round(cc_balance * 0.03, 2)
-        
-        # Student Loan Mapping
-        if debts.get('student'):
-            student_pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-            st.session_state.user_profile['student_loan'] = float(student_pmt)
-
-        st.success("✅ Bank data synced!")
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Handshake Error: {e}")
-
-# --- 1. INITIALIZE PLAID CLIENT ---
+# --- 2. INITIALIZE PLAID CLIENT ---
 configuration = plaid.Configuration(
     host=plaid.Environment.Sandbox,
     api_key={
@@ -87,9 +26,11 @@ configuration = plaid.Configuration(
 api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
+# --- 3. HELPER FUNCTIONS ---
 def create_plaid_link():
+    # Create a fresh link token
     plaid_request = LinkTokenCreateRequest(
-        user={'client_user_id': st.session_state.get('user_id', 'user_123')},
+        user={'client_user_id': 'user_123'},
         client_name="Analyst in a Pocket",
         products=[Products('liabilities')],
         country_codes=[CountryCode('CA')],
@@ -98,13 +39,84 @@ def create_plaid_link():
     )
     
     response = client.link_token_create(plaid_request)
+    
+    # CRITICAL FIX: Save the token immediately to session state
     st.session_state['current_link_token'] = response['link_token']
+    
     return response['hosted_link_url']
 
-# --- 1. GLOBAL CONFIG ---
+def sync_plaid_data():
+    # 1. Retrieve the token we saved earlier
+    link_token = st.session_state.get('current_link_token')
+    
+    if not link_token:
+        st.error("No active session. Please click 'Connect Bank' to start a new one.")
+        return
+
+    try:
+        # 2. Ask Plaid for the session status
+        get_request = LinkTokenGetRequest(link_token=link_token)
+        get_response = client.link_token_get(get_request)
+        res = get_response.to_dict()
+
+        public_token = None
+        
+        # --- DEEP SEARCH LOGIC (FIXED) ---
+        # Strategy A: Check 'item_add_results' (Immediate success)
+        results = res.get('results', {})
+        item_add = results.get('item_add_results', [])
+        if item_add:
+            public_token = item_add[0].get('public_token')
+        
+        # Strategy B: Check 'sessions' history (If user closed tab too fast)
+        if not public_token:
+            sessions = res.get('sessions', [])
+            for s in sessions:
+                # We look for ANY session that succeeded
+                if s.get('status') == 'success' and s.get('public_token'):
+                    public_token = s['public_token']
+                    break
+
+        # If we still don't have a token, the user hasn't finished the flow FOR THIS LINK
+        if not public_token:
+            status = res.get('status', 'unknown')
+            st.warning(f"Status: {status}. If you already logged in, you may have used an old link. Please click 'Connect Bank' again.")
+            return
+
+        # 3. Exchange Public Token for Access Token
+        exchange_resp = client.item_public_token_exchange(
+            ItemPublicTokenExchangeRequest(public_token=public_token)
+        )
+        access_token = exchange_resp['access_token']
+
+        # 4. Fetch Liabilities (Debt Data)
+        liabilities_resp = client.liabilities_get(
+            LiabilitiesGetRequest(access_token=access_token)
+        )
+        liab_data = liabilities_resp.to_dict()
+        debts = liab_data.get('liabilities', {})
+        
+        # 5. Map to your App Variables
+        
+        # Credit Cards (Sandbox usually returns ~$400-500 balance)
+        if debts.get('credit'):
+            cc_balance = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+            st.session_state.user_profile['cc_pmt'] = round(cc_balance * 0.03, 2) # Assume 3% min payment
+        
+        # Student Loans
+        if debts.get('student'):
+            student_pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+            st.session_state.user_profile['student_loan'] = float(student_pmt)
+
+        st.success("✅ Data Successfully Pulled!")
+        st.rerun()
+
+    except Exception as e:
+        st.error(f"Sync Error: {e}")
+
+# --- 4. GLOBAL CONFIG & STATE ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
-# --- 2. INITIALIZE GLOBAL VAULT ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -117,7 +129,7 @@ if 'user_profile' not in st.session_state:
         "heat_pmt": 125.0 
     }
 
-# --- 3. NAVIGATION ---
+# --- 5. NAVIGATION ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
@@ -130,7 +142,7 @@ tools = {
 }
 selection = st.sidebar.radio("Go to", list(tools.keys()))
 
-# --- 4. PROFILE PAGE ---
+# --- 6. PROFILE PAGE UI ---
 if selection == "👤 Client Profile":
     header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
     with header_col1:
@@ -191,12 +203,16 @@ if selection == "👤 Client Profile":
     # --- PLAID BUTTONS ---
     col_plaid1, col_plaid2 = st.columns(2)
     with col_plaid1:
+        # Note: Every time you click this, it creates a NEW link token.
+        # You must use the NEW link it generates, or the "Pull Data" button won't work.
         if st.button("🔗 1. Connect Bank"):
             try:
                 link_url = create_plaid_link()
-                st.markdown(f"### [Click here to Login]({link_url})")
+                st.markdown(f"**Click below to login:**\n\n[👉 **OPEN BANK LOGIN**]({link_url})")
+                st.info("After you see 'Success' in the bank window, close it and click 'Pull Data'.")
             except Exception as e:
                 st.error(f"Plaid Error: {e}")
+                
     with col_plaid2:
         if st.button("🔄 2. Pull Data"):
             sync_plaid_data()
