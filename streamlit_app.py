@@ -6,8 +6,45 @@ from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
-# REMOVE THE LinkTokenCreateRequestHostedLink LINE COMPLETELY
+from plaid.model.link_token_get_request import LinkTokenGetRequest
+from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
+def sync_plaid_data():
+    """Exchanges the completed link token for real debt data"""
+    try:
+        # 1. Check if the session is finished
+        link_token = st.session_state.get('current_link_token')
+        get_request = LinkTokenGetRequest(link_token=link_token)
+        get_response = client.link_token_get(get_request)
+        
+        # 2. Extract the Public Token
+        public_token = get_response['sessions'][0]['public_token']
+        
+        # 3. Exchange for an Access Token (the permanent key)
+        exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
+        exchange_response = client.item_public_token_exchange(exchange_request)
+        access_token = exchange_response['access_token']
+        
+        # 4. Fetch the actual Liabilities (Debt)
+        liabilities_request = LiabilitiesGetRequest(access_token=access_token)
+        liabilities_response = client.liabilities_get(liabilities_request)
+        
+        # 5. Update your app's state with the fake Sandbox data
+        # We will sum up credit cards and loans for your calculator
+        debts = liabilities_response['liabilities']
+        
+        # Example: Summing up all monthly mortgage/loan payments
+        total_monthly_debt = 0
+        if debts.get('credit'):
+            for cc in debts['credit']:
+                total_monthly_debt += (cc.get('last_payment_amount') or 0)
+        
+        st.session_state.user_profile['car_loan'] = total_monthly_debt # Update your UI!
+        st.success("✅ Data Synced! Your monthly debt has been updated.")
+        
+    except Exception as e:
+        st.error(f"Sync failed: You might need to finish the Plaid flow first! Error: {e}")
 # --- 1. INITIALIZE PLAID CLIENT ---
 configuration = plaid.Configuration(
     host=plaid.Environment.Sandbox,
@@ -20,17 +57,19 @@ api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
 def create_plaid_link():
-    """Generates a Hosted Link URL using an empty dictionary for hosted_link."""
     request = LinkTokenCreateRequest(
         user={'client_user_id': st.session_state.get('user_id', 'user_123')},
         client_name="Analyst in a Pocket",
         products=[Products('liabilities')],
         country_codes=[CountryCode('CA')],
         language='en',
-        # FIX: Use an empty dictionary {} instead of {'enabled': True}
         hosted_link={} 
     )
     response = client.link_token_create(request)
+    
+    # NEW: Save the link_token so we can use it to fetch data later
+    st.session_state['current_link_token'] = response['link_token']
+    
     return response['hosted_link_url']
 
 # --- 1. GLOBAL CONFIG ---
@@ -151,6 +190,9 @@ else:
 
         exec(open(file_path, encoding="utf-8").read(), globals())
 
+if st.button("🔄 Pull Data from Bank"):
+    sync_plaid_data()
+    st.rerun() # Refresh the page to show the new numbers
 
 
 
