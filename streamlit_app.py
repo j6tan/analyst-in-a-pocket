@@ -20,15 +20,15 @@ api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
 def create_plaid_link():
-    """Generates a Hosted Link URL using a simple dictionary instead of a strict model."""
+    """Generates a Hosted Link URL using an empty dictionary for hosted_link."""
     request = LinkTokenCreateRequest(
         user={'client_user_id': st.session_state.get('user_id', 'user_123')},
         client_name="Analyst in a Pocket",
         products=[Products('liabilities')],
         country_codes=[CountryCode('CA')],
         language='en',
-        # By passing a dictionary {}, we bypass the need for the missing model!
-        hosted_link={'enabled': True} 
+        # FIX: Use an empty dictionary {} instead of {'enabled': True}
+        hosted_link={} 
     )
     response = client.link_token_create(request)
     return response['hosted_link_url']
@@ -150,6 +150,7 @@ else:
     if os.path.exists(file_path):
 
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
 
