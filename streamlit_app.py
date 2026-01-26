@@ -10,10 +10,11 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. SESSION PERSISTENCE FIX ---
-# This ensures the token survives even if the app refreshes
+# --- 1. SESSION STATE SETUP ---
 if 'current_link_token' not in st.session_state:
     st.session_state['current_link_token'] = None
+if 'plaid_step' not in st.session_state:
+    st.session_state['plaid_step'] = 'connect'  # Options: 'connect', 'link_ready'
 
 # --- 2. INITIALIZE PLAID CLIENT ---
 configuration = plaid.Configuration(
@@ -27,94 +28,98 @@ api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
 # --- 3. HELPER FUNCTIONS ---
-def create_plaid_link():
-    # Create a fresh link token
-    plaid_request = LinkTokenCreateRequest(
-        user={'client_user_id': 'user_123'},
-        client_name="Analyst in a Pocket",
-        products=[Products('liabilities')],
-        country_codes=[CountryCode('CA')],
-        language='en',
-        hosted_link={} 
-    )
-    
-    response = client.link_token_create(plaid_request)
-    
-    # CRITICAL FIX: Save the token immediately to session state
-    st.session_state['current_link_token'] = response['link_token']
-    
-    return response['hosted_link_url']
+def generate_new_link():
+    """Generates a fresh Link Token and locks the UI to this token."""
+    try:
+        request = LinkTokenCreateRequest(
+            user={'client_user_id': 'user_123'},
+            client_name="Analyst in a Pocket",
+            products=[Products('liabilities')],
+            country_codes=[CountryCode('CA')],
+            language='en',
+            hosted_link={} 
+        )
+        response = client.link_token_create(request)
+        
+        # SAVE TOKEN AND UPDATE STEP
+        st.session_state['current_link_token'] = response['link_token']
+        st.session_state['link_url'] = response['hosted_link_url']
+        st.session_state['plaid_step'] = 'link_ready'
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error creating link: {e}")
+
+def reset_plaid_flow():
+    """Resets the flow so user can try again."""
+    st.session_state['current_link_token'] = None
+    st.session_state['plaid_step'] = 'connect'
+    st.rerun()
 
 def sync_plaid_data():
-    # 1. Retrieve the token we saved earlier
-    link_token = st.session_state.get('current_link_token')
-    
-    if not link_token:
-        st.error("No active session. Please click 'Connect Bank' to start a new one.")
+    token = st.session_state.get('current_link_token')
+    if not token:
+        st.error("No token found. Please start over.")
+        reset_plaid_flow()
         return
 
     try:
-        # 2. Ask Plaid for the session status
-        get_request = LinkTokenGetRequest(link_token=link_token)
-        get_response = client.link_token_get(get_request)
-        res = get_response.to_dict()
+        # Get Session Details
+        request = LinkTokenGetRequest(link_token=token)
+        response = client.link_token_get(request)
+        res = response.to_dict()
 
+        # --- FIND THE PUBLIC TOKEN ---
         public_token = None
         
-        # --- DEEP SEARCH LOGIC (FIXED) ---
-        # Strategy A: Check 'item_add_results' (Immediate success)
-        results = res.get('results', {})
-        item_add = results.get('item_add_results', [])
-        if item_add:
-            public_token = item_add[0].get('public_token')
+        # Check 1: Completed Results
+        if res.get('results', {}).get('item_add_results'):
+            public_token = res['results']['item_add_results'][0].get('public_token')
         
-        # Strategy B: Check 'sessions' history (If user closed tab too fast)
-        if not public_token:
-            sessions = res.get('sessions', [])
-            for s in sessions:
-                # We look for ANY session that succeeded
+        # Check 2: Session History
+        last_status = "No Activity"
+        if not public_token and res.get('sessions'):
+            # Get the most recent session status for debugging
+            last_session = res['sessions'][-1]
+            last_status = last_session.get('status', 'unknown')
+            
+            for s in res['sessions']:
                 if s.get('status') == 'success' and s.get('public_token'):
                     public_token = s['public_token']
                     break
 
-        # If we still don't have a token, the user hasn't finished the flow FOR THIS LINK
         if not public_token:
-            status = res.get('status', 'unknown')
-            st.warning(f"Status: {status}. If you already logged in, you may have used an old link. Please click 'Connect Bank' again.")
+            st.warning(f"Connection incomplete. Last Status: '{last_status}'.")
+            st.info("Tip: You must reach the 'Success' screen in Plaid.")
             return
 
-        # 3. Exchange Public Token for Access Token
-        exchange_resp = client.item_public_token_exchange(
+        # --- EXCHANGE & FETCH ---
+        exchange = client.item_public_token_exchange(
             ItemPublicTokenExchangeRequest(public_token=public_token)
         )
-        access_token = exchange_resp['access_token']
+        access_token = exchange['access_token']
 
-        # 4. Fetch Liabilities (Debt Data)
-        liabilities_resp = client.liabilities_get(
-            LiabilitiesGetRequest(access_token=access_token)
-        )
-        liab_data = liabilities_resp.to_dict()
-        debts = liab_data.get('liabilities', {})
+        liab = client.liabilities_get(LiabilitiesGetRequest(access_token=access_token))
+        debts = liab.to_dict().get('liabilities', {})
         
-        # 5. Map to your App Variables
-        
-        # Credit Cards (Sandbox usually returns ~$400-500 balance)
+        # Credit Cards
         if debts.get('credit'):
-            cc_balance = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-            st.session_state.user_profile['cc_pmt'] = round(cc_balance * 0.03, 2) # Assume 3% min payment
+            bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+            st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
         
         # Student Loans
         if debts.get('student'):
-            student_pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-            st.session_state.user_profile['student_loan'] = float(student_pmt)
+            pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+            st.session_state.user_profile['student_loan'] = float(pmt)
 
-        st.success("✅ Data Successfully Pulled!")
+        st.success("✅ Bank Data Pulled Successfully!")
+        # Reset flow after success so they can do it again if needed
+        st.session_state['plaid_step'] = 'connect'
         st.rerun()
 
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 4. GLOBAL CONFIG & STATE ---
+# --- 4. CONFIG & GLOBAL VARS ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
 if 'user_profile' not in st.session_state:
@@ -142,21 +147,20 @@ tools = {
 }
 selection = st.sidebar.radio("Go to", list(tools.keys()))
 
-# --- 6. PROFILE PAGE UI ---
+# --- 6. PAGE UI ---
 if selection == "👤 Client Profile":
-    header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-    with header_col1:
-        if os.path.exists("logo.png"):
-            st.image("logo.png", width=140)
-    with header_col2:
+    h1, h2 = st.columns([1, 5], vertical_alignment="center")
+    with h1:
+        if os.path.exists("logo.png"): st.image("logo.png", width=140)
+    with h2:
         st.title("General Client Information")
 
     st.subheader("💾 Profile Management")
-    up_col1, up_col2 = st.columns(2)
-    with up_col1:
-        uploaded_file = st.file_uploader("Upload Existing Profile (JSON)", type=["json"])
-        if uploaded_file is not None:
-            st.session_state.user_profile.update(json.load(uploaded_file))
+    u1, u2 = st.columns(2)
+    with u1:
+        uf = st.file_uploader("Upload Existing Profile", type=["json"])
+        if uf:
+            st.session_state.user_profile.update(json.load(uf))
             st.success("Profile Loaded!")
 
     st.subheader("👥 Household Income Details")
@@ -181,18 +185,18 @@ if selection == "👤 Client Profile":
 
     st.divider()
     st.subheader("🏠 Housing & Property Details")
-    h_toggle, h_data = st.columns([1, 2])
-    with h_toggle:
+    h1, h2 = st.columns([1, 2])
+    with h1:
         st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
-    with h_data:
+    with h2:
         if st.session_state.user_profile['housing_status'] == "Renting":
             st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
         else:
-            sub_c1, sub_c2 = st.columns(2)
-            with sub_c1:
+            s1, s2 = st.columns(2)
+            with s1:
                 st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
                 st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
-            with sub_c2:
+            with s2:
                 st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
                 st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
                 st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
@@ -200,22 +204,31 @@ if selection == "👤 Client Profile":
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # --- PLAID BUTTONS ---
-    col_plaid1, col_plaid2 = st.columns(2)
-    with col_plaid1:
-        # Note: Every time you click this, it creates a NEW link token.
-        # You must use the NEW link it generates, or the "Pull Data" button won't work.
-        if st.button("🔗 1. Connect Bank"):
-            try:
-                link_url = create_plaid_link()
-                st.markdown(f"**Click below to login:**\n\n[👉 **OPEN BANK LOGIN**]({link_url})")
-                st.info("After you see 'Success' in the bank window, close it and click 'Pull Data'.")
-            except Exception as e:
-                st.error(f"Plaid Error: {e}")
-                
-    with col_plaid2:
-        if st.button("🔄 2. Pull Data"):
-            sync_plaid_data()
+    # --- PLAID UI SECTION (FIXED) ---
+    p_col1, p_col2 = st.columns(2)
+    
+    with p_col1:
+        # Step 1: Show Connect Button only if we haven't started yet
+        if st.session_state['plaid_step'] == 'connect':
+            if st.button("🔗 1. Connect Bank"):
+                generate_new_link()
+        
+        # Step 2: Show Link URL only if we are in 'link_ready' mode
+        elif st.session_state['plaid_step'] == 'link_ready':
+            url = st.session_state.get('link_url', '#')
+            st.success("Session Created!")
+            st.markdown(f"👉 **[CLICK HERE TO LOGIN]({url})**")
+            
+            # Allow user to reset if they messed up
+            if st.button("Cancel / Start Over"):
+                reset_plaid_flow()
+
+    with p_col2:
+        # Step 3: Pull Data Button (Always visible if a link exists)
+        if st.session_state['plaid_step'] == 'link_ready':
+            st.info("After you see 'Success' in the other tab, wait 5 seconds and click below:")
+            if st.button("🔄 2. Pull Data"):
+                sync_plaid_data()
 
     l1, l2, l3 = st.columns(3)
     with l1:
