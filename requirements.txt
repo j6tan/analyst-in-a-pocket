@@ -3,3 +3,5 @@ pandas
 plotly
 numpy
 numpy-financial
+plaid-python
+requests
