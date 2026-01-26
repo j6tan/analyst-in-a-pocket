@@ -11,40 +11,39 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
 def sync_plaid_data():
-    """Exchanges the completed link token for real debt data"""
+    if 'current_link_token' not in st.session_state:
+        st.error("No active session found. Please click the connect button first.")
+        return
+
     try:
-        # 1. Check if the session is finished
-        link_token = st.session_state.get('current_link_token')
-        get_request = LinkTokenGetRequest(link_token=link_token)
+        # 1. Get the session status to find the 'public_token'
+        get_request = LinkTokenGetRequest(link_token=st.session_state['current_link_token'])
         get_response = client.link_token_get(get_request)
-        
-        # 2. Extract the Public Token
         public_token = get_response['sessions'][0]['public_token']
+
+        # 2. Exchange for access_token and fetch debt
+        exchange_resp = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+        liabilities_resp = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange_resp['access_token']))
+
+        # 3. AUTO-MAPPING: Link Plaid data to your specific UI boxes
+        # Plaid Sandbox 'user_good' usually has a student loan and a credit card
+        liabilities = liabilities_resp['liabilities']
         
-        # 3. Exchange for an Access Token (the permanent key)
-        exchange_request = ItemPublicTokenExchangeRequest(public_token=public_token)
-        exchange_response = client.item_public_token_exchange(exchange_request)
-        access_token = exchange_response['access_token']
-        
-        # 4. Fetch the actual Liabilities (Debt)
-        liabilities_request = LiabilitiesGetRequest(access_token=access_token)
-        liabilities_response = client.liabilities_get(liabilities_request)
-        
-        # 5. Update your app's state with the fake Sandbox data
-        # We will sum up credit cards and loans for your calculator
-        debts = liabilities_response['liabilities']
-        
-        # Example: Summing up all monthly mortgage/loan payments
-        total_monthly_debt = 0
-        if debts.get('credit'):
-            for cc in debts['credit']:
-                total_monthly_debt += (cc.get('last_payment_amount') or 0)
-        
-        st.session_state.user_profile['car_loan'] = total_monthly_debt # Update your UI!
-        st.success("✅ Data Synced! Your monthly debt has been updated.")
-        
+        # Mapping Credit Card Minimum Payments
+        if liabilities.get('credit'):
+            total_cc = sum(cc.get('last_payment_amount', 0) for cc in liabilities['credit'])
+            st.session_state.user_profile['cc_pmt'] = float(total_cc)
+
+        # Mapping Student/Car Loans
+        if liabilities.get('student'):
+            total_student = sum(s.get('last_payment_amount', 0) for s in liabilities['student'])
+            st.session_state.user_profile['student_loan'] = float(total_student)
+
+        st.success("✅ Bank Data Synced Successfully!")
+        st.rerun() # Refresh the UI to show the new numbers in the boxes
     except Exception as e:
-        st.error(f"Sync failed: You might need to finish the Plaid flow first! Error: {e}")
+        st.error(f"Sync failed: {e}")
+
 # --- 1. INITIALIZE PLAID CLIENT ---
 configuration = plaid.Configuration(
     host=plaid.Environment.Sandbox,
@@ -57,17 +56,10 @@ api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
 def create_plaid_link():
-    request = LinkTokenCreateRequest(
-        user={'client_user_id': st.session_state.get('user_id', 'user_123')},
-        client_name="Analyst in a Pocket",
-        products=[Products('liabilities')],
-        country_codes=[CountryCode('CA')],
-        language='en',
-        hosted_link={} 
-    )
+    # ... existing request code ...
     response = client.link_token_create(request)
     
-    # NEW: Save the link_token so we can use it to fetch data later
+    # CRITICAL: Save this token so the Pull button can find it later
     st.session_state['current_link_token'] = response['link_token']
     
     return response['hosted_link_url']
@@ -193,6 +185,7 @@ else:
 if st.button("🔄 Pull Data from Bank"):
     sync_plaid_data()
     st.rerun() # Refresh the page to show the new numbers
+
 
 
 
