@@ -1,0 +1,24 @@
+{
+    "last_updated": "2026-01-18 16:30:29",
+    "rates": {
+        "boc_overnight": 2.25,
+        "bank_prime": 5.95,
+        "five_year_fixed_uninsured": 4.26
+    },
+    "provincial_yields": {
+        "Ontario": 4.5,
+        "BC": 3.8,
+        "Alberta": 6.8,
+        "Quebec": 5.2,
+        "Manitoba": 7.0,
+        "Saskatchewan": 7.4,
+        "Nova Scotia": 5.5,
+        "NB": 6.5,
+        "PEI": 6.1,
+        "NL": 6.2
+    },
+    "tax_thresholds": {
+        "on_ltt_rebate_max": 4000,
+        "bc_fthb_exemption": 835000
+    }
+}
