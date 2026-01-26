@@ -13,46 +13,53 @@ from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 def sync_plaid_data():
     link_token = st.session_state.get('current_link_token')
     if not link_token:
-        st.error("Session lost. Please click 'Connect Bank' again.")
+        st.error("No session found. Please click 'Connect Bank' again.")
         return
 
     try:
+        # 1. Get the session details
         get_request = LinkTokenGetRequest(link_token=link_token)
         get_response = client.link_token_get(get_request)
         res_dict = get_response.to_dict()
         
-        # --- IMPROVED SEARCH LOGIC ---
+        # --- NEW DEEP SEARCH LOGIC ---
         public_token = None
         
-        # Check Place 1: item_add_results
-        results = res_dict.get('results', {})
-        item_add_results = results.get('item_add_results', [])
+        # Check the 'results' block first
+        item_results = res_dict.get('results', {}).get('item_add_results', [])
+        if item_results:
+            public_token = item_results[0]['public_token']
         
-        if item_add_results:
-            public_token = item_add_results[0]['public_token']
-        else:
-            # Check Place 2: the sessions list (backup)
-            sessions = res_dict.get('sessions', [])
-            if sessions and 'public_token' in sessions[0]:
-                public_token = sessions[0]['public_token']
+        # If still nothing, check the 'sessions' history
+        if not public_token:
+            all_sessions = res_dict.get('sessions', [])
+            for sess in all_sessions:
+                # Look for any session that has a public token
+                if 'public_token' in sess and sess['public_token']:
+                    public_token = sess['public_token']
+                    break
 
         if not public_token:
-            st.warning("Plaid didn't return a bank connection. Did you reach the 'Success' screen?")
+            # DEBUG: Show the status so we know why it's failing
+            status = res_dict.get('status', 'unknown')
+            st.warning(f"Connection Pending. Plaid Status: {status}. (Try again in 5 seconds)")
             return
-        # --- END IMPROVED SEARCH ---
+        # --- END DEEP SEARCH ---
 
+        # 2. Exchange for Access Token
         exchange_resp = client.item_public_token_exchange(
             ItemPublicTokenExchangeRequest(public_token=public_token)
         )
         access_token = exchange_resp['access_token']
 
+        # 3. Fetch Liabilities
         liabilities_resp = client.liabilities_get(
             LiabilitiesGetRequest(access_token=access_token)
         )
         liab_dict = liabilities_resp.to_dict()
         debts = liab_dict.get('liabilities', {})
         
-        # Update your profile variables
+        # 4. Map to your UI
         if debts.get('credit'):
             total_bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
             st.session_state.user_profile['cc_pmt'] = round(total_bal * 0.03, 2)
@@ -61,7 +68,7 @@ def sync_plaid_data():
             total_pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
             st.session_state.user_profile['student_loan'] = float(total_pmt)
 
-        st.success("✅ Bank data fetched!")
+        st.success("✅ Bank data synced!")
         st.rerun() 
         
     except Exception as e:
@@ -210,4 +217,5 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
