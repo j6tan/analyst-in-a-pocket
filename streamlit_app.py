@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import uuid  # <--- NEW: Ensures every session is unique
 import plaid
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
@@ -10,11 +11,14 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. SESSION STATE SETUP ---
+# --- 1. SESSION STATE & DEBUG SETUP ---
 if 'current_link_token' not in st.session_state:
     st.session_state['current_link_token'] = None
 if 'plaid_step' not in st.session_state:
-    st.session_state['plaid_step'] = 'connect'  # Options: 'connect', 'link_ready'
+    st.session_state['plaid_step'] = 'connect'
+if 'unique_user_id' not in st.session_state:
+    # Generate a random ID so Plaid treats this as a fresh user every time
+    st.session_state['unique_user_id'] = str(uuid.uuid4())
 
 # --- 2. INITIALIZE PLAID CLIENT ---
 configuration = plaid.Configuration(
@@ -29,10 +33,13 @@ client = plaid_api.PlaidApi(api_client)
 
 # --- 3. HELPER FUNCTIONS ---
 def generate_new_link():
-    """Generates a fresh Link Token and locks the UI to this token."""
+    """Generates a fresh Link Token and locks the UI."""
     try:
+        # Create a randomized user ID for this specific attempt
+        user_id = st.session_state['unique_user_id']
+        
         request = LinkTokenCreateRequest(
-            user={'client_user_id': 'user_123'},
+            user={'client_user_id': user_id},
             client_name="Analyst in a Pocket",
             products=[Products('liabilities')],
             country_codes=[CountryCode('CA')],
@@ -41,24 +48,26 @@ def generate_new_link():
         )
         response = client.link_token_create(request)
         
-        # SAVE TOKEN AND UPDATE STEP
+        # LOCK THE TOKEN
         st.session_state['current_link_token'] = response['link_token']
         st.session_state['link_url'] = response['hosted_link_url']
         st.session_state['plaid_step'] = 'link_ready'
         st.rerun()
+        
     except Exception as e:
         st.error(f"Error creating link: {e}")
 
 def reset_plaid_flow():
-    """Resets the flow so user can try again."""
+    """Resets the flow."""
     st.session_state['current_link_token'] = None
     st.session_state['plaid_step'] = 'connect'
     st.rerun()
 
 def sync_plaid_data():
     token = st.session_state.get('current_link_token')
+    
     if not token:
-        st.error("No token found. Please start over.")
+        st.error("CRITICAL ERROR: Token lost. The app refreshed and lost memory.")
         reset_plaid_flow()
         return
 
@@ -68,28 +77,34 @@ def sync_plaid_data():
         response = client.link_token_get(request)
         res = response.to_dict()
 
+        # --- DEBUGGER: SHOW ME THE DATA ---
+        # If this fails, we will see EXACTLY what Plaid sent back
+        with st.expander("🕵️ Debug: Raw Plaid Response", expanded=False):
+            st.json(res)
+
         # --- FIND THE PUBLIC TOKEN ---
         public_token = None
         
-        # Check 1: Completed Results
+        # Check 1: The Results Object (Primary)
         if res.get('results', {}).get('item_add_results'):
             public_token = res['results']['item_add_results'][0].get('public_token')
         
-        # Check 2: Session History
-        last_status = "No Activity"
+        # Check 2: Session History (Backup)
         if not public_token and res.get('sessions'):
-            # Get the most recent session status for debugging
-            last_session = res['sessions'][-1]
-            last_status = last_session.get('status', 'unknown')
-            
             for s in res['sessions']:
                 if s.get('status') == 'success' and s.get('public_token'):
                     public_token = s['public_token']
                     break
 
         if not public_token:
-            st.warning(f"Connection incomplete. Last Status: '{last_status}'.")
-            st.info("Tip: You must reach the 'Success' screen in Plaid.")
+            # Check if sessions is empty
+            sessions_list = res.get('sessions', [])
+            if not sessions_list:
+                st.error("⚠️ No Activity Found. This means the Link Token currently in memory was NEVER used.")
+                st.write(f"Token in Memory: `{token[-10:]}`... (Is this the one you clicked?)")
+            else:
+                last_status = sessions_list[-1].get('status')
+                st.warning(f"Connection Incomplete. Last Status: {last_status}")
             return
 
         # --- EXCHANGE & FETCH ---
@@ -101,19 +116,17 @@ def sync_plaid_data():
         liab = client.liabilities_get(LiabilitiesGetRequest(access_token=access_token))
         debts = liab.to_dict().get('liabilities', {})
         
-        # Credit Cards
+        # Update Profile
         if debts.get('credit'):
             bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
             st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
         
-        # Student Loans
         if debts.get('student'):
             pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
             st.session_state.user_profile['student_loan'] = float(pmt)
 
-        st.success("✅ Bank Data Pulled Successfully!")
-        # Reset flow after success so they can do it again if needed
-        st.session_state['plaid_step'] = 'connect'
+        st.success("✅ Success! Data Pulled.")
+        st.session_state['plaid_step'] = 'connect' # Reset for next time
         st.rerun()
 
     except Exception as e:
@@ -204,29 +217,30 @@ if selection == "👤 Client Profile":
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # --- PLAID UI SECTION (FIXED) ---
+    # --- PLAID UI SECTION (DEBUGGED) ---
     p_col1, p_col2 = st.columns(2)
     
     with p_col1:
-        # Step 1: Show Connect Button only if we haven't started yet
         if st.session_state['plaid_step'] == 'connect':
             if st.button("🔗 1. Connect Bank"):
                 generate_new_link()
         
-        # Step 2: Show Link URL only if we are in 'link_ready' mode
         elif st.session_state['plaid_step'] == 'link_ready':
             url = st.session_state.get('link_url', '#')
+            token = st.session_state.get('current_link_token', 'Unknown')
+            
             st.success("Session Created!")
+            # VISUAL PROOF: Show the last few chars of the token
+            st.caption(f"Token ID: ...{token[-8:]}")
+            
             st.markdown(f"👉 **[CLICK HERE TO LOGIN]({url})**")
             
-            # Allow user to reset if they messed up
-            if st.button("Cancel / Start Over"):
+            if st.button("Cancel"):
                 reset_plaid_flow()
 
     with p_col2:
-        # Step 3: Pull Data Button (Always visible if a link exists)
         if st.session_state['plaid_step'] == 'link_ready':
-            st.info("After you see 'Success' in the other tab, wait 5 seconds and click below:")
+            st.info("After 'Success', wait 5s then click:")
             if st.button("🔄 2. Pull Data"):
                 sync_plaid_data()
 
