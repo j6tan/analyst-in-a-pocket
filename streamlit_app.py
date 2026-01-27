@@ -16,16 +16,25 @@ if 'current_link_token' not in st.session_state:
 if 'plaid_step' not in st.session_state:
     st.session_state['plaid_step'] = 'connect'  # Options: 'connect', 'link_ready'
 
-# --- 2. INITIALIZE PLAID CLIENT ---
-configuration = plaid.Configuration(
-    host=plaid.Environment.Sandbox,
-    api_key={
-        'clientId': st.secrets["PLAID_CLIENT_ID"],
-        'secret': st.secrets["PLAID_SECRET"],
-    }
-)
-api_client = plaid.ApiClient(configuration)
-client = plaid_api.PlaidApi(api_client)
+# --- 2. INITIALIZE PLAID CLIENT (ROBUST VERSION) ---
+try:
+    # This checks if the keys exist before trying to use them
+    if "PLAID_CLIENT_ID" not in st.secrets or "PLAID_SECRET" not in st.secrets:
+        st.error("❌ Missing Plaid Credentials in Streamlit Secrets!")
+        st.stop() # Stops the app here so you don't get the Redacted Data Leak error
+
+    configuration = plaid.Configuration(
+        host=plaid.Environment.Sandbox,
+        api_key={
+            'clientId': st.secrets["PLAID_CLIENT_ID"],
+            'secret': st.secrets["PLAID_SECRET"],
+        }
+    )
+    api_client = plaid.ApiClient(configuration)
+    client = plaid_api.PlaidApi(api_client)
+except Exception as e:
+    st.error(f"Configuration Error: {e}")
+    st.stop()
 
 # --- 3. HELPER FUNCTIONS ---
 def generate_new_link():
@@ -248,3 +257,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
