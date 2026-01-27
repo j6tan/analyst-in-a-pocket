@@ -89,6 +89,7 @@ def run_handshake():
 
 @st.fragment
 def plaid_interface():
+    # STEP 1: SHOW THE INITIAL BUTTON
     if st.session_state['plaid_step'] == 'connect':
         if st.button("🔗 Auto-Fill Liabilities", use_container_width=True):
             try:
@@ -108,19 +109,21 @@ def plaid_interface():
             except Exception as e:
                 st.error(f"Link Error: {e}")
 
+    # STEP 2: SHOW THE LINK AND THE "AUTO-WATCHER" AT THE SAME TIME
     elif st.session_state['plaid_step'] == 'syncing':
-        st.markdown(f'<a href="{st.session_state["link_url"]}" target="_blank" style="text-decoration: none;"><div style="background-color: #2e7d32; color: white; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold;">PLEASE CLICK HERE TO LOGIN</div></a>', unsafe_allow_html=True)
+        # Keep the link visible so the user can actually click it!
+        st.markdown(f'<a href="{st.session_state["link_url"]}" target="_blank" style="text-decoration: none;"><div style="background-color: #2e7d32; color: white; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 15px;">1. CLICK HERE TO LOGIN</div></a>', unsafe_allow_html=True)
         
-        with st.status("📡 Waiting for bank login...", expanded=True) as status:
+        # Now start the status watcher below the button
+        with st.status("📡 2. Waiting for you to finish login...", expanded=True) as status:
             # AUTO-POLLING LOOP (Max 2 minutes)
             for _ in range(40): 
-                time.sleep(3) # Wait 3 seconds between checks
+                time.sleep(3) 
                 
                 token = st.session_state.get('current_link_token')
                 check_req = LinkTokenGetRequest(link_token=token)
                 check_res = client.link_token_get(check_req).to_dict()
                 
-                # Look for success
                 public_token = None
                 sessions = check_res.get('sessions', [])
                 if check_res.get('results', {}).get('item_add_results'):
@@ -129,13 +132,11 @@ def plaid_interface():
                     public_token = sessions[-1].get('public_token')
 
                 if public_token:
-                    status.update(label="✅ Login Detected! Exchanging keys...", state="running")
-                    # Final Exchange Logic
+                    status.update(label="✅ Login Detected! Syncing...", state="running")
                     exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
                     liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                     debts = liab.to_dict().get('liabilities', {})
                     
-                    # Update data
                     if debts.get('credit'):
                         bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                         st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -145,12 +146,12 @@ def plaid_interface():
                     time.sleep(2)
                     st.rerun()
                     break
-            else:
-                st.warning("Timeout: No login detected. Please try again.")
-                if st.button("Restart"):
-                    st.session_state['plaid_step'] = 'connect'
-                    st.rerun()
-
+            
+            # Reset option if they get stuck
+            if st.button("Cancel / Restart"):
+                st.session_state['plaid_step'] = 'connect'
+                st.rerun()
+                
 # --- 4. CONFIG & GLOBAL VARS ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
@@ -245,4 +246,5 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
