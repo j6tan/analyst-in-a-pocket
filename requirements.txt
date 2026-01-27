@@ -1,7 +1,4 @@
-streamlit
 plaid-python
-pandas
-plotly
-numpy
 numpy-financial
+plotly
 streamlit-plaid
