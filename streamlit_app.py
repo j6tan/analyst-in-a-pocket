@@ -18,10 +18,9 @@ if 'plaid_step' not in st.session_state:
 
 # --- 2. INITIALIZE PLAID CLIENT (ROBUST VERSION) ---
 try:
-    # This checks if the keys exist before trying to use them
     if "PLAID_CLIENT_ID" not in st.secrets or "PLAID_SECRET" not in st.secrets:
         st.error("❌ Missing Plaid Credentials in Streamlit Secrets!")
-        st.stop() # Stops the app here so you don't get the Redacted Data Leak error
+        st.stop()
 
     configuration = plaid.Configuration(
         host=plaid.Environment.Sandbox,
@@ -50,7 +49,6 @@ def generate_new_link():
         )
         response = client.link_token_create(request)
         
-        # SAVE TOKEN AND UPDATE STEP
         st.session_state['current_link_token'] = response['link_token']
         st.session_state['link_url'] = response['hosted_link_url']
         st.session_state['plaid_step'] = 'link_ready'
@@ -72,56 +70,50 @@ def sync_plaid_data():
         return
 
     try:
-        # Get Session Details
+        # Get Session Details from Plaid
         request = LinkTokenGetRequest(link_token=token)
         response = client.link_token_get(request)
         res = response.to_dict()
 
-        # --- FIND THE PUBLIC TOKEN ---
+        # --- THE HANDSHAKE FIX ---
+        # We need to extract the public_token from the session results
         public_token = None
         
-        # Check 1: Completed Results
+        # Check primary results path
         if res.get('results', {}).get('item_add_results'):
             public_token = res['results']['item_add_results'][0].get('public_token')
         
-        # Check 2: Session History
-        last_status = "No Activity"
+        # Fallback: check session history (sometimes needed in Sandbox)
         if not public_token and res.get('sessions'):
-            # Get the most recent session status for debugging
-            last_session = res['sessions'][-1]
-            last_status = last_session.get('status', 'unknown')
-            
             for s in res['sessions']:
                 if s.get('status') == 'success' and s.get('public_token'):
                     public_token = s['public_token']
                     break
 
         if not public_token:
+            last_status = res['sessions'][-1].get('status', 'No Activity') if res.get('sessions') else "No Activity"
             st.warning(f"Connection incomplete. Last Status: '{last_status}'.")
-            st.info("Tip: You must reach the 'Success' screen in Plaid.")
             return
 
-        # --- EXCHANGE & FETCH ---
+        # Exchange public token for access token
         exchange = client.item_public_token_exchange(
             ItemPublicTokenExchangeRequest(public_token=public_token)
         )
         access_token = exchange['access_token']
 
+        # Fetch the data
         liab = client.liabilities_get(LiabilitiesGetRequest(access_token=access_token))
         debts = liab.to_dict().get('liabilities', {})
         
-        # Credit Cards
         if debts.get('credit'):
             bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
             st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
         
-        # Student Loans
         if debts.get('student'):
             pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
             st.session_state.user_profile['student_loan'] = float(pmt)
 
         st.success("✅ Bank Data Pulled Successfully!")
-        # Reset flow after success so they can do it again if needed
         st.session_state['plaid_step'] = 'connect'
         st.rerun()
 
@@ -164,97 +156,4 @@ if selection == "👤 Client Profile":
     with h2:
         st.title("General Client Information")
 
-    st.subheader("💾 Profile Management")
-    u1, u2 = st.columns(2)
-    with u1:
-        uf = st.file_uploader("Upload Existing Profile", type=["json"])
-        if uf:
-            st.session_state.user_profile.update(json.load(uf))
-            st.success("Profile Loaded!")
-
-    st.subheader("👥 Household Income Details")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("### Primary Client")
-        st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile['p1_name'])
-        st.session_state.user_profile['p1_t4'] = st.number_input("T4 (Employment Income)", value=float(st.session_state.user_profile['p1_t4']))
-        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses / Performance Pay", value=float(st.session_state.user_profile['p1_bonus']))
-        st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile['p1_commission']))
-        st.session_state.user_profile['p1_pension'] = st.number_input("Pension / CPP / OAS", value=float(st.session_state.user_profile['p1_pension']))
-    
-    with c2:
-        st.markdown("### Co-Owner / Partner")
-        st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile['p2_name'])
-        st.session_state.user_profile['p2_t4'] = st.number_input("T4 (Employment Income) ", value=float(st.session_state.user_profile['p2_t4']))
-        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses / Performance Pay ", value=float(st.session_state.user_profile['p2_bonus']))
-        st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile['p2_commission']))
-        st.session_state.user_profile['p2_pension'] = st.number_input("Pension / CPP / OAS ", value=float(st.session_state.user_profile['p2_pension']))
-
-    st.session_state.user_profile['inv_rental_income'] = st.number_input("Joint Rental Income (Current Portfolio)", value=float(st.session_state.user_profile['inv_rental_income']))
-
-    st.divider()
-    st.subheader("🏠 Housing & Property Details")
-    h1, h2 = st.columns([1, 2])
-    with h1:
-        st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
-    with h2:
-        if st.session_state.user_profile['housing_status'] == "Renting":
-            st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
-        else:
-            s1, s2 = st.columns(2)
-            with s1:
-                st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
-                st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
-            with s2:
-                st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
-                st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
-                st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
-
-    st.divider()
-    st.subheader("💳 Monthly Liabilities")
-
-    # --- PLAID UI SECTION (FIXED) ---
-    p_col1, p_col2 = st.columns(2)
-    
-    with p_col1:
-        # Step 1: Show Connect Button only if we haven't started yet
-        if st.session_state['plaid_step'] == 'connect':
-            if st.button("🔗 1. Connect Bank"):
-                generate_new_link()
-        
-        # Step 2: Show Link URL only if we are in 'link_ready' mode
-        elif st.session_state['plaid_step'] == 'link_ready':
-            url = st.session_state.get('link_url', '#')
-            st.success("Session Created!")
-            st.markdown(f"👉 **[CLICK HERE TO LOGIN]({url})**")
-            
-            # Allow user to reset if they messed up
-            if st.button("Cancel / Start Over"):
-                reset_plaid_flow()
-
-    with p_col2:
-        # Step 3: Pull Data Button (Always visible if a link exists)
-        if st.session_state['plaid_step'] == 'link_ready':
-            st.info("After you see 'Success' in the other tab, wait 5 seconds and click below:")
-            if st.button("🔄 2. Pull Data"):
-                sync_plaid_data()
-
-    l1, l2, l3 = st.columns(3)
-    with l1:
-        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile['car_loan']))
-        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments (Monthly)", value=float(st.session_state.user_profile['student_loan']))
-    with l2:
-        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Monthly)", value=float(st.session_state.user_profile['cc_pmt']))
-        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance ($)", value=float(st.session_state.user_profile['loc_balance']))
-    with l3:
-        prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
-        st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')))
-
-    profile_json = json.dumps(st.session_state.user_profile, indent=4)
-    st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
-
-else:
-    file_path = os.path.join("scripts", tools[selection])
-    if os.path.exists(file_path):
-        exec(open(file_path, encoding="utf-8").read(), globals())
-
+    st.subheader("💾 Profile
