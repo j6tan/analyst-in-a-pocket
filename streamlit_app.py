@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 import plaid
+import time
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
@@ -89,7 +90,7 @@ def run_handshake():
 @st.fragment
 def plaid_interface():
     if st.session_state['plaid_step'] == 'connect':
-        if st.button("🔗 Auto-Fill Liabilities (Plaid Login)", use_container_width=True):
+        if st.button("🔗 Auto-Fill Liabilities", use_container_width=True):
             try:
                 request = LinkTokenCreateRequest(
                     user={'client_user_id': str(uuid.uuid4())},
@@ -102,17 +103,53 @@ def plaid_interface():
                 response = client.link_token_create(request)
                 st.session_state['current_link_token'] = response['link_token']
                 st.session_state['link_url'] = response['hosted_link_url']
-                st.session_state['plaid_step'] = 'sync_ready'
+                st.session_state['plaid_step'] = 'syncing'
                 st.rerun()
             except Exception as e:
                 st.error(f"Link Error: {e}")
-    else:
-        st.markdown(f'<a href="{st.session_state["link_url"]}" target="_blank" style="text-decoration: none;"><div style="background-color: #2e7d32; color: white; padding: 12px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 10px;">Step 1: Click to Login to Bank</div></a>', unsafe_allow_html=True)
-        if st.button("Step 2: Sync My Data 🔄", type="primary", use_container_width=True):
-            run_handshake()
-        if st.button("Cancel", use_container_width=True):
-            st.session_state['plaid_step'] = 'connect'
-            st.rerun()
+
+    elif st.session_state['plaid_step'] == 'syncing':
+        st.markdown(f'<a href="{st.session_state["link_url"]}" target="_blank" style="text-decoration: none;"><div style="background-color: #2e7d32; color: white; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold;">PLEASE CLICK HERE TO LOGIN</div></a>', unsafe_allow_html=True)
+        
+        with st.status("📡 Waiting for bank login...", expanded=True) as status:
+            # AUTO-POLLING LOOP (Max 2 minutes)
+            for _ in range(40): 
+                time.sleep(3) # Wait 3 seconds between checks
+                
+                token = st.session_state.get('current_link_token')
+                check_req = LinkTokenGetRequest(link_token=token)
+                check_res = client.link_token_get(check_req).to_dict()
+                
+                # Look for success
+                public_token = None
+                sessions = check_res.get('sessions', [])
+                if check_res.get('results', {}).get('item_add_results'):
+                    public_token = check_res['results']['item_add_results'][0].get('public_token')
+                elif sessions and sessions[-1].get('status') == 'success':
+                    public_token = sessions[-1].get('public_token')
+
+                if public_token:
+                    status.update(label="✅ Login Detected! Exchanging keys...", state="running")
+                    # Final Exchange Logic
+                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+                    liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                    debts = liab.to_dict().get('liabilities', {})
+                    
+                    # Update data
+                    if debts.get('credit'):
+                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                    
+                    status.update(label="🎉 Data Synced Successfully!", state="complete")
+                    st.session_state['plaid_step'] = 'connect'
+                    time.sleep(2)
+                    st.rerun()
+                    break
+            else:
+                st.warning("Timeout: No login detected. Please try again.")
+                if st.button("Restart"):
+                    st.session_state['plaid_step'] = 'connect'
+                    st.rerun()
 
 # --- 4. CONFIG & GLOBAL VARS ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -208,3 +245,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
