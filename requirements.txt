@@ -1,4 +1,7 @@
-plaid-python
-numpy-financial
+streamlit
+pandas
 plotly
-streamlit-plaid
+numpy
+numpy-financial
+plaid-python
+requests
