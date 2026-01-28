@@ -49,6 +49,7 @@ except Exception as e:
     st.stop()
 
 # --- 3. THE AUTO-POLLING LOGIC ---
+
 @st.fragment
 def plaid_interface():
     if st.session_state['plaid_step'] == 'connect':
@@ -87,26 +88,25 @@ def plaid_interface():
                 check_req = LinkTokenGetRequest(link_token=token)
                 check_res = client.link_token_get(check_req)
                 
-                # --- THE CRITICAL FIX ---
-                # We are looking for the 'results' object which is populated 
-                # immediately when you see the "Success" screen.
+                # Convert the whole response to a dictionary safely
+                res_dict = check_res.to_dict()
                 public_token = None
                 
-                # Try Path 1: The standard result path
-                if hasattr(check_res, 'results') and check_res.results.item_add_results:
-                    public_token = check_res.results.item_add_results[0].public_token
+                # 1. Check the results path
+                results = res_dict.get('results', {})
+                if results and results.get('item_add_results'):
+                    public_token = results['item_add_results'][0].get('public_token')
                 
-                # Try Path 2: The session list path (fallback)
-                if not public_token and hasattr(check_res, 'link_sessions'):
-                    for s in check_res.link_sessions:
-                        if s.status == 'success' and hasattr(s, 'public_token'):
-                            public_token = s.public_token
+                # 2. Check the link_sessions path safely
+                if not public_token and res_dict.get('link_sessions'):
+                    for s in res_dict['link_sessions']:
+                        if s.get('status') == 'success' and s.get('public_token'):
+                            public_token = s.get('public_token')
                             break
 
                 if public_token:
-                    status.update(label="✅ Success detected! Pulling data...", state="running")
+                    status.update(label="✅ Success detected! Syncing data...", state="running")
                     
-                    # Exchange and Fetch
                     exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
                     liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                     debts = liab.to_dict().get('liabilities', {})
@@ -122,12 +122,12 @@ def plaid_interface():
                     break
                 
                 if i % 2 == 0:
-                    status.write(f"Waiting... (Attempt {i//2 + 1})")
+                    status.write(f"Searching for 'Success' signal... (Attempt {i//2 + 1})")
 
             if st.button("Cancel / Restart"):
                 st.session_state['plaid_step'] = 'connect'
                 st.rerun()
-                
+
 # --- 4. CONFIG & GLOBAL VARS ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
@@ -222,5 +222,6 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
