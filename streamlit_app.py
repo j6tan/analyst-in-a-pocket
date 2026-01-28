@@ -45,90 +45,135 @@ except Exception as e:
 # --- 3. THE JAVASCRIPT PLAID INTERFACE ---
 @st.fragment
 def plaid_interface():
-    # --- A. CHECK FOR RETURN TRIP (The "Smart" Part) ---
-    # When Plaid redirects back, it adds '?status=success' to the URL.
-    # We catch this immediately when the app reloads.
+    # --- A. CHECK FOR RETURN TRIP (The New Tab) ---
+    # We look for TWO things: status=success AND the token we passed along
     params = st.query_params
     
-    # If we just came back from Plaid and it was successful:
-    if params.get("status") == "success" and st.session_state.get('current_link_token'):
-        st.toast("🔄 Bank verified! Fetching data...", icon="🏦")
+    if params.get("status") == "success" and params.get("t"):
+        # We retrieve the token directly from the URL stash
+        incoming_token = params.get("t")
         
-        try:
-            # We don't need the public_token from the URL.
-            # We use the Link Token we already have to ask Plaid "What happened?"
-            token = st.session_state['current_link_token']
-            check_req = LinkTokenGetRequest(link_token=token)
-            check_res = client.link_token_get(check_req).to_dict()
+        # Avoid re-running logic if we already synced this specific token
+        if st.session_state.get('last_processed_token') != incoming_token:
+            st.toast("🔄 Verifying Bank Connection...", icon="🏦")
             
-            # Extract the public_token from the session results
-            public_token = None
-            if check_res.get('link_sessions'):
-                for s in check_res['link_sessions']:
-                    if s.get('status') == 'success':
-                        public_token = s.get('public_token')
-                        break
+            try:
+                # Ask Plaid for the session details using the token from the URL
+                check_req = LinkTokenGetRequest(link_token=incoming_token)
+                check_res = client.link_token_get(check_req).to_dict()
+                
+                # Extract public_token
+                public_token = None
+                if check_res.get('link_sessions'):
+                    for s in check_res['link_sessions']:
+                        if s.get('status') == 'success':
+                            public_token = s.get('public_token')
+                            break
+                
+                if public_token:
+                    # Exchange and Sync
+                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+                    liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                    debts = liab.to_dict().get('liabilities', {})
+                    
+                    # FILL DATA
+                    if debts.get('credit'):
+                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                    
+                    if debts.get('student'):
+                        pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                        st.session_state.user_profile['student_loan'] = float(pmt)
+
+                    st.success("✅ Success! Data has been imported.")
+                    st.info("ℹ️ You can now close the previous tab and continue here.")
+                    
+                    # Mark this token as "done" so we don't loop forever
+                    st.session_state['last_processed_token'] = incoming_token
+                    
+                    # Optional: Clean the URL
+                    # st.query_params.clear() 
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Connection incomplete. Please try linking again.")
             
-            if public_token:
-                # Exchange and Sync
-                exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                debts = liab.to_dict().get('liabilities', {})
-                
-                # Auto-Fill Logic
-                if debts.get('credit'):
-                    bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                    st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                
-                if debts.get('student'):
-                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                    st.session_state.user_profile['student_loan'] = float(pmt)
+            except Exception as e:
+                st.error(f"Sync Error: {e}")
 
-                st.success("✅ Bank Data Synced Successfully!")
-                
-                # Cleanup: Clear params and token so it doesn't re-run on refresh
-                st.session_state['current_link_token'] = None
-                st.query_params.clear() 
-                time.sleep(2)
-                st.rerun()
-                
-            else:
-                st.error("Plaid said success, but no token was found. Please try again.")
-                
-        except Exception as e:
-            st.error(f"Sync Error: {e}")
-
-    # --- B. THE START BUTTON ---
-    # If we aren't currently processing a return trip, show the connect button.
+    # --- B. THE START BUTTON (The Old Tab) ---
     else:
         if st.button("🔗 Connect Bank (Auto-Fill)", use_container_width=True):
             try:
-                # 1. Determine where to send the user back to
-                # This must match what you added in Plaid Dashboard!
-                # If running locally, use localhost. If on cloud, use your .app URL.
-                # You can make this dynamic or hardcode it for now.
-                app_url = "https://analyst-in-a-pocket.streamlit.app" 
-                # OR for local testing: app_url = "http://localhost:8501"
+                # 1. DEFINE YOUR APP URL
+                # If locally testing:
+                # base_url = "http://localhost:8501" 
+                # If on Cloud (Update this to your actual URL!):
+                base_url = "https://analyst-in-a-pocket.streamlit.app"
                 
-                redirect_uri = f"{app_url}?status=success"
+                # 2. CREATE A UNIQUE LINK TOKEN
+                user_id = str(uuid.uuid4())
+                
+                # We need the token *before* we create the redirect URI...
+                # But Plaid requires the redirect URI to create the token.
+                # Catch-22? No. We use the 'state' parameter or append to URI later? 
+                # Actually, Plaid Hosted Link creates the token first, THEN gives you the URL.
+                # Wait, 'completion_redirect_uri' is part of the CREATE request. 
+                # So we can't put the token inside the redirect URI before we have the token.
+                
+                # SMART WORKAROUND:
+                # We will use a placeholder in the URI? No, Plaid validates it.
+                # We can't pass the token in the URI if we don't have it yet.
+                # BUT, we can just assume the redirect will happen and let the user 
+                # pass the "link_session_id" which Plaid appends automatically?
+                # No, Plaid appends 'link_token' automatically to the redirect if configured!
+                
+                # SIMPLER FIX:
+                # We create the request WITHOUT the token in the URL first.
+                # Plaid usually appends `?link_token=...` or `?link_session_id=...` automatically upon return.
+                # Let's rely on Plaid's automatic appending. 
+                # If Plaid DOESN'T append it, we have to use a 2-step process or `state`.
+                
+                # Let's try passing a temporary ID (state) that matches a session ID?
+                # Actually, the EASIEST way:
+                # We don't need the Token in the URL if we just fetch the MOST RECENTLY CREATED token? 
+                # No, that's risky with multiple users.
+                
+                # BETTER FIX (The "Oauth State" Trick):
+                # We generate a random ID *ourselves* first.
+                my_tracking_id = str(uuid.uuid4())
+                
+                redirect_uri = f"{base_url}?status=success&tracking_id={my_tracking_id}"
 
                 request = LinkTokenCreateRequest(
-                    user={'client_user_id': str(uuid.uuid4())},
+                    user={'client_user_id': user_id},
                     client_name="Analyst in a Pocket",
                     products=[Products('liabilities')],
                     country_codes=[CountryCode('CA')],
                     language='en',
-                    hosted_link={'completion_redirect_uri': redirect_uri} # <--- The Magic
+                    hosted_link={'completion_redirect_uri': redirect_uri}
                 )
                 response = client.link_token_create(request)
                 
-                # Save token and redirect user
-                st.session_state['current_link_token'] = response['link_token']
-                st.link_button("👉 Click to Open Secure Bank Login", response['hosted_link_url'])
+                # Save the mapping of Tracking ID -> Link Token in Session State? 
+                # NO, session state doesn't persist to the new tab!
                 
+                # OKAY, NEW STRATEGY: 
+                # We can't easily pass data between tabs without a database.
+                # EXCEPT: We can append the `link_token` to the URL *manually* on the client side? 
+                # No, Plaid handles the redirect.
+                
+                # WAIT! Plaid documentation says: 
+                # "The link_token will be appended to the completion_redirect_uri as a query parameter."
+                # If that is true, we just need to look for 'link_token' in params!
+                
+                st.session_state['current_link_token'] = response['link_token']
+                
+                # BUTTON TO OPEN PLAID
+                st.link_button("👉 Click to Open Secure Bank Login", response['hosted_link_url'])
+
             except Exception as e:
                 st.error(f"Plaid Error: {e}")
-                st.info("Did you add your Redirect URI to the Plaid Dashboard?")
         
 # --- 4. CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -228,6 +273,7 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
 
