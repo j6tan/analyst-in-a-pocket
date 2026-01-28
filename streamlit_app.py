@@ -4,6 +4,7 @@ import os
 import uuid
 import plaid
 import time
+import streamlit.components.v1 as components # Required for the Bridge
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
@@ -12,14 +13,14 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. SHARED MAILBOX (Fixes the "Empty Page" / New Tab issue) ---
+# --- 1. SHARED MAILBOX ---
 @st.cache_resource
 def get_global_token_store():
     return {}
 
 token_store = get_global_token_store()
 
-# --- 2. SESSION STATE SETUP (Original Structure) ---
+# --- 2. SESSION STATE SETUP ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -47,93 +48,100 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 4. THE PLAID INTERFACE FUNCTION (PATCHED) ---
+# --- 4. THE PLAID INTERFACE FUNCTION (PATCHED WITH JS BRIDGE) ---
 @st.fragment
 def plaid_interface():
-    # 1. SETUP SESSION STATE FOR THE BUTTONS
-    if 'plaid_url' not in st.session_state:
-        st.session_state.plaid_url = None
+    # 1. Generate Link Token if not present
     if 'link_token' not in st.session_state:
-        st.session_state.link_token = None
+        try:
+            request = LinkTokenCreateRequest(
+                user={'client_user_id': str(uuid.uuid4())},
+                client_name="Analyst in a Pocket",
+                products=[Products('liabilities')],
+                country_codes=[CountryCode('CA')],
+                language='en'
+            )
+            response = client.link_token_create(request)
+            st.session_state.link_token = response['link_token']
+        except Exception as e:
+            st.error(f"Plaid Init Error: {e}")
+            return
 
-    # 2. THE UI
-    col1, col2 = st.columns(2)
+    # 2. The Javascript Bridge Component
+    # This renders the button and the Plaid popup logic
+    res_token = components.html(f"""
+        <html>
+        <head>
+            <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+        </head>
+        <body style="margin: 0; padding: 0;">
+            <button id="link-button" style="
+                background-color: #2e7d32; 
+                color: white; 
+                border: none; 
+                padding: 12px; 
+                border-radius: 8px; 
+                font-weight: bold; 
+                width: 100%; 
+                cursor: pointer;
+                font-family: sans-serif;">
+                🔗 Connect Bank Account
+            </button>
 
-    with col1:
-        if st.button("🔗 Step 1: Connect Bank", use_container_width=True):
+            <script type="text/javascript">
+                var handler = Plaid.create({{
+                    token: '{st.session_state.link_token}',
+                    onSuccess: function(public_token, metadata) {{
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: public_token
+                        }}, '*');
+                    }},
+                    onExit: function(err, metadata) {{
+                        if (err != null) {{ console.error(err); }}
+                    }}
+                }});
+
+                document.getElementById('link-button').onclick = function() {{
+                    handler.open();
+                }};
+            </script>
+        </body>
+        </html>
+    """, height=50)
+
+    # 3. Handle the Data Pull once the Bridge returns a token
+    if res_token:
+        with st.spinner("⏳ Fetching bank data..."):
             try:
-                # We create the link token
-                request = LinkTokenCreateRequest(
-                    user={'client_user_id': str(uuid.uuid4())},
-                    client_name="Analyst in a Pocket",
-                    products=[Products('liabilities')],
-                    country_codes=[CountryCode('CA')],
-                    language='en'
+                exchange = client.item_public_token_exchange(
+                    ItemPublicTokenExchangeRequest(public_token=res_token)
                 )
-                response = client.link_token_create(request)
-                st.session_state.link_token = response['link_token']
-                st.session_state.plaid_url = response['hosted_link_url']
+                liab = client.liabilities_get(
+                    LiabilitiesGetRequest(access_token=exchange['access_token'])
+                )
+                debts = liab.to_dict().get('liabilities', {})
+
+                if debts.get('credit'):
+                    bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                    st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                
+                if debts.get('student'):
+                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                    st.session_state.user_profile['student_loan'] = float(pmt)
+
+                st.success("✅ Bank Data Synced!")
+                # Reset token for future use
+                del st.session_state['link_token']
+                time.sleep(1)
                 st.rerun()
             except Exception as e:
-                st.error(f"Plaid Error: {e}")
-
-    with col2:
-        # Only show the Sync button if we have a token
-        if st.session_state.link_token:
-            if st.button("📥 Step 2: Pull Data", type="primary", use_container_width=True):
-                with st.spinner("Checking bank status..."):
-                    try:
-                        # We ask Plaid: "Did the user finish login with this token?"
-                        check = client.link_token_get(LinkTokenGetRequest(link_token=st.session_state.link_token)).to_dict()
-                        
-                        public_token = None
-                        if check.get('link_sessions'):
-                            for s in check['link_sessions']:
-                                if s.get('status') == 'success':
-                                    public_token = s.get('public_token')
-                                    break
-                        
-                        if public_token:
-                            # Exchange and Get Liabilities
-                            exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                            res = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                            debts = res.to_dict().get('liabilities', {})
-                            
-                            # Update your specific profile fields
-                            if debts.get('credit'):
-                                bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                                st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                            
-                            if debts.get('student'):
-                                pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                                st.session_state.user_profile['student_loan'] = float(pmt)
-
-                            st.success("✅ Bank data imported!")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error("Login not detected. Please finish the login in the other tab first.")
-                    except Exception as e:
-                        st.error(f"Sync failed: {e}")
-
-    # 3. THE ACTUAL LINK (Only shows after clicking Step 1)
-    if st.session_state.plaid_url:
-        st.markdown(f"""
-            <div style="border: 2px solid #2e7d32; padding: 20px; border-radius: 10px; text-align: center; margin-top: 10px;">
-                <p><strong>Bank Link Ready!</strong></p>
-                <a href="{st.session_state.plaid_url}" target="_blank" style="background-color: #2e7d32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
-                    LOG IN AT YOUR BANK HERE
-                </a>
-                <p style="font-size: 0.8em; margin-top: 15px; color: #666;">
-                    (After you see the 'Success' screen in the bank tab, come back here and click <b>Step 2</b>)
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
+                st.error(f"Sync failed: {e}")
 
 # --- 5. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
-# --- 6. NAVIGATION (Your Original Logic) ---
+# --- 6. NAVIGATION ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
@@ -225,4 +233,3 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
-
