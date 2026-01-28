@@ -5,4 +5,4 @@ numpy
 numpy-financial
 plaid-python
 requests
-streamlit-plaid
+
