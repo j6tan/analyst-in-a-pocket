@@ -46,7 +46,7 @@ except Exception as e:
 @st.fragment
 def plaid_interface():
     # Generate Link Token if it doesn't exist
-    if not st.session_state['current_link_token']:
+    if not st.session_state.get('current_link_token'):
         try:
             request = LinkTokenCreateRequest(
                 user={'client_user_id': str(uuid.uuid4())},
@@ -63,8 +63,6 @@ def plaid_interface():
 
     link_token = st.session_state['current_link_token']
     
-    # JavaScript Bridge Logic
-    # We use window.parent.postMessage to send the public_token back to the Streamlit 'res' variable
     plaid_js = f"""
     <div id="plaid-button-container">
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
@@ -72,6 +70,7 @@ def plaid_interface():
         const handler = Plaid.create({{
           token: '{link_token}',
           onSuccess: (public_token, metadata) => {{
+            // Send the string token back to Streamlit
             window.parent.postMessage({{
               type: 'streamlit:setComponentValue',
               value: public_token
@@ -98,28 +97,34 @@ def plaid_interface():
     </div>
     """
     
-    # Render the HTML/JS component
+    # Render the component
     res = components.html(plaid_js, height=70)
 
-    # If the JS sends back a token, process it
-    if res:
-        with st.spinner("✅ Connection Found! Fetching Liabilities..."):
+    # --- THE FIX IS HERE ---
+    # We only run this if 'res' is a string (the token).
+    # When the page first loads, 'res' is a DeltaGenerator object, which we ignore.
+    if isinstance(res, str) and res.strip():
+        with st.spinner("✅ Token Received! Syncing..."):
             try:
-                exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
-                liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                exchange = client.item_public_token_exchange(
+                    ItemPublicTokenExchangeRequest(public_token=res)
+                )
+                liab = client.liabilities_get(
+                    LiabilitiesGetRequest(access_token=exchange['access_token'])
+                )
                 debts = liab.to_dict().get('liabilities', {})
                 
-                # Update Credit Card Payments (Estimated at 3% of balance)
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                 
-                # Update Student Loan Payments
                 if debts.get('student'):
                     pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
                 st.success("🎉 Liabilities Updated!")
+                # Reset the token so it doesn't trigger again on next rerun
+                st.session_state['current_link_token'] = None 
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
@@ -223,3 +228,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
