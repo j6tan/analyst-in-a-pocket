@@ -50,91 +50,85 @@ except Exception as e:
 # --- 4. THE PLAID INTERFACE FUNCTION (PATCHED) ---
 @st.fragment
 def plaid_interface():
-    # A. HANDLE REDIRECT LANDING (The New Tab)
-    params = st.query_params
-    if "req_id" in params:
-        req_id = params["req_id"]
-        stored_token = token_store.get(req_id)
-        
-        if stored_token:
-            with st.spinner("⏳ Finalizing secure connection..."):
-                public_token = None
-                # Check 3 times with 1s delays to avoid "Connection Incomplete"
-                for _ in range(3):
-                    try:
-                        check_res = client.link_token_get(LinkTokenGetRequest(link_token=stored_token)).to_dict()
-                        if check_res.get('link_sessions'):
-                            for s in check_res['link_sessions']:
-                                if s.get('status') == 'success':
-                                    public_token = s.get('public_token')
-                                    break
-                        if public_token: break
-                        time.sleep(1)
-                    except:
-                        pass
+    # 1. SETUP SESSION STATE FOR THE BUTTONS
+    if 'plaid_url' not in st.session_state:
+        st.session_state.plaid_url = None
+    if 'link_token' not in st.session_state:
+        st.session_state.link_token = None
 
-                if public_token:
-                    try:
-                        exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                        liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                        debts = liab.to_dict().get('liabilities', {})
-                        
-                        if debts.get('credit'):
-                            bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                            st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                        
-                        if debts.get('student'):
-                            pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                            st.session_state.user_profile['student_loan'] = float(pmt)
+    # 2. THE UI
+    col1, col2 = st.columns(2)
 
-                        st.success("✅ Bank Data Synced! You can continue in this tab.")
-                        del token_store[req_id] # Cleanup
-                        st.query_params.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Sync Error: {e}")
-                else:
-                    st.error("Connection incomplete. Please ensure you finished the bank login and hit 'Continue'.")
-        return
-
-    # B. MAIN INTERFACE (Step 1 & 2)
-    if 'plaid_ready' not in st.session_state:
-        st.session_state.plaid_ready = False
-
-    if not st.session_state.plaid_ready:
-        if st.button("🔗 Connect Bank Account", use_container_width=True):
+    with col1:
+        if st.button("🔗 Step 1: Connect Bank", use_container_width=True):
             try:
-                req_id = str(uuid.uuid4())
-                base_url = "https://analyst-in-a-pocket.streamlit.app" 
-                redirect_uri = f"{base_url}?req_id={req_id}"
-
+                # We create the link token
                 request = LinkTokenCreateRequest(
                     user={'client_user_id': str(uuid.uuid4())},
                     client_name="Analyst in a Pocket",
                     products=[Products('liabilities')],
                     country_codes=[CountryCode('CA')],
-                    language='en',
-                    hosted_link={'completion_redirect_uri': redirect_uri}
+                    language='en'
                 )
                 response = client.link_token_create(request)
-                token_store[req_id] = response['link_token']
-                
+                st.session_state.link_token = response['link_token']
                 st.session_state.plaid_url = response['hosted_link_url']
-                st.session_state.plaid_ready = True
                 st.rerun()
             except Exception as e:
-                st.error(f"Plaid Init Error: {e}")
-    else:
+                st.error(f"Plaid Error: {e}")
+
+    with col2:
+        # Only show the Sync button if we have a token
+        if st.session_state.link_token:
+            if st.button("📥 Step 2: Pull Data", type="primary", use_container_width=True):
+                with st.spinner("Checking bank status..."):
+                    try:
+                        # We ask Plaid: "Did the user finish login with this token?"
+                        check = client.link_token_get(LinkTokenGetRequest(link_token=st.session_state.link_token)).to_dict()
+                        
+                        public_token = None
+                        if check.get('link_sessions'):
+                            for s in check['link_sessions']:
+                                if s.get('status') == 'success':
+                                    public_token = s.get('public_token')
+                                    break
+                        
+                        if public_token:
+                            # Exchange and Get Liabilities
+                            exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+                            res = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                            debts = res.to_dict().get('liabilities', {})
+                            
+                            # Update your specific profile fields
+                            if debts.get('credit'):
+                                bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                                st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                            
+                            if debts.get('student'):
+                                pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                                st.session_state.user_profile['student_loan'] = float(pmt)
+
+                            st.success("✅ Bank data imported!")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Login not detected. Please finish the login in the other tab first.")
+                    except Exception as e:
+                        st.error(f"Sync failed: {e}")
+
+    # 3. THE ACTUAL LINK (Only shows after clicking Step 1)
+    if st.session_state.plaid_url:
         st.markdown(f"""
-            <a href="{st.session_state.plaid_url}" target="_blank" style="text-decoration: none;">
-                <div style="background-color: #2e7d32; color: white; padding: 12px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 10px;">
-                    👉 CLICK HERE TO LOGIN (Opens New Tab)
-                </div>
-            </a>
+            <div style="border: 2px solid #2e7d32; padding: 20px; border-radius: 10px; text-align: center; margin-top: 10px;">
+                <p><strong>Bank Link Ready!</strong></p>
+                <a href="{st.session_state.plaid_url}" target="_blank" style="background-color: #2e7d32; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                    LOG IN AT YOUR BANK HERE
+                </a>
+                <p style="font-size: 0.8em; margin-top: 15px; color: #666;">
+                    (After you see the 'Success' screen in the bank tab, come back here and click <b>Step 2</b>)
+                </p>
+            </div>
         """, unsafe_allow_html=True)
-        if st.button("Cancel"):
-            st.session_state.plaid_ready = False
-            st.rerun()
 
 # --- 5. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -231,3 +225,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
