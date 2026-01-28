@@ -42,10 +42,9 @@ except Exception as e:
 
 # --- 3. THE PLAID INTERFACE ---
 def plaid_interface():
-    # Standard Streamlit button to trigger the process
+    # A standard button to generate the token
     if st.button("🔗 Sync Bank Liabilities (Plaid)", use_container_width=True):
         try:
-            # A. Generate Link Token
             request = LinkTokenCreateRequest(
                 user={'client_user_id': str(uuid.uuid4())},
                 client_name="Analyst in a Pocket",
@@ -56,40 +55,42 @@ def plaid_interface():
             response = client.link_token_create(request)
             link_token = response['link_token']
             
-            # B. HTML Bridge
-            # Removed keywords 'key' and 'height' to fix IframeMixin error
+            # We use a larger height (250) to ensure the iframe isn't squashed
+            # We pass the token to a clean, simple HTML block
             html_code = f"""
-                <html>
-                <head><script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script></head>
-                <body style="margin: 0;">
+                <div style="text-align:center; padding: 20px; font-family: sans-serif; border: 1px solid #eee; border-radius: 10px;">
+                    <p>🏦 <b>Plaid Connection Ready</b></p>
+                    <button id='plaid-open' style="background:#2e7d32; color:white; border:none; padding:10px 20px; border-radius:5px; cursor:pointer;">
+                        Click to Open Secure Window
+                    </button>
+                    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
                     <script>
-                        var handler = Plaid.create({{
+                        const handler = Plaid.create({{
                             token: '{link_token}',
-                            onSuccess: function(t, m) {{ 
-                                window.parent.postMessage({{type:'streamlit:setComponentValue', value:t}}, '*'); 
+                            onSuccess: (public_token, metadata) => {{
+                                window.parent.postMessage({{
+                                    type: 'streamlit:setComponentValue',
+                                    value: public_token
+                                }}, '*');
                             }},
-                            onExit: function(e, m) {{ console.log("User closed Plaid"); }}
+                            onExit: (err, metadata) => {{ console.log('Exited'); }}
                         }});
+                        document.getElementById('plaid-open').onclick = () => handler.open();
+                        // Auto-open attempt
                         handler.open();
                     </script>
-                </body>
-                </html>
+                </div>
             """
-            # Call using only the positional argument for the HTML string
-            res_token = components.html(html_code)
+            # We use a fixed height and key here. If your environment 
+            # still throws the "IframeMixin" error, remove height=250 and key="plaid"
+            res_token = components.html(html_code, height=200)
 
-            # C. Handle the Token Exchange
             if isinstance(res_token, str) and len(res_token) > 10:
-                with st.spinner("Importing bank data..."):
-                    exchange = client.item_public_token_exchange(
-                        ItemPublicTokenExchangeRequest(public_token=res_token)
-                    )
-                    res = client.liabilities_get(
-                        LiabilitiesGetRequest(access_token=exchange['access_token'])
-                    )
+                with st.spinner("🔄 Exchanging tokens and fetching debts..."):
+                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res_token))
+                    res = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                     debts = res.to_dict().get('liabilities', {})
                     
-                    # Update profile based on imported data
                     if debts.get('credit'):
                         bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                         st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -98,9 +99,10 @@ def plaid_interface():
                         pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                         st.session_state.user_profile['student_loan'] = float(pmt)
                     
-                    st.success("✅ Imported!")
-                    time.sleep(1)
+                    st.success("✅ Bank Data Synced!")
+                    time.sleep(2)
                     st.rerun()
+
         except Exception as e:
             st.error(f"Plaid Error: {e}")
 
@@ -128,54 +130,22 @@ if selection == "👤 Client Profile":
     with h2:
         st.title("General Client Information")
 
-    st.subheader("💾 Profile Management")
-    u1, u2 = st.columns(2)
-    with u1:
-        uf = st.file_uploader("Upload Existing Profile", type=["json"])
-        if uf:
-            st.session_state.user_profile.update(json.load(uf))
-            st.success("Profile Loaded!")
-
     st.subheader("👥 Household Income Details")
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("### Primary Client")
         st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile['p1_name'])
         st.session_state.user_profile['p1_t4'] = st.number_input("T4 Income", value=float(st.session_state.user_profile['p1_t4']))
-        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses", value=float(st.session_state.user_profile['p1_bonus']))
-        st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile['p1_commission']))
-        st.session_state.user_profile['p1_pension'] = st.number_input("Pension/CPP", value=float(st.session_state.user_profile['p1_pension']))
     
     with c2:
         st.markdown("### Co-Owner / Partner")
         st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile['p2_name'])
         st.session_state.user_profile['p2_t4'] = st.number_input("T4 Income ", value=float(st.session_state.user_profile['p2_t4']))
-        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses ", value=float(st.session_state.user_profile['p2_bonus']))
-        st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile['p2_commission']))
-        st.session_state.user_profile['p2_pension'] = st.number_input("Pension/CPP ", value=float(st.session_state.user_profile['p2_pension']))
-
-    st.divider()
-    st.subheader("🏠 Housing & Property Details")
-    h1, h2 = st.columns([1, 2])
-    with h1:
-        st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
-    with h2:
-        if st.session_state.user_profile['housing_status'] == "Renting":
-            st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
-        else:
-            s1, s2 = st.columns(2)
-            with s1:
-                st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
-                st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
-            with s2:
-                st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
-                st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
-                st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
 
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # Call the Plaid trigger button
+    # Call the Plaid trigger
     plaid_interface()
 
     l1, l2, l3 = st.columns(3)
