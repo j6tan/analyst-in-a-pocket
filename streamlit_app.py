@@ -13,14 +13,14 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. SHARED MAILBOX ---
+# --- 1. SHARED MAILBOX (Fixes the "Empty Page" / New Tab issue) ---
 @st.cache_resource
 def get_global_token_store():
     return {}
 
 token_store = get_global_token_store()
 
-# --- 2. SESSION STATE SETUP ---
+# --- 2. SESSION STATE SETUP (Original Structure) ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -48,10 +48,10 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 4. THE PLAID INTERFACE FUNCTION (PATCHED WITH JS BRIDGE) ---
+# --- 4. THE PLAID INTERFACE FUNCTION (PATCHED) ---
 @st.fragment
 def plaid_interface():
-    # 1. Generate Link Token if not present
+    # A. Generate Link Token if not present
     if 'link_token' not in st.session_state:
         try:
             request = LinkTokenCreateRequest(
@@ -67,8 +67,8 @@ def plaid_interface():
             st.error(f"Plaid Init Error: {e}")
             return
 
-    # 2. The Javascript Bridge Component
-    # This renders the button and the Plaid popup logic
+    # B. The Javascript Bridge (Handles UI Popup)
+    # res_token will start as a DeltaGenerator but become a string on success
     res_token = components.html(f"""
         <html>
         <head>
@@ -110,10 +110,11 @@ def plaid_interface():
         </html>
     """, height=50)
 
-    # 3. Handle the Data Pull once the Bridge returns a token
-    if res_token:
+    # C. Handle Data Pull (Only runs if res_token is the string from JS)
+    if isinstance(res_token, str) and res_token.strip() != "":
         with st.spinner("⏳ Fetching bank data..."):
             try:
+                # Exchange Token
                 exchange = client.item_public_token_exchange(
                     ItemPublicTokenExchangeRequest(public_token=res_token)
                 )
@@ -122,6 +123,7 @@ def plaid_interface():
                 )
                 debts = liab.to_dict().get('liabilities', {})
 
+                # Update Profile
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -131,8 +133,7 @@ def plaid_interface():
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
                 st.success("✅ Bank Data Synced!")
-                # Reset token for future use
-                del st.session_state['link_token']
+                del st.session_state['link_token'] # Clear for next use
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
@@ -141,7 +142,7 @@ def plaid_interface():
 # --- 5. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
-# --- 6. NAVIGATION ---
+# --- 6. NAVIGATION (Your Original Logic) ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
