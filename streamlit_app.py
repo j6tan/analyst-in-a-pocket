@@ -4,6 +4,7 @@ import os
 import uuid
 import plaid
 import time
+import streamlit.components.v1 as components
 from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
@@ -52,10 +53,10 @@ except Exception as e:
 # --- 3. THE AUTO-POLLING LOGIC ---
 @st.fragment
 def plaid_interface():
-    st.markdown("### 🏦 Link Your Bank")
+    st.subheader("🏦 Secure Bank Link")
     
-    # 1. We still need a Link Token from the Python side
-    if st.session_state.get('current_link_token') is None:
+    # 1. Generate Link Token if not exists
+    if not st.session_state.get('current_link_token'):
         try:
             request = LinkTokenCreateRequest(
                 user={'client_user_id': str(uuid.uuid4())},
@@ -63,45 +64,69 @@ def plaid_interface():
                 products=[Products('liabilities')],
                 country_codes=[CountryCode('CA')],
                 language='en'
-                # Note: 'hosted_link' is REMOVED because we are embedding it now
             )
             response = client.link_token_create(request)
             st.session_state['current_link_token'] = response['link_token']
         except Exception as e:
-            st.error(f"Failed to initialize Plaid: {e}")
+            st.error(f"Plaid Init Error: {e}")
             return
 
-    # 2. THE JAVASCRIPT BRIDGE
-    # This button triggers the Plaid JS code. 
-    # The 'on_success' happens automatically in the background.
-    out = plaid_link(
-        st.session_state['current_link_token'],
-        button_label="🔗 Securely Connect Bank Account",
-        use_container_width=True,
-    )
+    # 2. EMBEDDED JAVASCRIPT
+    # This script creates a hidden bridge to send data back to Python
+    link_token = st.session_state['current_link_token']
+    
+    plaid_js = f"""
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script>
+    const handler = Plaid.create({{
+      token: '{link_token}',
+      onSuccess: (public_token, metadata) => {{
+        // This is the magic: it sends the token back to Streamlit
+        window.parent.postMessage({{
+          type: 'streamlit:setComponentValue',
+          value: public_token
+        }}, '*');
+      }},
+      onExit: (err, metadata) => {{
+        console.log("User exited Plaid");
+      }}
+    }});
+    
+    function openPlaid() {{
+        handler.open();
+    }}
+    </script>
+    <button onclick="openPlaid()" style="
+        background-color: #2e7d32; 
+        color: white; 
+        border: none; 
+        padding: 12px 24px; 
+        border-radius: 8px; 
+        width: 100%; 
+        font-weight: bold; 
+        cursor: pointer;
+        font-family: sans-serif;">
+        🔗 CLICK TO CONNECT BANK
+    </button>
+    """
+    
+    # Render the JS Button
+    # 'res' will capture the public_token sent by window.parent.postMessage
+    res = components.html(plaid_js, height=60)
 
-    # 3. Handle the return from JavaScript
-    if out.public_token:
-        with st.spinner("✅ Connection Received! Fetching data..."):
+    # 3. Handle the Return
+    if res:
+        with st.spinner("✅ Token Received! Syncing Liabilities..."):
             try:
-                # This part is exactly the same as before
-                exchange = client.item_public_token_exchange(
-                    ItemPublicTokenExchangeRequest(public_token=out.public_token)
-                )
-                liab = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=exchange['access_token'])
-                )
+                exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
+                liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                 debts = liab.to_dict().get('liabilities', {})
                 
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                 
-                if debts.get('student'):
-                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                    st.session_state.user_profile['student_loan'] = float(pmt)
-
-                st.success("🎉 Liabilities Updated!")
+                st.success("🎉 Data Synced!")
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
@@ -201,6 +226,7 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
 
