@@ -80,37 +80,33 @@ def plaid_interface():
         ''', unsafe_allow_html=True)
         
         with st.status("📡 2. Watching for bank login...", expanded=True) as status:
-            # AUTO-POLLING LOOP
             for i in range(40): 
                 time.sleep(3) 
                 
                 token = st.session_state.get('current_link_token')
                 check_req = LinkTokenGetRequest(link_token=token)
-                check_res = client.link_token_get(check_req).to_dict()
+                check_res = client.link_token_get(check_req)
                 
+                # --- THE CRITICAL FIX ---
+                # We are looking for the 'results' object which is populated 
+                # immediately when you see the "Success" screen.
                 public_token = None
                 
-                # Check Location A: item_add_results
-                results = check_res.get('results', {})
-                if results and results.get('item_add_results'):
-                    public_token = results['item_add_results'][0].get('public_token')
+                # Try Path 1: The standard result path
+                if hasattr(check_res, 'results') and check_res.results.item_add_results:
+                    public_token = check_res.results.item_add_results[0].public_token
                 
-                # Check Location B: link_sessions (Newest Plaid format)
-                if not public_token and check_res.get('link_sessions'):
-                    for s in check_res['link_sessions']:
-                        if s.get('status') == 'success':
-                            public_token = s.get('public_token')
-                            break
-                
-                # Check Location C: sessions (Legacy format)
-                if not public_token and check_res.get('sessions'):
-                    for s in check_res['sessions']:
-                        if s.get('status') == 'success':
-                            public_token = s.get('public_token')
+                # Try Path 2: The session list path (fallback)
+                if not public_token and hasattr(check_res, 'link_sessions'):
+                    for s in check_res.link_sessions:
+                        if s.status == 'success' and hasattr(s, 'public_token'):
+                            public_token = s.public_token
                             break
 
                 if public_token:
-                    status.update(label="✅ Success! Syncing data...", state="running")
+                    status.update(label="✅ Success detected! Pulling data...", state="running")
+                    
+                    # Exchange and Fetch
                     exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
                     liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                     debts = liab.to_dict().get('liabilities', {})
@@ -119,15 +115,14 @@ def plaid_interface():
                         bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                         st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                     
-                    status.update(label="🎉 Data Synced!", state="complete")
+                    status.update(label="🎉 Data Synced Successfully!", state="complete")
                     st.session_state['plaid_step'] = 'connect'
                     time.sleep(2)
                     st.rerun()
                     break
                 
-                # Debug feedback so we aren't flying blind
-                if i % 5 == 0:
-                    status.write(f"Check {i//5 + 1}: Waiting for 'Success' signal from bank...")
+                if i % 2 == 0:
+                    status.write(f"Waiting... (Attempt {i//2 + 1})")
 
             if st.button("Cancel / Restart"):
                 st.session_state['plaid_step'] = 'connect'
@@ -227,4 +222,5 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
