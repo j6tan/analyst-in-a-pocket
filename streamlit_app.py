@@ -53,62 +53,80 @@ except Exception as e:
 # --- 4. THE SMART PLAID INTERFACE ---
 @st.fragment
 def plaid_interface():
-    # A. CHECK MAILBOX (Did we just arrive from the bank?)
+    # A. HANDLE THE RETURN TRIP (New Tab)
     params = st.query_params
-    
-    # If the URL has a 'req_id', it means we are the "Success Tab"
-    if params.get("req_id"):
-        req_id = params.get("req_id")
-        
-        # 1. Retrieve the token from the global mailbox
+    if "req_id" in params:
+        req_id = params["req_id"]
         stored_token = token_store.get(req_id)
         
         if stored_token:
-            st.toast("🏦 Welcome back! Processing data...", icon="🔄")
-            
-            try:
-                # 2. Ask Plaid for the results
-                check_req = LinkTokenGetRequest(link_token=stored_token)
-                check_res = client.link_token_get(check_req).to_dict()
-                
+            with st.spinner("⏳ Finalizing secure connection..."):
+                # We try 3 times to find the success session (sometimes Plaid is slow)
                 public_token = None
-                if check_res.get('link_sessions'):
-                    for s in check_res['link_sessions']:
-                        if s.get('status') == 'success':
-                            public_token = s.get('public_token')
-                            break
-                
-                if public_token:
-                    # 3. Fetch Liabilities
-                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                    liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                    debts = liab.to_dict().get('liabilities', {})
-                    
-                    # 4. Fill Data
-                    if debts.get('credit'):
-                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                    
-                    if debts.get('student'):
-                        pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                        st.session_state.user_profile['student_loan'] = float(pmt)
+                for _ in range(3):
+                    try:
+                        check_res = client.link_token_get(LinkTokenGetRequest(link_token=stored_token)).to_dict()
+                        if check_res.get('link_sessions'):
+                            for s in check_res['link_sessions']:
+                                if s.get('status') == 'success':
+                                    public_token = s.get('public_token')
+                                    break
+                        if public_token: break
+                        time.sleep(1) # Wait for Plaid to update
+                    except:
+                        pass
 
-                    st.success("✅ Success! Your bank data has been imported.")
-                    st.info("You can continue using the app in this tab.")
-                    
-                    # Cleanup: Remove from mailbox and clear URL
-                    del token_store[req_id]
-                    st.query_params.clear()
-                    
+                if public_token:
+                    try:
+                        exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+                        liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                        debts = liab.to_dict().get('liabilities', {})
+                        
+                        # UPDATE YOUR PROFILE DATA
+                        if debts.get('credit'):
+                            bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                            st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                        
+                        if debts.get('student'):
+                            pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                            st.session_state.user_profile['student_loan'] = float(pmt)
+
+                        st.success("✅ Data Synced!")
+                        del token_store[req_id]
+                        st.query_params.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Sync Error: {e}")
                 else:
-                    st.warning("Connection incomplete. Please try again.")
+                    st.error("Connection incomplete. Plaid hasn't confirmed the login yet. Please try one more time.")
+
+    # B. THE BUTTON (Original Tab)
+    else:
+        if st.button("🔗 Connect Bank Account", use_container_width=True):
+            try:
+                req_id = str(uuid.uuid4())
+                # CHANGE THIS to your actual streamlit URL
+                base_url = "https://analyst-in-a-pocket.streamlit.app" 
+                redirect_uri = f"{base_url}?req_id={req_id}"
+
+                request = LinkTokenCreateRequest(
+                    user={'client_user_id': str(uuid.uuid4())},
+                    client_name="Analyst in a Pocket",
+                    products=[Products('liabilities')],
+                    country_codes=[CountryCode('CA')],
+                    language='en',
+                    hosted_link={'completion_redirect_uri': redirect_uri}
+                )
+                response = client.link_token_create(request)
+                
+                # Save to shared mailbox
+                token_store[req_id] = response['link_token']
+                
+                # Show Link
+                st.link_button("👉 Click to Open Bank Login", response['hosted_link_url'])
             except Exception as e:
-                st.error(f"Sync Error: {e}")
-        else:
-            st.warning("⚠️ Session expired or invalid. Please start the link process again.")
-            if st.button("Start Over"):
-                st.query_params.clear()
-                st.rerun()
+                st.error(f"Plaid Init Error: {e}")
 
     # B. START BUTTON (Standard View)
     else:
@@ -179,3 +197,4 @@ if selection == "👤 Client Profile":
 else:
     # Logic for other pages
     pass
+
