@@ -25,8 +25,8 @@ if 'user_profile' not in st.session_state:
         "heat_pmt": 125.0 
     }
 
-if 'show_plaid' not in st.session_state:
-    st.session_state.show_plaid = False
+if 'public_token' not in st.session_state:
+    st.session_state.public_token = None
 
 # --- 2. INITIALIZE PLAID CLIENT ---
 try:
@@ -45,76 +45,83 @@ except Exception as e:
 
 # --- 3. THE PLAID INTERFACE ---
 def plaid_interface():
-    # Toggle button
-    if st.button("🔗 Sync Bank Liabilities (Plaid)", use_container_width=True):
-        st.session_state.show_plaid = True
+    # A. Generate the Link Token (Needed for the popup)
+    try:
+        request = LinkTokenCreateRequest(
+            user={'client_user_id': str(uuid.uuid4())},
+            client_name="Analyst in a Pocket",
+            products=[Products('liabilities')],
+            country_codes=[CountryCode('CA')],
+            language='en'
+        )
+        response = client.link_token_create(request)
+        link_token = response['link_token']
+    except Exception as e:
+        st.error(f"Could not connect to Plaid: {e}")
+        return
+
+    # B. The Bridge
+    # This renders the button. When clicked, it sends the public_token back to Streamlit.
+    html_code = f"""
+        <div style="text-align:center;">
+            <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+            <button id='plaid-open' style="background:#2e7d32; color:white; border:none; padding:12px; border-radius:8px; width:100%; cursor:pointer; font-weight:bold; font-family:sans-serif;">
+                🔗 SYNC BANK DATA
+            </button>
+            <script>
+                const handler = Plaid.create({{
+                    token: '{link_token}',
+                    onSuccess: (public_token, metadata) => {{
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: public_token
+                        }}, '*');
+                    }}
+                }});
+                document.getElementById('plaid-open').onclick = () => handler.open();
+            </script>
+        </div>
+    """
+    # This component "catches" the public_token
+    token_from_js = components.html(html_code, height=50)
+
+    # C. If we just received a token, save it and rerun to break the "busy" cycle
+    if isinstance(token_from_js, str) and len(token_from_js) > 5:
+        st.session_state.public_token = token_from_js
         st.rerun()
 
-    if st.session_state.show_plaid:
-        try:
-            # Create Link Token
-            request = LinkTokenCreateRequest(
-                user={'client_user_id': str(uuid.uuid4())},
-                client_name="Analyst in a Pocket",
-                products=[Products('liabilities')],
-                country_codes=[CountryCode('CA')],
-                language='en'
-            )
-            response = client.link_token_create(request)
-            link_token = response['link_token']
-            
-            html_code = f"""
-                <div style="text-align:center; padding: 15px; border: 2px solid #2e7d32; border-radius: 10px; background: #f1f8e9;">
-                    <p style="margin-bottom:10px; font-family:sans-serif;">✅ <b>Plaid Ready</b></p>
-                    <button id='plaid-open' style="background:#2e7d32; color:white; border:none; padding:12px 24px; border-radius:5px; cursor:pointer; font-weight:bold;">
-                        LAUNCH SECURE BANK LOGIN
-                    </button>
-                    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-                    <script>
-                        const handler = Plaid.create({{
-                            token: '{link_token}',
-                            onSuccess: (public_token, metadata) => {{
-                                window.parent.postMessage({{
-                                    type: 'streamlit:setComponentValue',
-                                    value: public_token
-                                }}, '*');
-                            }},
-                            onExit: (err, metadata) => {{ console.log('Exited'); }}
-                        }});
-                        document.getElementById('plaid-open').onclick = () => handler.open();
-                    </script>
-                </div>
-            """
-            # The Component
-            res_token = components.html(html_code, height=120)
+    # D. Process the token if it exists in state
+    if st.session_state.public_token:
+        with st.spinner("⏳ Success! Fetching bank details..."):
+            try:
+                # Exchange public token for access token
+                exchange = client.item_public_token_exchange(
+                    ItemPublicTokenExchangeRequest(public_token=st.session_state.public_token)
+                )
+                
+                # Fetch liabilities
+                res = client.liabilities_get(
+                    LiabilitiesGetRequest(access_token=exchange['access_token'])
+                )
+                debts = res.to_dict().get('liabilities', {})
 
-            # THE FIX: Check if res_token is actually a string before checking length
-            if isinstance(res_token, str) and len(res_token) > 5:
-                with st.spinner("🔄 Syncing Bank Data..."):
-                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res_token))
-                    res = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                    debts = res.to_dict().get('liabilities', {})
-                    
-                    if debts.get('credit'):
-                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                    
-                    if debts.get('student'):
-                        pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                        st.session_state.user_profile['student_loan'] = float(pmt)
-                    
-                    st.session_state.show_plaid = False
-                    st.success("✅ Imported!")
-                    time.sleep(1)
-                    st.rerun()
+                # Update state
+                if debts.get('credit'):
+                    bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                    st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                
+                if debts.get('student'):
+                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                    st.session_state.user_profile['student_loan'] = float(pmt)
 
-            if st.button("Cancel Sync"):
-                st.session_state.show_plaid = False
+                # Clear token so it doesn't run again on next refresh
+                st.session_state.public_token = None
+                st.success("✅ Data Imported!")
+                time.sleep(1)
                 st.rerun()
-
-        except Exception as e:
-            st.error(f"Plaid Error: {e}")
-            st.session_state.show_plaid = False
+            except Exception as e:
+                st.error(f"Data Sync Error: {e}")
+                st.session_state.public_token = None
 
 # --- 4. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -149,7 +156,7 @@ if selection == "👤 Client Profile":
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # Run Plaid Interface
+    # Run Plaid Interface (Fixed)
     plaid_interface()
 
     l1, l2, l3 = st.columns(3)
