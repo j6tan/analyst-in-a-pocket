@@ -12,17 +12,14 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. THE "MAILBOX" (Solves the Empty Page Issue) ---
-# This creates a shared dictionary that persists across different tabs.
+# --- 1. SHARED MAILBOX (Fixes the "Empty Page" / New Tab issue) ---
 @st.cache_resource
 def get_global_token_store():
     return {}
 
 token_store = get_global_token_store()
 
-# --- 2. SETUP & CONFIG ---
-st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
-
+# --- 2. SESSION STATE SETUP (Original Structure) ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -35,7 +32,7 @@ if 'user_profile' not in st.session_state:
         "heat_pmt": 125.0 
     }
 
-# --- 3. INITIALIZE PLAID ---
+# --- 3. INITIALIZE PLAID CLIENT ---
 try:
     configuration = plaid.Configuration(
         host=plaid.Environment.Sandbox,
@@ -50,19 +47,20 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 4. THE SMART PLAID INTERFACE ---
+# --- 4. THE PLAID INTERFACE FUNCTION ---
 @st.fragment
 def plaid_interface():
-    # A. HANDLE THE RETURN TRIP (New Tab)
     params = st.query_params
+    
+    # CASE A: User just returned from the bank in a new tab
     if "req_id" in params:
         req_id = params["req_id"]
         stored_token = token_store.get(req_id)
         
         if stored_token:
             with st.spinner("⏳ Finalizing secure connection..."):
-                # We try 3 times to find the success session (sometimes Plaid is slow)
                 public_token = None
+                # Retry loop to give Plaid Sandbox time to sync
                 for _ in range(3):
                     try:
                         check_res = client.link_token_get(LinkTokenGetRequest(link_token=stored_token)).to_dict()
@@ -72,7 +70,7 @@ def plaid_interface():
                                     public_token = s.get('public_token')
                                     break
                         if public_token: break
-                        time.sleep(1) # Wait for Plaid to update
+                        time.sleep(1)
                     except:
                         pass
 
@@ -82,7 +80,7 @@ def plaid_interface():
                         liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                         debts = liab.to_dict().get('liabilities', {})
                         
-                        # UPDATE YOUR PROFILE DATA
+                        # Sync to your original session state
                         if debts.get('credit'):
                             bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                             st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -91,7 +89,7 @@ def plaid_interface():
                             pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                             st.session_state.user_profile['student_loan'] = float(pmt)
 
-                        st.success("✅ Data Synced!")
+                        st.success("🎉 Liabilities Synced! You can continue in this tab.")
                         del token_store[req_id]
                         st.query_params.clear()
                         time.sleep(1)
@@ -99,52 +97,19 @@ def plaid_interface():
                     except Exception as e:
                         st.error(f"Sync Error: {e}")
                 else:
-                    st.error("Connection incomplete. Plaid hasn't confirmed the login yet. Please try one more time.")
+                    st.error("Connection incomplete. Plaid hasn't confirmed the login. Please try again.")
+        else:
+            st.warning("Session expired. Please click 'Connect Bank' again in your original tab.")
 
-    # B. THE BUTTON (Original Tab)
-    else:
-        if st.button("🔗 Connect Bank Account", use_container_width=True):
-            try:
-                req_id = str(uuid.uuid4())
-                # CHANGE THIS to your actual streamlit URL
-                base_url = "https://analyst-in-a-pocket.streamlit.app" 
-                redirect_uri = f"{base_url}?req_id={req_id}"
-
-                request = LinkTokenCreateRequest(
-                    user={'client_user_id': str(uuid.uuid4())},
-                    client_name="Analyst in a Pocket",
-                    products=[Products('liabilities')],
-                    country_codes=[CountryCode('CA')],
-                    language='en',
-                    hosted_link={'completion_redirect_uri': redirect_uri}
-                )
-                response = client.link_token_create(request)
-                
-                # Save to shared mailbox
-                token_store[req_id] = response['link_token']
-                
-                # Show Link
-                st.link_button("👉 Click to Open Bank Login", response['hosted_link_url'])
-            except Exception as e:
-                st.error(f"Plaid Init Error: {e}")
-
-    # B. START BUTTON (Standard View)
+    # CASE B: The initial button
     else:
         if st.button("🔗 Connect Bank (Auto-Fill)", use_container_width=True):
             try:
-                # 1. Create a unique ID for this specific transaction
-                # We will use this to retrieve the token later
                 req_id = str(uuid.uuid4())
-                
-                # 2. Define where to come back to (THIS app + the unique ID)
-                # IMPORTANT: If on Cloud, change 'localhost' to your actual app URL!
-                # e.g., https://analyst-in-a-pocket.streamlit.app
+                # MUST match your Plaid Dashboard Redirect URIs exactly
                 base_url = "https://analyst-in-a-pocket.streamlit.app" 
-                # base_url = "http://localhost:8501" # Uncomment for local testing
-                
                 redirect_uri = f"{base_url}?req_id={req_id}"
 
-                # 3. Create the Link Token
                 request = LinkTokenCreateRequest(
                     user={'client_user_id': str(uuid.uuid4())},
                     client_name="Analyst in a Pocket",
@@ -154,47 +119,103 @@ def plaid_interface():
                     hosted_link={'completion_redirect_uri': redirect_uri}
                 )
                 response = client.link_token_create(request)
-                
-                # 4. Put the token in the "Mailbox" so the new tab can find it
                 token_store[req_id] = response['link_token']
-                
-                # 5. Send user to Plaid
-                st.link_button("👉 Click to Log In at Bank", response['hosted_link_url'])
-                
+                st.link_button("👉 Click to Open Secure Bank Login", response['hosted_link_url'])
             except Exception as e:
-                st.error(f"Plaid Error: {e}")
+                st.error(f"Plaid Init Error: {e}")
 
-# --- 5. APP NAVIGATION & UI ---
+# --- 5. APP CONFIG ---
+st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
+
+# --- 6. NAVIGATION (Your Original Logic) ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
-    # ... add your other pages here ...
+    "🏢 Affordability Secondary": "affordability_second.py", 
+    "🛡️ Smith Maneuver": "smith_maneuver.py",
+    "📉 Mortgage Scenarios": "mortgage_scenario.py",
+    "🔄 Renewal Dilemma": "renewal_analysis.py",
+    "⚖️ Buy vs Rent": "buy_vs_rent.py",
+    "⚖️ Rental vs Stock": "rental_vs_stock.py",
 }
 selection = st.sidebar.radio("Go to", list(tools.keys()))
 
+# --- 7. PAGE UI ---
 if selection == "👤 Client Profile":
-    st.title("General Client Information")
+    h1, h2 = st.columns([1, 5], vertical_alignment="center")
+    with h1:
+        if os.path.exists("logo.png"): st.image("logo.png", width=140)
+    with h2:
+        st.title("General Client Information")
+
+    st.subheader("💾 Profile Management")
+    u1, u2 = st.columns(2)
+    with u1:
+        uf = st.file_uploader("Upload Existing Profile", type=["json"])
+        if uf:
+            st.session_state.user_profile.update(json.load(uf))
+            st.success("Profile Loaded!")
+
+    st.subheader("👥 Household Income Details")
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("### Primary Client")
+        st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile['p1_name'])
+        st.session_state.user_profile['p1_t4'] = st.number_input("T4 (Employment Income)", value=float(st.session_state.user_profile['p1_t4']))
+        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses / Performance Pay", value=float(st.session_state.user_profile['p1_bonus']))
+        st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile['p1_commission']))
+        st.session_state.user_profile['p1_pension'] = st.number_input("Pension / CPP / OAS", value=float(st.session_state.user_profile['p1_pension']))
     
-    # ... Your Input Fields (Names, T4, etc.) ...
-    
+    with c2:
+        st.markdown("### Co-Owner / Partner")
+        st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile['p2_name'])
+        st.session_state.user_profile['p2_t4'] = st.number_input("T4 (Employment Income) ", value=float(st.session_state.user_profile['p2_t4']))
+        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses / Performance Pay ", value=float(st.session_state.user_profile['p2_bonus']))
+        st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile['p2_commission']))
+        st.session_state.user_profile['p2_pension'] = st.number_input("Pension / CPP / OAS ", value=float(st.session_state.user_profile['p2_pension']))
+
+    st.session_state.user_profile['inv_rental_income'] = st.number_input("Joint Rental Income (Current Portfolio)", value=float(st.session_state.user_profile['inv_rental_income']))
+
+    st.divider()
+    st.subheader("🏠 Housing & Property Details")
+    h1, h2 = st.columns([1, 2])
+    with h1:
+        st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
+    with h2:
+        if st.session_state.user_profile['housing_status'] == "Renting":
+            st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
+        else:
+            s1, s2 = st.columns(2)
+            with s1:
+                st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
+                st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
+            with s2:
+                st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
+                st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
+                st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
+
     st.divider()
     st.subheader("💳 Monthly Liabilities")
-    
-    # RUN THE INTERFACE
+
+    # The Plaid Interface Call
     plaid_interface()
 
     l1, l2, l3 = st.columns(3)
     with l1:
-        st.number_input("Car Loan Payments", key="car_loan", value=float(st.session_state.user_profile['car_loan']))
-        st.number_input("Student Loan Payments", key="student_loan", value=float(st.session_state.user_profile['student_loan']))
+        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile['car_loan']))
+        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments (Monthly)", value=float(st.session_state.user_profile['student_loan']))
     with l2:
-        # These will update automatically after Plaid sync!
-        st.number_input("Credit Card Payments", key="cc_pmt", value=float(st.session_state.user_profile['cc_pmt']))
-        st.number_input("LOC Balance", key="loc_balance", value=float(st.session_state.user_profile['loc_balance']))
+        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Monthly)", value=float(st.session_state.user_profile['cc_pmt']))
+        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance ($)", value=float(st.session_state.user_profile['loc_balance']))
     with l3:
-        st.selectbox("Province", ["Ontario", "BC", "Alberta"], key="province")
+        prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
+        st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')))
 
+    profile_json = json.dumps(st.session_state.user_profile, indent=4)
+    st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
+
+# --- 8. HANDLE OTHER PAGES ---
 else:
-    # Logic for other pages
-    pass
-
+    file_path = os.path.join("scripts", tools[selection])
+    if os.path.exists(file_path):
+        exec(open(file_path, encoding="utf-8").read(), globals())
