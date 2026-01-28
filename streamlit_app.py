@@ -9,16 +9,10 @@ from plaid.api import plaid_api
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
-from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
-from streamlit_plaid import plaid_link # Add this to your imports
 
 # --- 1. SESSION STATE SETUP ---
-if 'current_link_token' not in st.session_state:
-    st.session_state['current_link_token'] = None
-if 'plaid_step' not in st.session_state:
-    st.session_state['plaid_step'] = 'connect' 
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -30,13 +24,11 @@ if 'user_profile' not in st.session_state:
         "m_bal": 0.0, "m_rate": 0.0, "m_amort": 25, "prop_taxes": 4200.0, "rent_pmt": 0.0,
         "heat_pmt": 125.0 
     }
+if 'current_link_token' not in st.session_state:
+    st.session_state['current_link_token'] = None
 
 # --- 2. INITIALIZE PLAID CLIENT ---
 try:
-    if "PLAID_CLIENT_ID" not in st.secrets or "PLAID_SECRET" not in st.secrets:
-        st.error("❌ Missing Plaid Credentials in Streamlit Secrets!")
-        st.stop()
-
     configuration = plaid.Configuration(
         host=plaid.Environment.Sandbox,
         api_key={
@@ -50,13 +42,11 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 3. THE AUTO-POLLING LOGIC ---
+# --- 3. THE JAVASCRIPT PLAID INTERFACE ---
 @st.fragment
 def plaid_interface():
-    st.subheader("🏦 Secure Bank Link")
-    
-    # 1. Generate Link Token if not exists
-    if not st.session_state.get('current_link_token'):
+    # Generate Link Token if it doesn't exist
+    if not st.session_state['current_link_token']:
         try:
             request = LinkTokenCreateRequest(
                 user={'client_user_id': str(uuid.uuid4())},
@@ -71,17 +61,14 @@ def plaid_interface():
             st.error(f"Plaid Init Error: {e}")
             return
 
-    # 2. EMBEDDED JAVASCRIPT
-    # This script creates a hidden bridge to send data back to Python
+    # JavaScript to open the Plaid Link overlay
     link_token = st.session_state['current_link_token']
-    
     plaid_js = f"""
     <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
     <script>
     const handler = Plaid.create({{
       token: '{link_token}',
       onSuccess: (public_token, metadata) => {{
-        // This is the magic: it sends the token back to Streamlit
         window.parent.postMessage({{
           type: 'streamlit:setComponentValue',
           value: public_token
@@ -91,12 +78,8 @@ def plaid_interface():
         console.log("User exited Plaid");
       }}
     }});
-    
-    function openPlaid() {{
-        handler.open();
-    }}
     </script>
-    <button onclick="openPlaid()" style="
+    <button onclick="handler.open()" style="
         background-color: #2e7d32; 
         color: white; 
         border: none; 
@@ -105,18 +88,17 @@ def plaid_interface():
         width: 100%; 
         font-weight: bold; 
         cursor: pointer;
-        font-family: sans-serif;">
-        🔗 CLICK TO CONNECT BANK
+        font-family: sans-serif;
+        box-shadow: 0px 2px 4px rgba(0,0,0,0.1);">
+        🔗 CLICK TO CONNECT BANK (AUTO-FILL)
     </button>
     """
     
-    # Render the JS Button
-    # 'res' will capture the public_token sent by window.parent.postMessage
-    res = components.html(plaid_js, height=60)
+    # This component returns the public_token directly to Python
+    res = components.html(plaid_js, height=65)
 
-    # 3. Handle the Return
     if res:
-        with st.spinner("✅ Token Received! Syncing Liabilities..."):
+        with st.spinner("✅ Token Received! Syncing..."):
             try:
                 exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
                 liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
@@ -126,13 +108,17 @@ def plaid_interface():
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                 
-                st.success("🎉 Data Synced!")
-                time.sleep(1)
+                if debts.get('student'):
+                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                    st.session_state.user_profile['student_loan'] = float(pmt)
+
+                st.success("🎉 Data Synced Successfully!")
+                time.sleep(1.5)
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
 
-# --- 4. CONFIG & GLOBAL VARS ---
+# --- 4. CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
 # --- 5. NAVIGATION ---
@@ -205,7 +191,7 @@ if selection == "👤 Client Profile":
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # This call handles the auto-fill logic
+    # This handles the Plaid button and the token return
     plaid_interface()
 
     l1, l2, l3 = st.columns(3)
@@ -226,8 +212,3 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
-
-
-
-
-
