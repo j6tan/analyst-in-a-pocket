@@ -50,73 +50,21 @@ except Exception as e:
 # --- 4. THE PLAID INTERFACE FUNCTION ---
 @st.fragment
 def plaid_interface():
-    params = st.query_params
-    
-    # CASE A: THE "RETURN" TAB
-    if "req_id" in params:
-        req_id = params["req_id"]
-        stored_token = token_store.get(req_id)
-        
-        if stored_token:
-            # Create a placeholder so the user sees progress
-            status_box = st.empty()
-            status_box.info("⏳ Communicating with Plaid... please wait 5 seconds.")
-            
-            public_token = None
-            # Aggressive Retry: Check 5 times with longer pauses
-            for attempt in range(5):
-                try:
-                    time.sleep(2) # Give Plaid room to breathe
-                    check_res = client.link_token_get(LinkTokenGetRequest(link_token=stored_token)).to_dict()
-                    
-                    if check_res.get('link_sessions'):
-                        # Check all sessions associated with this token
-                        for s in check_res['link_sessions']:
-                            if s.get('status') == 'success':
-                                public_token = s.get('public_token')
-                                break
-                    if public_token:
-                        break
-                except Exception as e:
-                    continue # Keep trying if API call fails
-            
-            if public_token:
-                status_box.info("✅ Connection found! Exchanging tokens...")
-                try:
-                    # Exchange and Fetch
-                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                    liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                    debts = liab.to_dict().get('liabilities', {})
-                    
-                    # Update Session State
-                    if debts.get('credit'):
-                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                    
-                    if debts.get('student'):
-                        pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                        st.session_state.user_profile['student_loan'] = float(pmt)
+    # 1. Start Step
+    if 'plaid_status' not in st.session_state:
+        st.session_state['plaid_status'] = 'idle'
 
-                    status_box.success("🎉 Success! Your liabilities have been updated.")
-                    
-                    # Cleanup and Refresh
-                    del token_store[req_id]
-                    # We keep the query params for a moment so the success message stays visible
-                    time.sleep(2)
-                    st.rerun()
-                except Exception as e:
-                    status_box.error(f"Sync Error: {e}")
-            else:
-                status_box.error("❌ Plaid hasn't confirmed the login yet. Close this tab and click the link in the original tab again, or wait a moment and refresh.")
-        else:
-            st.error("Session Link Expired. Please start over from the main page.")
+    # A. THE REDIRECT LANDING PAGE (New Tab)
+    if "req_id" in st.query_params:
+        st.success("✅ **Bank Login Successful!**")
+        st.info("Please **close this tab** and return to your original window to finish the sync.")
+        return
 
-    # CASE B: THE "START" BUTTON
-    else:
-        if st.button("🔗 Connect Bank (Auto-Fill)", use_container_width=True):
+    # B. THE MAIN UI (Original Tab)
+    if st.session_state['plaid_status'] == 'idle':
+        if st.button("🔗 Connect Bank Account", use_container_width=True):
             try:
                 req_id = str(uuid.uuid4())
-                # Ensure this is YOUR exact app URL
                 base_url = "https://analyst-in-a-pocket.streamlit.app" 
                 redirect_uri = f"{base_url}?req_id={req_id}"
 
@@ -130,12 +78,66 @@ def plaid_interface():
                 )
                 response = client.link_token_create(request)
                 
-                # Store the token
-                token_store[req_id] = response['link_token']
+                # Store globally for the sync step
+                st.session_state['active_link_token'] = response['link_token']
+                st.session_state['plaid_status'] = 'waiting'
                 
-                st.link_button("👉 Click to Open Secure Bank Login", response['hosted_link_url'])
+                # Show the link
+                st.markdown(f"""
+                    <a href="{response['hosted_link_url']}" target="_blank" style="text-decoration: none;">
+                        <div style="background-color: #2e7d32; color: white; padding: 12px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 10px;">
+                            👉 CLICK HERE TO LOGIN (Opens New Tab)
+                        </div>
+                    </a>
+                """, unsafe_allow_html=True)
+                st.rerun()
             except Exception as e:
                 st.error(f"Plaid Init Error: {e}")
+
+    # C. THE SYNC STEP (After clicking the link)
+    elif st.session_state['plaid_status'] == 'waiting':
+        st.warning("🔄 **Step 2: Finish the Sync**")
+        st.write("Once you see the 'Success' page in the other tab, click the button below.")
+        
+        if st.button("📥 Sync My Liabilities Now", type="primary", use_container_width=True):
+            with st.spinner("Fetching data from Plaid..."):
+                try:
+                    token = st.session_state.get('active_link_token')
+                    # We check the session status manually here
+                    check_res = client.link_token_get(LinkTokenGetRequest(link_token=token)).to_dict()
+                    
+                    public_token = None
+                    if check_res.get('link_sessions'):
+                        for s in check_res['link_sessions']:
+                            if s.get('status') == 'success':
+                                public_token = s.get('public_token')
+                                break
+                    
+                    if public_token:
+                        exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+                        liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                        debts = liab.to_dict().get('liabilities', {})
+                        
+                        # Sync Data
+                        if debts.get('credit'):
+                            bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                            st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                        if debts.get('student'):
+                            pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                            st.session_state.user_profile['student_loan'] = float(pmt)
+
+                        st.success("✅ Success! Data Imported.")
+                        st.session_state['plaid_status'] = 'idle'
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error("Plaid doesn't show a successful login yet. Make sure you hit 'Continue' on the final Plaid screen.")
+                except Exception as e:
+                    st.error(f"Sync Error: {e}")
+        
+        if st.button("Cancel"):
+            st.session_state['plaid_status'] = 'idle'
+            st.rerun()
 
 # --- 5. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -232,4 +234,5 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
