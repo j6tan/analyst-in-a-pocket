@@ -6,7 +6,6 @@ import plaid
 import time
 import streamlit.components.v1 as components 
 from plaid.api import plaid_api
-# Fixed Case-Sensitivity in Imports below:
 from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
@@ -33,6 +32,9 @@ if 'user_profile' not in st.session_state:
         "m_bal": 0.0, "m_rate": 0.0, "m_amort": 25, "prop_taxes": 4200.0, "rent_pmt": 0.0,
         "heat_pmt": 125.0 
     }
+
+if 'plaid_attempts' not in st.session_state:
+    st.session_state.plaid_attempts = 0
 
 # --- 3. INITIALIZE PLAID CLIENT ---
 try:
@@ -67,7 +69,8 @@ def plaid_interface():
         return
 
     # B. The Javascript Bridge
-    res_token = components.html(f"""
+    # Cleaned up string formatting to avoid TypeError
+    html_code = f"""
         <html>
         <head>
             <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
@@ -98,7 +101,13 @@ def plaid_interface():
             </script>
         </body>
         </html>
-    """, height=50, key=f"plaid_btn_{st.session_state.get('plaid_attempts', 0)}")
+    """
+    
+    res_token = components.html(
+        html_code, 
+        height=50, 
+        key=f"plaid_component_{st.session_state.plaid_attempts}"
+    )
 
     # C. Data Handoff
     if isinstance(res_token, str) and len(res_token) > 5:
@@ -120,7 +129,7 @@ def plaid_interface():
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
                 st.success("✅ Imported!")
-                st.session_state['plaid_attempts'] = st.session_state.get('plaid_attempts', 0) + 1
+                st.session_state.plaid_attempts += 1
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
