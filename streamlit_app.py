@@ -4,14 +4,14 @@ import os
 import uuid
 import plaid
 import time
-import streamlit.components.v1 as components # Required for the Bridge
+import streamlit.components.v1 as components 
 from plaid.api import plaid_api
-from plaid.model.link_token_create_request import LinkTokenCreateRequest
+from plaid.model.link_token_create_request import Link_token_create_request
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
-from plaid.model.link_token_get_request import LinkTokenGetRequest
-from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
-from plaid.model.liabilities_get_request import LiabilitiesGetRequest
+from plaid.model.link_token_get_request import Link_token_get_request
+from plaid.model.item_public_token_exchange_request import Item_public_token_exchange_request
+from plaid.model.liabilities_get_request import Liabilities_get_request
 
 # --- 1. SHARED MAILBOX ---
 @st.cache_resource
@@ -48,27 +48,25 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 4. THE PLAID INTERFACE FUNCTION (PATCHED) ---
-@st.fragment
+# --- 4. THE PLAID INTERFACE FUNCTION (FINAL PULSE PATCH) ---
 def plaid_interface():
-    # A. Generate Link Token if not present
-    if 'link_token' not in st.session_state:
-        try:
-            request = LinkTokenCreateRequest(
-                user={'client_user_id': str(uuid.uuid4())},
-                client_name="Analyst in a Pocket",
-                products=[Products('liabilities')],
-                country_codes=[CountryCode('CA')],
-                language='en'
-            )
-            response = client.link_token_create(request)
-            st.session_state.link_token = response['link_token']
-        except Exception as e:
-            st.error(f"Plaid Init Error: {e}")
-            return
+    # A. Generate a fresh Link Token for every render to ensure the button is "live"
+    try:
+        request = LinkTokenCreateRequest(
+            user={'client_user_id': str(uuid.uuid4())},
+            client_name="Analyst in a Pocket",
+            products=[Products('liabilities')],
+            country_codes=[CountryCode('CA')],
+            language='en'
+        )
+        response = client.link_token_create(request)
+        link_token = response['link_token']
+    except Exception as e:
+        st.error(f"Plaid Init Error: {e}")
+        return
 
-    # B. The Javascript Bridge (Handles UI Popup)
-    # This component emits a string value back to Streamlit on success
+    # B. The Javascript Bridge
+    # Use a dynamic key to force the component to rebuild if a sync happens
     res_token = components.html(f"""
         <html>
         <head>
@@ -76,69 +74,44 @@ def plaid_interface():
         </head>
         <body style="margin: 0; padding: 0;">
             <button id="link-button" style="
-                background-color: #2e7d32; 
-                color: white; 
-                border: none; 
-                padding: 12px; 
-                border-radius: 8px; 
-                font-weight: bold; 
-                width: 100%; 
-                cursor: pointer;
-                font-family: sans-serif;">
+                background-color: #2e7d32; color: white; border: none; 
+                padding: 12px; border-radius: 8px; font-weight: bold; 
+                width: 100%; cursor: pointer; font-family: sans-serif;">
                 🔗 Connect Bank Account
             </button>
-            <div id="error-msg" style="color: red; font-size: 11px; font-family: sans-serif; margin-top: 5px; display: none;"></div>
-
             <script type="text/javascript">
-                const btn = document.getElementById('link-button');
-                const errDiv = document.getElementById('error-msg');
-
-                try {{
-                    const handler = Plaid.create({{
-                        token: '{st.session_state.link_token}',
-                        onSuccess: function(public_token, metadata) {{
-                            window.parent.postMessage({{
-                                type: 'streamlit:setComponentValue',
-                                value: public_token
-                            }}, '*');
-                        }},
-                        onExit: function(err, metadata) {{
-                            if (err != null) {{
-                                errDiv.style.display = 'block';
-                                errDiv.innerText = 'Plaid Error: ' + err.display_message;
-                            }}
-                        }}
-                    }});
-
-                    btn.onclick = function() {{
-                        handler.open();
-                    }};
-                }} catch (e) {{
-                    errDiv.style.display = 'block';
-                    errDiv.innerText = 'Bridge Error: ' + e.message;
-                }}
+                var handler = Plaid.create({{
+                    token: '{link_token}',
+                    onSuccess: function(public_token, metadata) {{
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: public_token
+                        }}, '*');
+                    }},
+                    onExit: function(err, metadata) {{
+                        if (err != null) {{ console.error(err); }}
+                    }}
+                }});
+                document.getElementById('link-button').onclick = function() {{
+                    handler.open();
+                }};
             </script>
         </body>
         </html>
-    """, height=70)
+    """, height=50, key=f"plaid_btn_{st.session_state.get('plaid_attempts', 0)}")
 
-    # C. Handle Data Pull (Only runs if res_token is the string returned from JS)
-    if isinstance(res_token, str) and res_token.strip() != "":
-        with st.spinner("⏳ Fetching bank data..."):
+    # C. Data Handoff (Only triggers when Javascript sends the public_token)
+    if isinstance(res_token, str) and len(res_token) > 5:
+        with st.spinner("⏳ Syncing Bank Data..."):
             try:
-                # Exchange public_token for access_token
                 exchange = client.item_public_token_exchange(
                     ItemPublicTokenExchangeRequest(public_token=res_token)
                 )
-                access_token = exchange['access_token']
-
-                # Fetch Liabilities
                 res = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=access_token)
+                    LiabilitiesGetRequest(access_token=exchange['access_token'])
                 )
                 debts = res.to_dict().get('liabilities', {})
 
-                # Update Profile (CC Balances & Student Loans)
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -147,9 +120,9 @@ def plaid_interface():
                     pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
-                st.success("✅ Bank Data Synced!")
-                # Reset token for a clean slate
-                del st.session_state['link_token']
+                st.success("✅ Imported!")
+                # Update counter to refresh the UI component
+                st.session_state['plaid_attempts'] = st.session_state.get('plaid_attempts', 0) + 1
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
