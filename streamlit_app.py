@@ -13,14 +13,14 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. SHARED MAILBOX (Fixes the "Empty Page" / New Tab issue) ---
+# --- 1. SHARED MAILBOX ---
 @st.cache_resource
 def get_global_token_store():
     return {}
 
 token_store = get_global_token_store()
 
-# --- 2. SESSION STATE SETUP (Original Structure) ---
+# --- 2. SESSION STATE SETUP ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -68,7 +68,7 @@ def plaid_interface():
             return
 
     # B. The Javascript Bridge (Handles UI Popup)
-    # res_token will start as a DeltaGenerator but become a string on success
+    # This component emits a string value back to Streamlit on success
     res_token = components.html(f"""
         <html>
         <head>
@@ -87,43 +87,58 @@ def plaid_interface():
                 font-family: sans-serif;">
                 🔗 Connect Bank Account
             </button>
+            <div id="error-msg" style="color: red; font-size: 11px; font-family: sans-serif; margin-top: 5px; display: none;"></div>
 
             <script type="text/javascript">
-                var handler = Plaid.create({{
-                    token: '{st.session_state.link_token}',
-                    onSuccess: function(public_token, metadata) {{
-                        window.parent.postMessage({{
-                            type: 'streamlit:setComponentValue',
-                            value: public_token
-                        }}, '*');
-                    }},
-                    onExit: function(err, metadata) {{
-                        if (err != null) {{ console.error(err); }}
-                    }}
-                }});
+                const btn = document.getElementById('link-button');
+                const errDiv = document.getElementById('error-msg');
 
-                document.getElementById('link-button').onclick = function() {{
-                    handler.open();
-                }};
+                try {{
+                    const handler = Plaid.create({{
+                        token: '{st.session_state.link_token}',
+                        onSuccess: function(public_token, metadata) {{
+                            window.parent.postMessage({{
+                                type: 'streamlit:setComponentValue',
+                                value: public_token
+                            }}, '*');
+                        }},
+                        onExit: function(err, metadata) {{
+                            if (err != null) {{
+                                errDiv.style.display = 'block';
+                                errDiv.innerText = 'Plaid Error: ' + err.display_message;
+                            }}
+                        }}
+                    }});
+
+                    btn.onclick = function() {{
+                        handler.open();
+                    }};
+                }} catch (e) {{
+                    errDiv.style.display = 'block';
+                    errDiv.innerText = 'Bridge Error: ' + e.message;
+                }}
             </script>
         </body>
         </html>
-    """, height=50)
+    """, height=70)
 
-    # C. Handle Data Pull (Only runs if res_token is the string from JS)
+    # C. Handle Data Pull (Only runs if res_token is the string returned from JS)
     if isinstance(res_token, str) and res_token.strip() != "":
         with st.spinner("⏳ Fetching bank data..."):
             try:
-                # Exchange Token
+                # Exchange public_token for access_token
                 exchange = client.item_public_token_exchange(
                     ItemPublicTokenExchangeRequest(public_token=res_token)
                 )
-                liab = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=exchange['access_token'])
-                )
-                debts = liab.to_dict().get('liabilities', {})
+                access_token = exchange['access_token']
 
-                # Update Profile
+                # Fetch Liabilities
+                res = client.liabilities_get(
+                    LiabilitiesGetRequest(access_token=access_token)
+                )
+                debts = res.to_dict().get('liabilities', {})
+
+                # Update Profile (CC Balances & Student Loans)
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -133,7 +148,8 @@ def plaid_interface():
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
                 st.success("✅ Bank Data Synced!")
-                del st.session_state['link_token'] # Clear for next use
+                # Reset token for a clean slate
+                del st.session_state['link_token']
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
@@ -142,7 +158,7 @@ def plaid_interface():
 # --- 5. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
-# --- 6. NAVIGATION (Your Original Logic) ---
+# --- 6. NAVIGATION ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
