@@ -13,14 +13,7 @@ from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
-# --- 1. SHARED MAILBOX ---
-@st.cache_resource
-def get_global_token_store():
-    return {}
-
-token_store = get_global_token_store()
-
-# --- 2. SESSION STATE SETUP ---
+# --- 1. SESSION STATE SETUP ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -33,7 +26,7 @@ if 'user_profile' not in st.session_state:
         "heat_pmt": 125.0 
     }
 
-# --- 3. INITIALIZE PLAID CLIENT ---
+# --- 2. INITIALIZE PLAID CLIENT ---
 try:
     configuration = plaid.Configuration(
         host=plaid.Environment.Sandbox,
@@ -48,91 +41,66 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 4. THE PLAID INTERFACE FUNCTION ---
+# --- 3. THE PLAID INTERFACE ---
 def plaid_interface():
-    # A. Generate Link Token
-    # We use a placeholder so the button doesn't vanish if this fails
-    link_token = None
-    try:
-        request = LinkTokenCreateRequest(
-            user={'client_user_id': str(uuid.uuid4())},
-            client_name="Analyst in a Pocket",
-            products=[Products('liabilities')],
-            country_codes=[CountryCode('CA')],
-            language='en'
-        )
-        response = client.link_token_create(request)
-        link_token = response['link_token']
-    except Exception as e:
-        st.warning("Plaid initialization pending... ensure credentials are correct.")
-        return
+    # Use a standard button to trigger the bridge
+    # This prevents the TypeError by delaying the component mount
+    if st.button("🔗 Sync Bank Liabilities (Plaid)", use_container_width=True):
+        try:
+            request = LinkTokenCreateRequest(
+                user={'client_user_id': str(uuid.uuid4())},
+                client_name="Analyst in a Pocket",
+                products=[Products('liabilities')],
+                country_codes=[CountryCode('CA')],
+                language='en'
+            )
+            response = client.link_token_create(request)
+            link_token = response['link_token']
+            
+            # Show the bridge once token is ready
+            html_code = f"""
+                <html>
+                <head><script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script></head>
+                <body style="margin: 0;">
+                    <script>
+                        var handler = Plaid.create({{
+                            token: '{link_token}',
+                            onSuccess: function(t, m) {{ window.parent.postMessage({{type:'streamlit:setComponentValue', value:t}}, '*'); }},
+                            onExit: function(e, m) {{ console.log("Exited"); }}
+                        }});
+                        handler.open();
+                    </script>
+                    <p style="font-family: sans-serif; font-size: 12px; color: gray; text-align: center;">Plaid Secure Window Opening...</p>
+                </body>
+                </html>
+            """
+            res_token = components.html(html_code, height=40, key="plaid_bridge")
 
-    # B. The Javascript Bridge
-    # Simplified HTML and fixed key to prevent TypeError
-    html_code = f"""
-        <html>
-        <head>
-            <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-        </head>
-        <body style="margin: 0; padding: 0;">
-            <button id="link-button" style="
-                background-color: #2e7d32; color: white; border: none; 
-                padding: 12px; border-radius: 8px; font-weight: bold; 
-                width: 100%; cursor: pointer; font-family: sans-serif;">
-                🔗 Connect Bank Account
-            </button>
-            <script type="text/javascript">
-                var handler = Plaid.create({{
-                    token: '{link_token}',
-                    onSuccess: function(public_token, metadata) {{
-                        window.parent.postMessage({{
-                            type: 'streamlit:setComponentValue',
-                            value: public_token
-                        }}, '*');
-                    }}
-                }});
-                document.getElementById('link-button').onclick = function() {{
-                    handler.open();
-                }};
-            </script>
-        </body>
-        </html>
-    """
-    
-    # Static key prevents the internal Streamlit TypeError during re-renders
-    res_token = components.html(html_code, height=50, key="plaid_link_bridge")
+            # Handle the result
+            if isinstance(res_token, str) and len(res_token) > 10:
+                with st.spinner("Importing..."):
+                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res_token))
+                    res = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                    debts = res.to_dict().get('liabilities', {})
+                    
+                    if debts.get('credit'):
+                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                    
+                    if debts.get('student'):
+                        pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                        st.session_state.user_profile['student_loan'] = float(pmt)
+                    
+                    st.success("✅ Imported!")
+                    time.sleep(1)
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Plaid Error: {e}")
 
-    # C. Data Handoff
-    if isinstance(res_token, str) and len(res_token) > 10:
-        with st.spinner("⏳ Fetching bank data..."):
-            try:
-                exchange = client.item_public_token_exchange(
-                    ItemPublicTokenExchangeRequest(public_token=res_token)
-                )
-                res = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=exchange['access_token'])
-                )
-                debts = res.to_dict().get('liabilities', {})
-
-                # Calculations
-                if debts.get('credit'):
-                    bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                    st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                
-                if debts.get('student'):
-                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                    st.session_state.user_profile['student_loan'] = float(pmt)
-
-                st.success("✅ Imported successfully!")
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Sync failed: {e}")
-
-# --- 5. APP CONFIG ---
+# --- 4. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
-# --- 6. NAVIGATION ---
+# --- 5. NAVIGATION ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
@@ -145,7 +113,7 @@ tools = {
 }
 selection = st.sidebar.radio("Go to", list(tools.keys()))
 
-# --- 7. PAGE UI ---
+# --- 6. PAGE UI ---
 if selection == "👤 Client Profile":
     h1, h2 = st.columns([1, 5], vertical_alignment="center")
     with h1:
@@ -166,38 +134,18 @@ if selection == "👤 Client Profile":
     with c1:
         st.markdown("### Primary Client")
         st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile['p1_name'])
-        st.session_state.user_profile['p1_t4'] = st.number_input("T4 (Employment Income)", value=float(st.session_state.user_profile['p1_t4']))
-        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses / Performance Pay", value=float(st.session_state.user_profile['p1_bonus']))
+        st.session_state.user_profile['p1_t4'] = st.number_input("T4 Income", value=float(st.session_state.user_profile['p1_t4']))
+        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses", value=float(st.session_state.user_profile['p1_bonus']))
         st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile['p1_commission']))
-        st.session_state.user_profile['p1_pension'] = st.number_input("Pension / CPP / OAS", value=float(st.session_state.user_profile['p1_pension']))
+        st.session_state.user_profile['p1_pension'] = st.number_input("Pension/CPP", value=float(st.session_state.user_profile['p1_pension']))
     
     with c2:
         st.markdown("### Co-Owner / Partner")
         st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile['p2_name'])
-        st.session_state.user_profile['p2_t4'] = st.number_input("T4 (Employment Income) ", value=float(st.session_state.user_profile['p2_t4']))
-        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses / Performance Pay ", value=float(st.session_state.user_profile['p2_bonus']))
+        st.session_state.user_profile['p2_t4'] = st.number_input("T4 Income ", value=float(st.session_state.user_profile['p2_t4']))
+        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses ", value=float(st.session_state.user_profile['p2_bonus']))
         st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile['p2_commission']))
-        st.session_state.user_profile['p2_pension'] = st.number_input("Pension / CPP / OAS ", value=float(st.session_state.user_profile['p2_pension']))
-
-    st.session_state.user_profile['inv_rental_income'] = st.number_input("Joint Rental Income (Current Portfolio)", value=float(st.session_state.user_profile['inv_rental_income']))
-
-    st.divider()
-    st.subheader("🏠 Housing & Property Details")
-    h1, h2 = st.columns([1, 2])
-    with h1:
-        st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
-    with h2:
-        if st.session_state.user_profile['housing_status'] == "Renting":
-            st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
-        else:
-            s1, s2 = st.columns(2)
-            with s1:
-                st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
-                st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
-            with s2:
-                st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
-                st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
-                st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
+        st.session_state.user_profile['p2_pension'] = st.number_input("Pension/CPP ", value=float(st.session_state.user_profile['p2_pension']))
 
     st.divider()
     st.subheader("💳 Monthly Liabilities")
@@ -207,11 +155,11 @@ if selection == "👤 Client Profile":
 
     l1, l2, l3 = st.columns(3)
     with l1:
-        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile['car_loan']))
-        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments (Monthly)", value=float(st.session_state.user_profile['student_loan']))
+        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments", value=float(st.session_state.user_profile['car_loan']))
+        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments", value=float(st.session_state.user_profile['student_loan']))
     with l2:
-        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Monthly)", value=float(st.session_state.user_profile['cc_pmt']))
-        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance ($)", value=float(st.session_state.user_profile['loc_balance']))
+        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments", value=float(st.session_state.user_profile['cc_pmt']))
+        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance", value=float(st.session_state.user_profile['loc_balance']))
     with l3:
         prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
         st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')))
@@ -219,7 +167,7 @@ if selection == "👤 Client Profile":
     profile_json = json.dumps(st.session_state.user_profile, indent=4)
     st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
 
-# --- 8. HANDLE OTHER PAGES ---
+# --- 7. HANDLE OTHER PAGES ---
 else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
