@@ -52,61 +52,71 @@ except Exception as e:
 def plaid_interface():
     params = st.query_params
     
-    # CASE A: User just returned from the bank in a new tab
+    # CASE A: THE "RETURN" TAB
     if "req_id" in params:
         req_id = params["req_id"]
         stored_token = token_store.get(req_id)
         
         if stored_token:
-            with st.spinner("⏳ Finalizing secure connection..."):
-                public_token = None
-                # Retry loop to give Plaid Sandbox time to sync
-                for _ in range(3):
-                    try:
-                        check_res = client.link_token_get(LinkTokenGetRequest(link_token=stored_token)).to_dict()
-                        if check_res.get('link_sessions'):
-                            for s in check_res['link_sessions']:
-                                if s.get('status') == 'success':
-                                    public_token = s.get('public_token')
-                                    break
-                        if public_token: break
-                        time.sleep(1)
-                    except:
-                        pass
+            # Create a placeholder so the user sees progress
+            status_box = st.empty()
+            status_box.info("⏳ Communicating with Plaid... please wait 5 seconds.")
+            
+            public_token = None
+            # Aggressive Retry: Check 5 times with longer pauses
+            for attempt in range(5):
+                try:
+                    time.sleep(2) # Give Plaid room to breathe
+                    check_res = client.link_token_get(LinkTokenGetRequest(link_token=stored_token)).to_dict()
+                    
+                    if check_res.get('link_sessions'):
+                        # Check all sessions associated with this token
+                        for s in check_res['link_sessions']:
+                            if s.get('status') == 'success':
+                                public_token = s.get('public_token')
+                                break
+                    if public_token:
+                        break
+                except Exception as e:
+                    continue # Keep trying if API call fails
+            
+            if public_token:
+                status_box.info("✅ Connection found! Exchanging tokens...")
+                try:
+                    # Exchange and Fetch
+                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+                    liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
+                    debts = liab.to_dict().get('liabilities', {})
+                    
+                    # Update Session State
+                    if debts.get('credit'):
+                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                    
+                    if debts.get('student'):
+                        pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                        st.session_state.user_profile['student_loan'] = float(pmt)
 
-                if public_token:
-                    try:
-                        exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                        liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                        debts = liab.to_dict().get('liabilities', {})
-                        
-                        # Sync to your original session state
-                        if debts.get('credit'):
-                            bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                            st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                        
-                        if debts.get('student'):
-                            pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                            st.session_state.user_profile['student_loan'] = float(pmt)
-
-                        st.success("🎉 Liabilities Synced! You can continue in this tab.")
-                        del token_store[req_id]
-                        st.query_params.clear()
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Sync Error: {e}")
-                else:
-                    st.error("Connection incomplete. Plaid hasn't confirmed the login. Please try again.")
+                    status_box.success("🎉 Success! Your liabilities have been updated.")
+                    
+                    # Cleanup and Refresh
+                    del token_store[req_id]
+                    # We keep the query params for a moment so the success message stays visible
+                    time.sleep(2)
+                    st.rerun()
+                except Exception as e:
+                    status_box.error(f"Sync Error: {e}")
+            else:
+                status_box.error("❌ Plaid hasn't confirmed the login yet. Close this tab and click the link in the original tab again, or wait a moment and refresh.")
         else:
-            st.warning("Session expired. Please click 'Connect Bank' again in your original tab.")
+            st.error("Session Link Expired. Please start over from the main page.")
 
-    # CASE B: The initial button
+    # CASE B: THE "START" BUTTON
     else:
         if st.button("🔗 Connect Bank (Auto-Fill)", use_container_width=True):
             try:
                 req_id = str(uuid.uuid4())
-                # MUST match your Plaid Dashboard Redirect URIs exactly
+                # Ensure this is YOUR exact app URL
                 base_url = "https://analyst-in-a-pocket.streamlit.app" 
                 redirect_uri = f"{base_url}?req_id={req_id}"
 
@@ -119,7 +129,10 @@ def plaid_interface():
                     hosted_link={'completion_redirect_uri': redirect_uri}
                 )
                 response = client.link_token_create(request)
+                
+                # Store the token
                 token_store[req_id] = response['link_token']
+                
                 st.link_button("👉 Click to Open Secure Bank Login", response['hosted_link_url'])
             except Exception as e:
                 st.error(f"Plaid Init Error: {e}")
@@ -219,3 +232,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
