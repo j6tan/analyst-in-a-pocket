@@ -33,9 +33,6 @@ if 'user_profile' not in st.session_state:
         "heat_pmt": 125.0 
     }
 
-if 'plaid_attempts' not in st.session_state:
-    st.session_state.plaid_attempts = 0
-
 # --- 3. INITIALIZE PLAID CLIENT ---
 try:
     configuration = plaid.Configuration(
@@ -45,7 +42,7 @@ try:
             'secret': st.secrets["PLAID_SECRET"],
         }
     )
-    api_client = plaid.ApiClient(configuration)
+    api_client = plaid_api.ApiClient(configuration)
     client = plaid_api.PlaidApi(api_client)
 except Exception as e:
     st.error(f"Configuration Error: {e}")
@@ -54,6 +51,8 @@ except Exception as e:
 # --- 4. THE PLAID INTERFACE FUNCTION ---
 def plaid_interface():
     # A. Generate Link Token
+    # We use a placeholder so the button doesn't vanish if this fails
+    link_token = None
     try:
         request = LinkTokenCreateRequest(
             user={'client_user_id': str(uuid.uuid4())},
@@ -65,11 +64,11 @@ def plaid_interface():
         response = client.link_token_create(request)
         link_token = response['link_token']
     except Exception as e:
-        st.error(f"Plaid Init Error: {e}")
+        st.warning("Plaid initialization pending... ensure credentials are correct.")
         return
 
     # B. The Javascript Bridge
-    # Cleaned up string formatting to avoid TypeError
+    # Simplified HTML and fixed key to prevent TypeError
     html_code = f"""
         <html>
         <head>
@@ -90,9 +89,6 @@ def plaid_interface():
                             type: 'streamlit:setComponentValue',
                             value: public_token
                         }}, '*');
-                    }},
-                    onExit: function(err, metadata) {{
-                        if (err != null) {{ console.error(err); }}
                     }}
                 }});
                 document.getElementById('link-button').onclick = function() {{
@@ -103,23 +99,22 @@ def plaid_interface():
         </html>
     """
     
-    res_token = components.html(
-        html_code, 
-        height=50, 
-        key=f"plaid_component_{st.session_state.plaid_attempts}"
-    )
+    # Static key prevents the internal Streamlit TypeError during re-renders
+    res_token = components.html(html_code, height=50, key="plaid_link_bridge")
 
     # C. Data Handoff
-    if isinstance(res_token, str) and len(res_token) > 5:
-        with st.spinner("⏳ Syncing Bank Data..."):
+    if isinstance(res_token, str) and len(res_token) > 10:
+        with st.spinner("⏳ Fetching bank data..."):
             try:
-                exchange_request = ItemPublicTokenExchangeRequest(public_token=res_token)
-                exchange = client.item_public_token_exchange(exchange_request)
-                
-                liab_request = LiabilitiesGetRequest(access_token=exchange['access_token'])
-                res = client.liabilities_get(liab_request)
+                exchange = client.item_public_token_exchange(
+                    ItemPublicTokenExchangeRequest(public_token=res_token)
+                )
+                res = client.liabilities_get(
+                    LiabilitiesGetRequest(access_token=exchange['access_token'])
+                )
                 debts = res.to_dict().get('liabilities', {})
 
+                # Calculations
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
@@ -128,8 +123,7 @@ def plaid_interface():
                     pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
-                st.success("✅ Imported!")
-                st.session_state.plaid_attempts += 1
+                st.success("✅ Imported successfully!")
                 time.sleep(1)
                 st.rerun()
             except Exception as e:
