@@ -45,7 +45,7 @@ except Exception as e:
 # --- 3. THE JAVASCRIPT PLAID INTERFACE ---
 @st.fragment
 def plaid_interface():
-    # 1. Generate Link Token
+    # 1. Token Management
     if not st.session_state.get('current_link_token'):
         try:
             request = LinkTokenCreateRequest(
@@ -63,83 +63,84 @@ def plaid_interface():
 
     link_token = st.session_state['current_link_token']
     
-    # 2. UPDATED JAVASCRIPT BRIDGE
+    # 2. THE REBUILT JS BRIDGE
+    # We now initialize Plaid ONLY when the user clicks. 
+    # This prevents the library from "hanging" on page load.
     plaid_js = f"""
-    <div id="plaid-button-container">
-        <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-        <script>
-        // Use a global variable to ensure the handler is ready
-        var plaidHandler = null;
-
-        function initializePlaid() {{
-            plaidHandler = Plaid.create({{
-                token: '{link_token}',
-                onSuccess: (public_token, metadata) => {{
-                    window.parent.postMessage({{
-                        type: 'streamlit:setComponentValue',
-                        value: public_token
-                    }}, '*');
-                }},
-                onExit: (err, metadata) => {{
-                    if (err != null) {{
-                        console.error("Plaid Error:", err);
-                    }}
-                }}
-            }});
-        }}
-
-        // Initialize immediately
-        initializePlaid();
-
-        function handleBtnClick() {{
-            if (plaidHandler) {{
-                plaidHandler.open();
-            }} else {{
-                alert("Plaid is still loading... please try again in a second.");
-                initializePlaid();
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script>
+    function launchPlaid() {{
+        const handler = Plaid.create({{
+            token: '{link_token}',
+            onSuccess: (public_token, metadata) => {{
+                window.parent.postMessage({{
+                    type: 'streamlit:setComponentValue',
+                    value: public_token
+                }}, '*');
+            }},
+            onExit: (err, metadata) => {{
+                if (err != null) console.error(err);
+                // If they exit, we tell Streamlit to allow a retry
+                window.parent.postMessage({{
+                    type: 'streamlit:setComponentValue',
+                    value: "EXITED"
+                }}, '*');
             }}
-        }}
-        </script>
-        <button onclick="handleBtnClick()" style="
-            background-color: #2e7d32; 
-            color: white; 
-            border: none; 
-            padding: 12px 24px; 
-            border-radius: 8px; 
-            width: 100%; 
-            font-weight: bold; 
-            cursor: pointer;
-            font-family: sans-serif;
-            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);">
-            🔗 CLICK TO CONNECT BANK (AUTO-FILL)
-        </button>
-    </div>
+        }});
+        handler.open();
+    }}
+    </script>
+    <button onclick="launchPlaid()" style="
+        background-color: #2e7d32; 
+        color: white; 
+        border: none; 
+        padding: 14px 24px; 
+        border-radius: 8px; 
+        width: 100%; 
+        font-weight: bold; 
+        cursor: pointer;
+        font-family: sans-serif;
+        font-size: 16px;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
+        🔗 CLICK TO CONNECT BANK
+    </button>
     """
     
-    res = components.html(plaid_js, height=70)
+    # Render component
+    res = components.html(plaid_js, height=80)
 
-    if isinstance(res, str) and res.strip():
-        with st.spinner("✅ Token Received! Syncing..."):
+    # 3. Handle Returns
+    if res == "EXITED":
+        st.info("ℹ️ Plaid closed. You can try clicking the button again.")
+    elif isinstance(res, str) and len(res) > 10: # Ensure it's a real token
+        with st.spinner("🔄 Syncing Liabilities..."):
             try:
                 exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
                 liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                 debts = liab.to_dict().get('liabilities', {})
                 
+                # Update CC
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                 
+                # Update Student Loans
                 if debts.get('student'):
                     pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
-                st.success("🎉 Liabilities Updated!")
+                st.success("✅ Data Synced!")
                 st.session_state['current_link_token'] = None 
-                time.sleep(1.5)
+                time.sleep(1)
                 st.rerun()
             except Exception as e:
                 st.error(f"Sync Error: {e}")
 
+    # 4. EMERGENCY RESET
+    if st.button("🔄 Stuck? Refresh Connection", type="tertiary"):
+        st.session_state['current_link_token'] = None
+        st.rerun()
+        
 # --- 4. CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
@@ -238,5 +239,6 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
