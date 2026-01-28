@@ -6,12 +6,13 @@ import plaid
 import time
 import streamlit.components.v1 as components 
 from plaid.api import plaid_api
-from plaid.model.link_token_create_request import Link_token_create_request
+# Fixed Case-Sensitivity in Imports below:
+from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
-from plaid.model.link_token_get_request import Link_token_get_request
-from plaid.model.item_public_token_exchange_request import Item_public_token_exchange_request
-from plaid.model.liabilities_get_request import Liabilities_get_request
+from plaid.model.link_token_get_request import LinkTokenGetRequest
+from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
 # --- 1. SHARED MAILBOX ---
 @st.cache_resource
@@ -48,9 +49,9 @@ except Exception as e:
     st.error(f"Configuration Error: {e}")
     st.stop()
 
-# --- 4. THE PLAID INTERFACE FUNCTION (FINAL PULSE PATCH) ---
+# --- 4. THE PLAID INTERFACE FUNCTION ---
 def plaid_interface():
-    # A. Generate a fresh Link Token for every render to ensure the button is "live"
+    # A. Generate Link Token
     try:
         request = LinkTokenCreateRequest(
             user={'client_user_id': str(uuid.uuid4())},
@@ -66,7 +67,6 @@ def plaid_interface():
         return
 
     # B. The Javascript Bridge
-    # Use a dynamic key to force the component to rebuild if a sync happens
     res_token = components.html(f"""
         <html>
         <head>
@@ -100,16 +100,15 @@ def plaid_interface():
         </html>
     """, height=50, key=f"plaid_btn_{st.session_state.get('plaid_attempts', 0)}")
 
-    # C. Data Handoff (Only triggers when Javascript sends the public_token)
+    # C. Data Handoff
     if isinstance(res_token, str) and len(res_token) > 5:
         with st.spinner("⏳ Syncing Bank Data..."):
             try:
-                exchange = client.item_public_token_exchange(
-                    ItemPublicTokenExchangeRequest(public_token=res_token)
-                )
-                res = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=exchange['access_token'])
-                )
+                exchange_request = ItemPublicTokenExchangeRequest(public_token=res_token)
+                exchange = client.item_public_token_exchange(exchange_request)
+                
+                liab_request = LiabilitiesGetRequest(access_token=exchange['access_token'])
+                res = client.liabilities_get(liab_request)
                 debts = res.to_dict().get('liabilities', {})
 
                 if debts.get('credit'):
@@ -121,7 +120,6 @@ def plaid_interface():
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
                 st.success("✅ Imported!")
-                # Update counter to refresh the UI component
                 st.session_state['plaid_attempts'] = st.session_state.get('plaid_attempts', 0) + 1
                 time.sleep(1)
                 st.rerun()
