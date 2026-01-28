@@ -61,58 +61,65 @@ def plaid_interface():
             st.error(f"Plaid Init Error: {e}")
             return
 
-    # JavaScript to open the Plaid Link overlay
     link_token = st.session_state['current_link_token']
+    
+    # JavaScript Bridge Logic
+    # We use window.parent.postMessage to send the public_token back to the Streamlit 'res' variable
     plaid_js = f"""
-    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-    <script>
-    const handler = Plaid.create({{
-      token: '{link_token}',
-      onSuccess: (public_token, metadata) => {{
-        window.parent.postMessage({{
-          type: 'streamlit:setComponentValue',
-          value: public_token
-        }}, '*');
-      }},
-      onExit: (err, metadata) => {{
-        console.log("User exited Plaid");
-      }}
-    }});
-    </script>
-    <button onclick="handler.open()" style="
-        background-color: #2e7d32; 
-        color: white; 
-        border: none; 
-        padding: 12px 24px; 
-        border-radius: 8px; 
-        width: 100%; 
-        font-weight: bold; 
-        cursor: pointer;
-        font-family: sans-serif;
-        box-shadow: 0px 2px 4px rgba(0,0,0,0.1);">
-        🔗 CLICK TO CONNECT BANK (AUTO-FILL)
-    </button>
+    <div id="plaid-button-container">
+        <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+        <script>
+        const handler = Plaid.create({{
+          token: '{link_token}',
+          onSuccess: (public_token, metadata) => {{
+            window.parent.postMessage({{
+              type: 'streamlit:setComponentValue',
+              value: public_token
+            }}, '*');
+          }},
+          onExit: (err, metadata) => {{
+            console.log("User exited Plaid");
+          }}
+        }});
+        </script>
+        <button onclick="handler.open()" style="
+            background-color: #2e7d32; 
+            color: white; 
+            border: none; 
+            padding: 12px 24px; 
+            border-radius: 8px; 
+            width: 100%; 
+            font-weight: bold; 
+            cursor: pointer;
+            font-family: sans-serif;
+            box-shadow: 0px 2px 4px rgba(0,0,0,0.1);">
+            🔗 CLICK TO CONNECT BANK (AUTO-FILL)
+        </button>
+    </div>
     """
     
-    # This component returns the public_token directly to Python
-    res = components.html(plaid_js, height=65)
+    # Render the HTML/JS component
+    res = components.html(plaid_js, height=70)
 
+    # If the JS sends back a token, process it
     if res:
-        with st.spinner("✅ Token Received! Syncing..."):
+        with st.spinner("✅ Connection Found! Fetching Liabilities..."):
             try:
                 exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
                 liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                 debts = liab.to_dict().get('liabilities', {})
                 
+                # Update Credit Card Payments (Estimated at 3% of balance)
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                 
+                # Update Student Loan Payments
                 if debts.get('student'):
                     pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
-                st.success("🎉 Data Synced Successfully!")
+                st.success("🎉 Liabilities Updated!")
                 time.sleep(1.5)
                 st.rerun()
             except Exception as e:
@@ -147,8 +154,12 @@ if selection == "👤 Client Profile":
     with u1:
         uf = st.file_uploader("Upload Existing Profile", type=["json"])
         if uf:
-            st.session_state.user_profile.update(json.load(uf))
-            st.success("Profile Loaded!")
+            try:
+                data = json.load(uf)
+                st.session_state.user_profile.update(data)
+                st.success("Profile Loaded!")
+            except:
+                st.error("Invalid JSON file.")
 
     st.subheader("👥 Household Income Details")
     c1, c2 = st.columns(2)
@@ -191,7 +202,7 @@ if selection == "👤 Client Profile":
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # This handles the Plaid button and the token return
+    # This handles the Plaid JavaScript button
     plaid_interface()
 
     l1, l2, l3 = st.columns(3)
