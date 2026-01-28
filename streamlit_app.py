@@ -11,6 +11,7 @@ from plaid.model.country_code import CountryCode
 from plaid.model.link_token_get_request import LinkTokenGetRequest
 from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
 from plaid.model.liabilities_get_request import LiabilitiesGetRequest
+from streamlit_plaid import plaid_link # Add this to your imports
 
 # --- 1. SESSION STATE SETUP ---
 if 'current_link_token' not in st.session_state:
@@ -49,84 +50,62 @@ except Exception as e:
     st.stop()
 
 # --- 3. THE AUTO-POLLING LOGIC ---
-
 @st.fragment
 def plaid_interface():
-    if st.session_state['plaid_step'] == 'connect':
-        if st.button("🔗 Auto-Fill Liabilities (Plaid)", use_container_width=True):
+    st.markdown("### 🏦 Link Your Bank")
+    
+    # 1. We still need a Link Token from the Python side
+    if st.session_state.get('current_link_token') is None:
+        try:
+            request = LinkTokenCreateRequest(
+                user={'client_user_id': str(uuid.uuid4())},
+                client_name="Analyst in a Pocket",
+                products=[Products('liabilities')],
+                country_codes=[CountryCode('CA')],
+                language='en'
+                # Note: 'hosted_link' is REMOVED because we are embedding it now
+            )
+            response = client.link_token_create(request)
+            st.session_state['current_link_token'] = response['link_token']
+        except Exception as e:
+            st.error(f"Failed to initialize Plaid: {e}")
+            return
+
+    # 2. THE JAVASCRIPT BRIDGE
+    # This button triggers the Plaid JS code. 
+    # The 'on_success' happens automatically in the background.
+    out = plaid_link(
+        st.session_state['current_link_token'],
+        button_label="🔗 Securely Connect Bank Account",
+        use_container_width=True,
+    )
+
+    # 3. Handle the return from JavaScript
+    if out.public_token:
+        with st.spinner("✅ Connection Received! Fetching data..."):
             try:
-                request = LinkTokenCreateRequest(
-                    user={'client_user_id': str(uuid.uuid4())},
-                    client_name="Analyst in a Pocket",
-                    products=[Products('liabilities')],
-                    country_codes=[CountryCode('CA')],
-                    language='en',
-                    hosted_link={} 
+                # This part is exactly the same as before
+                exchange = client.item_public_token_exchange(
+                    ItemPublicTokenExchangeRequest(public_token=out.public_token)
                 )
-                response = client.link_token_create(request)
-                st.session_state['current_link_token'] = response['link_token']
-                st.session_state['link_url'] = response['hosted_link_url']
-                st.session_state['plaid_step'] = 'syncing'
+                liab = client.liabilities_get(
+                    LiabilitiesGetRequest(access_token=exchange['access_token'])
+                )
+                debts = liab.to_dict().get('liabilities', {})
+                
+                if debts.get('credit'):
+                    bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
+                    st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
+                
+                if debts.get('student'):
+                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
+                    st.session_state.user_profile['student_loan'] = float(pmt)
+
+                st.success("🎉 Liabilities Updated!")
+                time.sleep(1)
                 st.rerun()
             except Exception as e:
-                st.error(f"Link Error: {e}")
-
-    elif st.session_state['plaid_step'] == 'syncing':
-        st.markdown(f'''
-            <a href="{st.session_state["link_url"]}" target="_blank" style="text-decoration: none;">
-                <div style="background-color: #2e7d32; color: white; padding: 15px; text-align: center; border-radius: 8px; font-weight: bold; margin-bottom: 15px;">
-                    STEP 1: CLICK HERE TO LOGIN
-                </div>
-            </a>
-        ''', unsafe_allow_html=True)
-        
-        with st.status("📡 2. Watching for bank login...", expanded=True) as status:
-            for i in range(40): 
-                time.sleep(3) 
-                
-                token = st.session_state.get('current_link_token')
-                check_req = LinkTokenGetRequest(link_token=token)
-                check_res = client.link_token_get(check_req)
-                
-                # Convert the whole response to a dictionary safely
-                res_dict = check_res.to_dict()
-                public_token = None
-                
-                # 1. Check the results path
-                results = res_dict.get('results', {})
-                if results and results.get('item_add_results'):
-                    public_token = results['item_add_results'][0].get('public_token')
-                
-                # 2. Check the link_sessions path safely
-                if not public_token and res_dict.get('link_sessions'):
-                    for s in res_dict['link_sessions']:
-                        if s.get('status') == 'success' and s.get('public_token'):
-                            public_token = s.get('public_token')
-                            break
-
-                if public_token:
-                    status.update(label="✅ Success detected! Syncing data...", state="running")
-                    
-                    exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
-                    liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
-                    debts = liab.to_dict().get('liabilities', {})
-                    
-                    if debts.get('credit'):
-                        bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                        st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                    
-                    status.update(label="🎉 Data Synced Successfully!", state="complete")
-                    st.session_state['plaid_step'] = 'connect'
-                    time.sleep(2)
-                    st.rerun()
-                    break
-                
-                if i % 2 == 0:
-                    status.write(f"Searching for 'Success' signal... (Attempt {i//2 + 1})")
-
-            if st.button("Cancel / Restart"):
-                st.session_state['plaid_step'] = 'connect'
-                st.rerun()
+                st.error(f"Sync Error: {e}")
 
 # --- 4. CONFIG & GLOBAL VARS ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -222,6 +201,7 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
 
