@@ -45,101 +45,90 @@ except Exception as e:
 # --- 3. THE JAVASCRIPT PLAID INTERFACE ---
 @st.fragment
 def plaid_interface():
-    # 1. Token Management
-    if not st.session_state.get('current_link_token'):
+    # --- A. CHECK FOR RETURN TRIP (The "Smart" Part) ---
+    # When Plaid redirects back, it adds '?status=success' to the URL.
+    # We catch this immediately when the app reloads.
+    params = st.query_params
+    
+    # If we just came back from Plaid and it was successful:
+    if params.get("status") == "success" and st.session_state.get('current_link_token'):
+        st.toast("🔄 Bank verified! Fetching data...", icon="🏦")
+        
         try:
-            request = LinkTokenCreateRequest(
-                user={'client_user_id': str(uuid.uuid4())},
-                client_name="Analyst in a Pocket",
-                products=[Products('liabilities')],
-                country_codes=[CountryCode('CA')],
-                language='en'
-            )
-            response = client.link_token_create(request)
-            st.session_state['current_link_token'] = response['link_token']
-        except Exception as e:
-            st.error(f"Plaid Init Error: {e}")
-            return
-
-    link_token = st.session_state['current_link_token']
-    
-    # 2. THE REBUILT JS BRIDGE
-    # We now initialize Plaid ONLY when the user clicks. 
-    # This prevents the library from "hanging" on page load.
-    plaid_js = f"""
-    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-    <script>
-    function launchPlaid() {{
-        const handler = Plaid.create({{
-            token: '{link_token}',
-            onSuccess: (public_token, metadata) => {{
-                window.parent.postMessage({{
-                    type: 'streamlit:setComponentValue',
-                    value: public_token
-                }}, '*');
-            }},
-            onExit: (err, metadata) => {{
-                if (err != null) console.error(err);
-                // If they exit, we tell Streamlit to allow a retry
-                window.parent.postMessage({{
-                    type: 'streamlit:setComponentValue',
-                    value: "EXITED"
-                }}, '*');
-            }}
-        }});
-        handler.open();
-    }}
-    </script>
-    <button onclick="launchPlaid()" style="
-        background-color: #2e7d32; 
-        color: white; 
-        border: none; 
-        padding: 14px 24px; 
-        border-radius: 8px; 
-        width: 100%; 
-        font-weight: bold; 
-        cursor: pointer;
-        font-family: sans-serif;
-        font-size: 16px;
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">
-        🔗 CLICK TO CONNECT BANK
-    </button>
-    """
-    
-    # Render component
-    res = components.html(plaid_js, height=80)
-
-    # 3. Handle Returns
-    if res == "EXITED":
-        st.info("ℹ️ Plaid closed. You can try clicking the button again.")
-    elif isinstance(res, str) and len(res) > 10: # Ensure it's a real token
-        with st.spinner("🔄 Syncing Liabilities..."):
-            try:
-                exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
+            # We don't need the public_token from the URL.
+            # We use the Link Token we already have to ask Plaid "What happened?"
+            token = st.session_state['current_link_token']
+            check_req = LinkTokenGetRequest(link_token=token)
+            check_res = client.link_token_get(check_req).to_dict()
+            
+            # Extract the public_token from the session results
+            public_token = None
+            if check_res.get('link_sessions'):
+                for s in check_res['link_sessions']:
+                    if s.get('status') == 'success':
+                        public_token = s.get('public_token')
+                        break
+            
+            if public_token:
+                # Exchange and Sync
+                exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
                 liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                 debts = liab.to_dict().get('liabilities', {})
                 
-                # Update CC
+                # Auto-Fill Logic
                 if debts.get('credit'):
                     bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
                     st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
                 
-                # Update Student Loans
                 if debts.get('student'):
                     pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
-                st.success("✅ Data Synced!")
-                st.session_state['current_link_token'] = None 
-                time.sleep(1)
+                st.success("✅ Bank Data Synced Successfully!")
+                
+                # Cleanup: Clear params and token so it doesn't re-run on refresh
+                st.session_state['current_link_token'] = None
+                st.query_params.clear() 
+                time.sleep(2)
                 st.rerun()
-            except Exception as e:
-                st.error(f"Sync Error: {e}")
+                
+            else:
+                st.error("Plaid said success, but no token was found. Please try again.")
+                
+        except Exception as e:
+            st.error(f"Sync Error: {e}")
 
-    # 4. EMERGENCY RESET
-    if st.button("🔄 Stuck? Refresh Connection", type="tertiary"):
-        st.session_state['current_link_token'] = None
-        st.rerun()
+    # --- B. THE START BUTTON ---
+    # If we aren't currently processing a return trip, show the connect button.
+    else:
+        if st.button("🔗 Connect Bank (Auto-Fill)", use_container_width=True):
+            try:
+                # 1. Determine where to send the user back to
+                # This must match what you added in Plaid Dashboard!
+                # If running locally, use localhost. If on cloud, use your .app URL.
+                # You can make this dynamic or hardcode it for now.
+                app_url = "https://analyst-in-a-pocket.streamlit.app" 
+                # OR for local testing: app_url = "http://localhost:8501"
+                
+                redirect_uri = f"{app_url}?status=success"
+
+                request = LinkTokenCreateRequest(
+                    user={'client_user_id': str(uuid.uuid4())},
+                    client_name="Analyst in a Pocket",
+                    products=[Products('liabilities')],
+                    country_codes=[CountryCode('CA')],
+                    language='en',
+                    hosted_link={'completion_redirect_uri': redirect_uri} # <--- The Magic
+                )
+                response = client.link_token_create(request)
+                
+                # Save token and redirect user
+                st.session_state['current_link_token'] = response['link_token']
+                st.link_button("👉 Click to Open Secure Bank Login", response['hosted_link_url'])
+                
+            except Exception as e:
+                st.error(f"Plaid Error: {e}")
+                st.info("Did you add your Redirect URI to the Plaid Dashboard?")
         
 # --- 4. CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -239,6 +228,7 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
 
 
