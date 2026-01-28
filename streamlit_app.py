@@ -45,7 +45,7 @@ except Exception as e:
 # --- 3. THE JAVASCRIPT PLAID INTERFACE ---
 @st.fragment
 def plaid_interface():
-    # Generate Link Token if it doesn't exist
+    # 1. Generate Link Token
     if not st.session_state.get('current_link_token'):
         try:
             request = LinkTokenCreateRequest(
@@ -63,25 +63,44 @@ def plaid_interface():
 
     link_token = st.session_state['current_link_token']
     
+    # 2. UPDATED JAVASCRIPT BRIDGE
     plaid_js = f"""
     <div id="plaid-button-container">
         <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
         <script>
-        const handler = Plaid.create({{
-          token: '{link_token}',
-          onSuccess: (public_token, metadata) => {{
-            // Send the string token back to Streamlit
-            window.parent.postMessage({{
-              type: 'streamlit:setComponentValue',
-              value: public_token
-            }}, '*');
-          }},
-          onExit: (err, metadata) => {{
-            console.log("User exited Plaid");
-          }}
-        }});
+        // Use a global variable to ensure the handler is ready
+        var plaidHandler = null;
+
+        function initializePlaid() {{
+            plaidHandler = Plaid.create({{
+                token: '{link_token}',
+                onSuccess: (public_token, metadata) => {{
+                    window.parent.postMessage({{
+                        type: 'streamlit:setComponentValue',
+                        value: public_token
+                    }}, '*');
+                }},
+                onExit: (err, metadata) => {{
+                    if (err != null) {{
+                        console.error("Plaid Error:", err);
+                    }}
+                }}
+            }});
+        }}
+
+        // Initialize immediately
+        initializePlaid();
+
+        function handleBtnClick() {{
+            if (plaidHandler) {{
+                plaidHandler.open();
+            }} else {{
+                alert("Plaid is still loading... please try again in a second.");
+                initializePlaid();
+            }}
+        }}
         </script>
-        <button onclick="handler.open()" style="
+        <button onclick="handleBtnClick()" style="
             background-color: #2e7d32; 
             color: white; 
             border: none; 
@@ -97,21 +116,13 @@ def plaid_interface():
     </div>
     """
     
-    # Render the component
     res = components.html(plaid_js, height=70)
 
-    # --- THE FIX IS HERE ---
-    # We only run this if 'res' is a string (the token).
-    # When the page first loads, 'res' is a DeltaGenerator object, which we ignore.
     if isinstance(res, str) and res.strip():
         with st.spinner("✅ Token Received! Syncing..."):
             try:
-                exchange = client.item_public_token_exchange(
-                    ItemPublicTokenExchangeRequest(public_token=res)
-                )
-                liab = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=exchange['access_token'])
-                )
+                exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res))
+                liab = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                 debts = liab.to_dict().get('liabilities', {})
                 
                 if debts.get('credit'):
@@ -123,7 +134,6 @@ def plaid_interface():
                     st.session_state.user_profile['student_loan'] = float(pmt)
 
                 st.success("🎉 Liabilities Updated!")
-                # Reset the token so it doesn't trigger again on next rerun
                 st.session_state['current_link_token'] = None 
                 time.sleep(1.5)
                 st.rerun()
@@ -228,4 +238,5 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
 
