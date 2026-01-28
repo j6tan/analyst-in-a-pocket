@@ -45,14 +45,14 @@ except Exception as e:
 
 # --- 3. THE PLAID INTERFACE ---
 def plaid_interface():
-    # Button to toggle the interface
+    # Toggle button
     if st.button("🔗 Sync Bank Liabilities (Plaid)", use_container_width=True):
         st.session_state.show_plaid = True
         st.rerun()
 
     if st.session_state.show_plaid:
         try:
-            # Generate token once per session trigger
+            # Create Link Token
             request = LinkTokenCreateRequest(
                 user={'client_user_id': str(uuid.uuid4())},
                 client_name="Analyst in a Pocket",
@@ -79,20 +79,18 @@ def plaid_interface():
                                     value: public_token
                                 }}, '*');
                             }},
-                            onExit: (err, metadata) => {{ 
-                                console.log('User closed Plaid'); 
-                            }}
+                            onExit: (err, metadata) => {{ console.log('Exited'); }}
                         }});
                         document.getElementById('plaid-open').onclick = () => handler.open();
                     </script>
                 </div>
             """
-            # This positional-only call is what fixed your IframeMixin error
+            # The Component
             res_token = components.html(html_code, height=120)
 
-            # C. Handle the Token Exchange ONLY if we got a value back
-            if res_token and len(res_token) > 10:
-                with st.spinner("🔄 Fetching Debt Data..."):
+            # THE FIX: Check if res_token is actually a string before checking length
+            if isinstance(res_token, str) and len(res_token) > 5:
+                with st.spinner("🔄 Syncing Bank Data..."):
                     exchange = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=res_token))
                     res = client.liabilities_get(LiabilitiesGetRequest(access_token=exchange['access_token']))
                     debts = res.to_dict().get('liabilities', {})
@@ -105,8 +103,8 @@ def plaid_interface():
                         pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
                         st.session_state.user_profile['student_loan'] = float(pmt)
                     
-                    st.session_state.show_plaid = False # Close the interface
-                    st.success("✅ Bank Data Synced!")
+                    st.session_state.show_plaid = False
+                    st.success("✅ Imported!")
                     time.sleep(1)
                     st.rerun()
 
@@ -151,7 +149,7 @@ if selection == "👤 Client Profile":
     st.divider()
     st.subheader("💳 Monthly Liabilities")
 
-    # Call the Plaid trigger
+    # Run Plaid Interface
     plaid_interface()
 
     l1, l2, l3 = st.columns(3)
