@@ -1,16 +1,10 @@
 import streamlit as st
 import json
 import os
-import uuid
-import plaid
+import pandas as pd
+import pdfplumber
+import re
 import time
-import streamlit.components.v1 as components 
-from plaid.api import plaid_api
-from plaid.model.link_token_create_request import LinkTokenCreateRequest
-from plaid.model.products import Products
-from plaid.model.country_code import CountryCode
-from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
-from plaid.model.liabilities_get_request import LiabilitiesGetRequest
 
 # --- 1. SESSION STATE SETUP ---
 if 'user_profile' not in st.session_state:
@@ -25,108 +19,51 @@ if 'user_profile' not in st.session_state:
         "heat_pmt": 125.0 
     }
 
-if 'public_token' not in st.session_state:
-    st.session_state.public_token = None
-
-# --- 2. INITIALIZE PLAID CLIENT ---
-try:
-    configuration = plaid.Configuration(
-        host=plaid.Environment.Sandbox,
-        api_key={
-            'clientId': st.secrets["PLAID_CLIENT_ID"],
-            'secret': st.secrets["PLAID_SECRET"],
-        }
-    )
-    api_client = plaid_api.ApiClient(configuration)
-    client = plaid_api.PlaidApi(api_client)
-except Exception as e:
-    st.error(f"Configuration Error: {e}")
-    st.stop()
-
-# --- 3. THE PLAID INTERFACE ---
-def plaid_interface():
-    # A. Generate the Link Token (Needed for the popup)
-    try:
-        request = LinkTokenCreateRequest(
-            user={'client_user_id': str(uuid.uuid4())},
-            client_name="Analyst in a Pocket",
-            products=[Products('liabilities')],
-            country_codes=[CountryCode('CA')],
-            language='en'
-        )
-        response = client.link_token_create(request)
-        link_token = response['link_token']
-    except Exception as e:
-        st.error(f"Could not connect to Plaid: {e}")
-        return
-
-    # B. The Bridge
-    # This renders the button. When clicked, it sends the public_token back to Streamlit.
-    html_code = f"""
-        <div style="text-align:center;">
-            <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
-            <button id='plaid-open' style="background:#2e7d32; color:white; border:none; padding:12px; border-radius:8px; width:100%; cursor:pointer; font-weight:bold; font-family:sans-serif;">
-                🔗 SYNC BANK DATA
-            </button>
-            <script>
-                const handler = Plaid.create({{
-                    token: '{link_token}',
-                    onSuccess: (public_token, metadata) => {{
-                        window.parent.postMessage({{
-                            type: 'streamlit:setComponentValue',
-                            value: public_token
-                        }}, '*');
-                    }}
-                }});
-                document.getElementById('plaid-open').onclick = () => handler.open();
-            </script>
-        </div>
+# --- 2. UNIVERSAL FILE HANDLER ---
+def universal_statement_parser(uploaded_file):
     """
-    # This component "catches" the public_token
-    token_from_js = components.html(html_code, height=50)
+    Scans CSV or PDF for financial keywords to auto-fill liabilities.
+    """
+    extracted_data = {"cc_pmt": 0.0, "car_loan": 0.0, "student_loan": 0.0}
+    
+    try:
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file)
+            text_blob = df.to_string().upper()
+        else:
+            with pdfplumber.open(uploaded_file) as pdf:
+                text_blob = "".join([page.extract_text() for page in pdf.pages]).upper()
 
-    # C. If we just received a token, save it and rerun to break the "busy" cycle
-    if isinstance(token_from_js, str) and len(token_from_js) > 5:
-        st.session_state.public_token = token_from_js
-        st.rerun()
+        # --- KEYWORD HEURISTICS (Universal Logic) ---
+        
+        # 1. Credit Card Payments (Look for Minimum Payment amounts)
+        cc_match = re.search(r"(?:MINIMUM|PAYMENT DUE|VISA|MASTERCARD).*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)", text_blob)
+        if cc_match:
+            extracted_data["cc_pmt"] = float(cc_match.group(1).replace(',', ''))
 
-    # D. Process the token if it exists in state
-    if st.session_state.public_token:
-        with st.spinner("⏳ Success! Fetching bank details..."):
-            try:
-                # Exchange public token for access token
-                exchange = client.item_public_token_exchange(
-                    ItemPublicTokenExchangeRequest(public_token=st.session_state.public_token)
-                )
-                
-                # Fetch liabilities
-                res = client.liabilities_get(
-                    LiabilitiesGetRequest(access_token=exchange['access_token'])
-                )
-                debts = res.to_dict().get('liabilities', {})
+        # 2. Car Loans (Common Canadian lenders/keywords)
+        car_keywords = ["FORD CREDIT", "TOYOTA FINANCIAL", "CHEVROLET", "AUTO LOAN", "CAR LOAN"]
+        if any(k in text_blob for k in car_keywords):
+            car_match = re.search(r"(?:AUTO|LOAN|FINANCE).*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)", text_blob)
+            if car_match:
+                extracted_data["car_loan"] = float(car_match.group(1).replace(',', ''))
 
-                # Update state
-                if debts.get('credit'):
-                    bal = sum(cc.get('last_statement_balance', 0) for cc in debts['credit'])
-                    st.session_state.user_profile['cc_pmt'] = round(bal * 0.03, 2)
-                
-                if debts.get('student'):
-                    pmt = sum(s.get('last_payment_amount', 0) for s in debts['student'])
-                    st.session_state.user_profile['student_loan'] = float(pmt)
+        # 3. Student Loans
+        if "NSLSC" in text_blob or "STUDENT LOAN" in text_blob:
+            student_match = re.search(r"(?:STUDENT|NSLSC).*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)", text_blob)
+            if student_match:
+                extracted_data["student_loan"] = float(student_match.group(1).replace(',', ''))
 
-                # Clear token so it doesn't run again on next refresh
-                st.session_state.public_token = None
-                st.success("✅ Data Imported!")
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.error(f"Data Sync Error: {e}")
-                st.session_state.public_token = None
+        return extracted_data
 
-# --- 4. APP CONFIG ---
+    except Exception as e:
+        st.error(f"Parser Error: {e}")
+        return extracted_data
+
+# --- 3. APP CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
-# --- 5. NAVIGATION ---
+# --- 4. NAVIGATION ---
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
@@ -139,7 +76,7 @@ tools = {
 }
 selection = st.sidebar.radio("Go to", list(tools.keys()))
 
-# --- 6. PAGE UI ---
+# --- 5. PAGE UI ---
 if selection == "👤 Client Profile":
     st.title("General Client Information")
 
@@ -154,10 +91,26 @@ if selection == "👤 Client Profile":
         st.session_state.user_profile['p2_t4'] = st.number_input("T4 Income ", value=float(st.session_state.user_profile['p2_t4']))
 
     st.divider()
-    st.subheader("💳 Monthly Liabilities")
+    
+    # --- NEW FILE UPLOAD SECTION ---
+    st.subheader("📁 Auto-Fill from Bank Statement")
+    st.info("Upload a PDF or CSV statement. The tool will attempt to detect monthly liabilities automatically.")
+    
+    uploaded_file = st.file_uploader("Upload Statement", type=["pdf", "csv"])
+    
+    if uploaded_file:
+        with st.spinner("Analyzing document..."):
+            auto_data = universal_statement_parser(uploaded_file)
+            
+            # Apply to state
+            if auto_data["cc_pmt"] > 0: st.session_state.user_profile['cc_pmt'] = auto_data["cc_pmt"]
+            if auto_data["car_loan"] > 0: st.session_state.user_profile['car_loan'] = auto_data["car_loan"]
+            if auto_data["student_loan"] > 0: st.session_state.user_profile['student_loan'] = auto_data["student_loan"]
+            
+            st.success("Analysis complete! Review the fields below.")
 
-    # Run Plaid Interface (Fixed)
-    plaid_interface()
+    st.divider()
+    st.subheader("💳 Monthly Liabilities")
 
     l1, l2, l3 = st.columns(3)
     with l1:
@@ -173,7 +126,7 @@ if selection == "👤 Client Profile":
     profile_json = json.dumps(st.session_state.user_profile, indent=4)
     st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
 
-# --- 7. HANDLE OTHER PAGES ---
+# --- 6. HANDLE OTHER PAGES ---
 else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
