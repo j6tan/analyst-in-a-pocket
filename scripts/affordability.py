@@ -93,7 +93,7 @@ if "aff_store" not in st.session_state:
         "down_payment": 100000.0,
         "prop_taxes": float(prof.get('prop_taxes', 4200)),
         "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
-        "heat": 125.0,
+        "heat": float(prof.get('heat_pmt', 125.0)),
         "strata": 400.0,
         "city": "Outside Toronto",
         "prop_type": "House / Freehold",
@@ -119,7 +119,6 @@ with col_1:
     
     total_qualifying = t4 + bonus + (rental * 0.80)
     
-    # COSMETIC UPDATE: Black color, increased size, no grey halo
     st.markdown(f"""
         <div style="margin-top: 10px;">
             <span style="font-size: 1.15em; color: {SLATE_ACCENT}; font-weight: bold;">Qualifying Income: </span>
@@ -166,6 +165,11 @@ with col_3:
 with st.sidebar:
     st.header("⚙️ Underwriting")
     
+    # --- MARKET SYNC BUTTON ---
+    if st.button("🔄 Sync Market Rates"):
+        store['contract_rate'] = float(intel['rates'].get('five_year_fixed_uninsured', 4.49))
+        st.rerun()
+    
     contract_rate = st.number_input("Bank Contract Rate %", step=0.01, value=store['contract_rate'], key="w_rate")
     store['contract_rate'] = contract_rate
     
@@ -187,11 +191,13 @@ with st.sidebar:
     else:
         strata = 0
 
-# Calculation Logic
+# --- IMPROVED GDS/TDS LOGIC ---
 monthly_inc = total_qualifying / 12
 loc_pmt = prof.get('loc_balance', 0) * 0.03
-gds_max = (monthly_inc * 0.39) - heat - (taxes/12) - (strata*0.5 if "Condo" in prop_type else 0)
-tds_max = (monthly_inc * 0.44) - heat - (taxes/12) - (strata*0.5 if "Condo" in prop_type else 0) - (monthly_debt + loc_pmt)
+
+# Fixed Logic: Uses heat and taxes from inputs which are primed by the Profile page
+gds_max = (monthly_inc * 0.39) - heat - (taxes/12) - (strata * 0.5)
+tds_max = (monthly_inc * 0.44) - heat - (taxes/12) - (strata * 0.5) - (monthly_debt + loc_pmt)
 max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
@@ -242,6 +248,7 @@ if max_pi_stress > 0:
 else:
     st.error("Approval amount is $0. Please check income vs debt levels.")
 
+# --- FOOTER ---
 st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
@@ -252,4 +259,5 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
+
 st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
