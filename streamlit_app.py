@@ -1,12 +1,11 @@
 import streamlit as st
 import json
 import os
-import pandas as pd
-import pdfplumber
-import re
-import time
 
-# --- 1. SESSION STATE SETUP ---
+# --- 1. GLOBAL CONFIG ---
+st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
+
+# --- 2. INITIALIZE GLOBAL VAULT ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "", "p2_name": "",
@@ -16,64 +15,11 @@ if 'user_profile' not in st.session_state:
         "car_loan": 0.0, "student_loan": 0.0, "cc_pmt": 0.0, "loc_pmt": 0.0, "loc_balance": 0.0,
         "housing_status": "Renting", "province": "Ontario",
         "m_bal": 0.0, "m_rate": 0.0, "m_amort": 25, "prop_taxes": 4200.0, "rent_pmt": 0.0,
-        "heat_pmt": 125.0 
+        "heat_pmt": 125.0 # Added for more accurate TDS calculations
     }
 
-# --- 2. UNIVERSAL PARSER LOGIC ---
-def universal_statement_parser(uploaded_file):
-    extracted_data = {"cc_pmt": 0.0, "car_loan": 0.0, "student_loan": 0.0}
-    text_blob = ""
-    
-    try:
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-            text_blob = df.to_string().upper()
-        
-        elif uploaded_file.name.endswith('.xlsx'):
-            # Uses openpyxl engine
-            excel_data = pd.read_excel(uploaded_file, engine='openpyxl', sheet_name=None)
-            text_blob = " ".join([df.to_string().upper() for df in excel_data.values()])
-            
-        elif uploaded_file.name.endswith('.xls'):
-            # Uses xlrd engine
-            excel_data = pd.read_excel(uploaded_file, engine='xlrd', sheet_name=None)
-            text_blob = " ".join([df.to_string().upper() for df in excel_data.values()])
-            
-        elif uploaded_file.name.endswith('.pdf'):
-            with pdfplumber.open(uploaded_file) as pdf:
-                text_blob = " ".join([page.extract_text() for page in pdf.pages if page.extract_text()]).upper()
-
-        # --- KEYWORD SEARCH (REGEX) ---
-        # 1. Credit Card (Minimum Payments)
-        cc_patterns = [r"MINIMUM PAYMENT.*?(\d[\d,.]*)", r"PAYMENT DUE.*?(\d[\d,.]*)", r"TOTAL MINIMUM.*?(\d[\d,.]*)"]
-        for p in cc_patterns:
-            match = re.search(p, text_blob)
-            if match:
-                extracted_data["cc_pmt"] = float(match.group(1).replace(',', ''))
-                break
-
-        # 2. Car Loans
-        car_keywords = ["FORD CREDIT", "TOYOTA FINANCIAL", "CHEVROLET", "AUTO LOAN", "GMF", "CAR LOAN"]
-        if any(k in text_blob for k in car_keywords):
-            car_match = re.search(r"(?:AUTO|LOAN|FINANCE|DEBIT).*?(\d[\d,.]*)", text_blob)
-            if car_match:
-                extracted_data["car_loan"] = float(car_match.group(1).replace(',', ''))
-
-        # 3. Student Loans
-        if any(k in text_blob for k in ["NSLSC", "STUDENT LOAN", "OSAP"]):
-            student_match = re.search(r"(?:STUDENT|NSLSC|OSAP).*?(\d[\d,.]*)", text_blob)
-            if student_match:
-                extracted_data["student_loan"] = float(student_match.group(1).replace(',', ''))
-
-        return extracted_data
-    except Exception as e:
-        st.error(f"Analysis failed: {e}")
-        return extracted_data
-
-# --- 3. APP CONFIG ---
-st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
-
-# --- 4. NAVIGATION ---
+# --- 3. NAVIGATION ---
+# Added "🏢 Investment Qual" to the tools dictionary
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
@@ -86,55 +32,71 @@ tools = {
 }
 selection = st.sidebar.radio("Go to", list(tools.keys()))
 
-# --- 5. PAGE UI ---
+# --- 4. PROFILE PAGE ---
 if selection == "👤 Client Profile":
-    st.title("General Client Information")
+    header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+    with header_col1:
+        if os.path.exists("logo.png"):
+            st.image("logo.png", width=140)
+    with header_col2:
+        st.title("General Client Information")
 
-    st.subheader("📁 Auto-Fill Statement Data")
-    # Added xls and xlsx to the allowed types
-    uploaded_file = st.file_uploader(
-        "Upload a Bank Statement (PDF, CSV, or Excel)", 
-        type=["pdf", "csv", "xls", "xlsx"], 
-        help="Upload a document to automatically extract credit card and loan payments."
-    )
-    
-    if uploaded_file:
-        with st.spinner("Scanning Document..."):
-            auto_data = universal_statement_parser(uploaded_file)
-            
-            if any(v > 0 for v in auto_data.values()):
-                # Only update fields where we found a value > 0
-                for k, v in auto_data.items():
-                    if v > 0:
-                        st.session_state.user_profile[k] = v
-                st.success("Success! We found matching liabilities and updated the fields below.")
-            else:
-                st.warning("Document scanned, but no specific liabilities were found. You can still enter them manually.")
+    st.subheader("💾 Profile Management")
+    up_col1, up_col2 = st.columns(2)
+    with up_col1:
+        uploaded_file = st.file_uploader("Upload Existing Profile (JSON)", type=["json"])
+        if uploaded_file is not None:
+            st.session_state.user_profile.update(json.load(uploaded_file))
+            st.success("Profile Loaded!")
 
-    st.divider()
-
-    # --- INPUT FIELDS (SAME AS BEFORE) ---
     st.subheader("👥 Household Income Details")
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("### Primary Client")
         st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile['p1_name'])
-        st.session_state.user_profile['p1_t4'] = st.number_input("T4 Income", value=float(st.session_state.user_profile['p1_t4']))
+        st.session_state.user_profile['p1_t4'] = st.number_input("T4 (Employment Income)", value=float(st.session_state.user_profile['p1_t4']))
+        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses / Performance Pay", value=float(st.session_state.user_profile['p1_bonus']))
+        st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile['p1_commission']))
+        st.session_state.user_profile['p1_pension'] = st.number_input("Pension / CPP / OAS", value=float(st.session_state.user_profile['p1_pension']))
     
     with c2:
         st.markdown("### Co-Owner / Partner")
         st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile['p2_name'])
-        st.session_state.user_profile['p2_t4'] = st.number_input("T4 Income ", value=float(st.session_state.user_profile['p2_t4']))
+        st.session_state.user_profile['p2_t4'] = st.number_input("T4 (Employment Income) ", value=float(st.session_state.user_profile['p2_t4']))
+        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses / Performance Pay ", value=float(st.session_state.user_profile['p2_bonus']))
+        st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile['p2_commission']))
+        st.session_state.user_profile['p2_pension'] = st.number_input("Pension / CPP / OAS ", value=float(st.session_state.user_profile['p2_pension']))
+
+    st.session_state.user_profile['inv_rental_income'] = st.number_input("Joint Rental Income (Current Portfolio)", value=float(st.session_state.user_profile['inv_rental_income']))
+
+    st.divider()
+    st.subheader("🏠 Housing & Property Details")
+    h_toggle, h_data = st.columns([1, 2])
+    with h_toggle:
+        st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
+    with h_data:
+        if st.session_state.user_profile['housing_status'] == "Renting":
+            st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
+        else:
+            sub_c1, sub_c2 = st.columns(2)
+            with sub_c1:
+                st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
+                st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
+            with sub_c2:
+                st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
+                st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
+                # Added heating input for primary residence to feed Investment Tool
+                st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
 
     st.divider()
     st.subheader("💳 Monthly Liabilities")
     l1, l2, l3 = st.columns(3)
     with l1:
-        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments", value=float(st.session_state.user_profile['car_loan']))
-        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments", value=float(st.session_state.user_profile['student_loan']))
+        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile['car_loan']))
+        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments (Monthly)", value=float(st.session_state.user_profile['student_loan']))
     with l2:
-        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Min)", value=float(st.session_state.user_profile['cc_pmt']))
-        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance", value=float(st.session_state.user_profile['loc_balance']))
+        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Monthly)", value=float(st.session_state.user_profile['cc_pmt']))
+        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance ($)", value=float(st.session_state.user_profile['loc_balance']))
     with l3:
         prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
         st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')))
@@ -142,9 +104,7 @@ if selection == "👤 Client Profile":
     profile_json = json.dumps(st.session_state.user_profile, indent=4)
     st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
 
-# --- 6. PAGE REDIRECTION ---
 else:
-    file_path = os.path.join("scripts", tools[selection])
+    file_path = os.path.join("app_pages", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
-
