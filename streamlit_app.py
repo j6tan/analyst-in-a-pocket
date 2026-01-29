@@ -25,14 +25,18 @@ def universal_statement_parser(uploaded_file):
     text_blob = ""
     
     try:
-        # Check file type and extract text/data
         if uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file)
             text_blob = df.to_string().upper()
         
-        elif uploaded_file.name.endswith(('.xls', '.xlsx')):
-            # Read all sheets and combine them into a single searchable string
-            excel_data = pd.read_excel(uploaded_file, sheet_name=None)
+        elif uploaded_file.name.endswith('.xlsx'):
+            # Uses openpyxl engine
+            excel_data = pd.read_excel(uploaded_file, engine='openpyxl', sheet_name=None)
+            text_blob = " ".join([df.to_string().upper() for df in excel_data.values()])
+            
+        elif uploaded_file.name.endswith('.xls'):
+            # Uses xlrd engine
+            excel_data = pd.read_excel(uploaded_file, engine='xlrd', sheet_name=None)
             text_blob = " ".join([df.to_string().upper() for df in excel_data.values()])
             
         elif uploaded_file.name.endswith('.pdf'):
@@ -143,3 +147,4 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
