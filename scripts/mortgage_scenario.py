@@ -15,8 +15,7 @@ household_names = f"{client_name1} & {client_name2}" if client_name2 else client
 raw_afford_max = st.session_state.get('max_purchase_power', 800000.0)
 raw_afford_down = st.session_state.get('affordability_down_payment', 160000.0)
 
-# Retrieve rate from Affordability Store (The new fix we just made)
-# If aff_store exists, use that rate. Otherwise fallback to market data.
+# Retrieve rate from Affordability Store
 def get_default_rate():
     if 'aff_store' in st.session_state:
         return st.session_state.aff_store.get('contract_rate', 4.49)
@@ -34,24 +33,19 @@ global_rate_default = get_default_rate()
 # --- 2. ROUNDING LOGIC ---
 def smart_round_price(price):
     if price >= 1000000:
-        # Round to the nearest $10,000 (e.g., 1,578,876 -> 1,580,000)
-        # This reflects your "1.58M" preference
         return float(round(price, -4))
     else:
-        # Round to the nearest $1,000 (e.g., 784,987 -> 785,000)
         return float(round(price, -3))
 
 # --- 3. PERSISTENCE INITIALIZATION (SHADOW STORE) ---
 if 'scen_store' not in st.session_state:
-    # Initialize the store with smart defaults
     st.session_state.scen_store = {
         "price": float(smart_round_price(raw_afford_max)),
         "down": float(raw_afford_down),
         "amort": 25,
-        "scenarios": [] # Will hold the state for each dynamic column
+        "scenarios": [] 
     }
     
-    # Pre-populate 2 default scenarios in the store
     st.session_state.scen_store["scenarios"] = [
         {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False},
         {"label": "Accelerated Bi-Weekly", "rate": global_rate_default, "freq": "Accelerated Bi-weekly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
@@ -59,7 +53,6 @@ if 'scen_store' not in st.session_state:
 
 store = st.session_state.scen_store
 
-# Ensure num_options syncs with the store length
 if 'num_options' not in st.session_state:
     st.session_state.num_options = len(store['scenarios'])
 
@@ -67,10 +60,9 @@ if 'num_options' not in st.session_state:
 def add_option():
     if st.session_state.num_options < 5:
         st.session_state.num_options += 1
-        # Add a new default entry to the store
         store['scenarios'].append({
             "label": f"Scenario {chr(65 + len(store['scenarios']))}", 
-            "rate": store['scenarios'][0]['rate'], # Copy rate from first option
+            "rate": store['scenarios'][0]['rate'], 
             "freq": "Monthly", 
             "strat": "None", 
             "extra": 0.0, 
@@ -81,7 +73,6 @@ def add_option():
 def remove_option():
     if st.session_state.num_options > 1:
         st.session_state.num_options -= 1
-        # Remove the last entry from the store
         store['scenarios'].pop()
 
 # --- COLOR PALETTE ---
@@ -145,32 +136,25 @@ def simulate_mortgage(principal, annual_rate, amort_years, freq_label, extra_per
         "Total_Life_Int": round(total_lifeline_int), "History": pd.DataFrame(history), 
         "Freq": freq_label, "Rate": annual_rate, "Payoff_Time": round(i/p_yr, 1),
         "Prepay_Active": "None" if (extra_per_pmt == 0 and lump_sum_annual == 0 and not double_up) else "Active",
-        "Name": "" # Placeholder
+        "Name": "" 
     }
 
 # --- 6. SIDEBAR INPUTS ---
 with st.sidebar:
     st.header("🏠 Global Settings")
-    
-    # Link inputs to Shadow Store
     price = st.number_input("Property Price ($)", value=store['price'], step=5000.0, key="w_price")
-    store['price'] = price # Save immediately
-    
+    store['price'] = price 
     down = st.number_input("Down Payment ($)", value=store['down'], step=5000.0, key="w_down")
-    store['down'] = down # Save immediately
-    
+    store['down'] = down 
     min_down_req = calculate_min_downpayment(price)
     is_valid = down >= min_down_req
-    
     base_loan = price - down
     ltv = (base_loan / price) * 100
     cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
     final_loan = base_loan + cmhc_p
-    
     st.metric("LTV Ratio", f"{ltv:.1f}%")
     if is_valid and cmhc_p > 0: st.warning(f"CMHC Premium: ${cmhc_p:,.0f}")
     st.metric("Total Mortgage", f"${final_loan:,.0f}")
-    
     amort = st.slider("Amortization (Years)", 5, 30, value=store['amort'], key="w_amort")
     store['amort'] = amort
 
@@ -202,36 +186,26 @@ total_cols = st.session_state.num_options
 main_cols = st.columns([3] * total_cols + [1]) 
 results = []
 
-# Ensure store list is long enough (sanity check)
 while len(store['scenarios']) < total_cols:
     add_option()
 
 for i in range(total_cols):
-    # Retrieve data from Store for this column
     s_data = store['scenarios'][i]
-    
     with main_cols[i]:
         st.markdown(f"### Option {chr(65+i)}")
-        
-        # Render widgets using Store values, then update Store immediately
         name = st.text_input("Label", value=s_data['label'], key=f"n{i}")
         store['scenarios'][i]['label'] = name
-        
         rate = st.number_input("Rate %", value=float(s_data['rate']), step=0.01, key=f"r{i}")
         store['scenarios'][i]['rate'] = rate
-        
         freq = st.selectbox("Frequency", ["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"], 
                             index=["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"].index(s_data['freq']),
                             key=f"f{i}")
         store['scenarios'][i]['freq'] = freq
-        
         strat = st.selectbox("Strategy", ["None", "Extra/Pmt", "Double Up", "Annual Lump"], 
                              index=["None", "Extra/Pmt", "Double Up", "Annual Lump"].index(s_data['strat']),
                              key=f"s{i}")
         store['scenarios'][i]['strat'] = strat
-        
         ex, ls, db = 0, 0, False
-        
         if strat == "Extra/Pmt": 
             ex = st.number_input("Extra $", value=float(s_data['extra']), key=f"ex{i}")
             store['scenarios'][i]['extra'] = ex
@@ -242,11 +216,9 @@ for i in range(total_cols):
             db = True
             store['scenarios'][i]['double'] = True
         else:
-            # Reset hidden values in store so they don't persist if user switches strategy back
             store['scenarios'][i]['extra'] = 0.0
             store['scenarios'][i]['lump'] = 0.0
             store['scenarios'][i]['double'] = False
-        
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
         results.append(res)
@@ -254,8 +226,9 @@ for i in range(total_cols):
 with main_cols[-1]:
     st.write("### ") 
     st.write("### ")
-    if st.session_state.num_options < 5: st.button("➕ Add", on_click=add_option, use_container_width=True)
-    if st.session_state.num_options > 1: st.button("➖ Remove", on_click=remove_option, use_container_width=True)
+    # Text removed from buttons to prevent squishing
+    if st.session_state.num_options < 5: st.button("➕", on_click=add_option, use_container_width=True)
+    if st.session_state.num_options > 1: st.button("➖", on_click=remove_option, use_container_width=True)
 
 st.divider()
 
@@ -265,7 +238,6 @@ total_savings = results[0]['Total_Life_Int'] - best_int_scenario['Total_Life_Int
 
 st.markdown("### 🎯 Professional Recommendation")
 if total_savings > 0:
-    # Fix: Ensure there is a space between the label and the dynamic variable to prevent markdown clashing
     st.success(f"**Recommendation:** Strategy {best_int_scenario['Name']} is the highest-value option. It saves you **${total_savings:,.0f}** in total interest and eliminates your debt **{results[0]['Payoff_Time'] - best_int_scenario['Payoff_Time']:.1f} years** faster.")
 else:
     st.info(f"**Recommendation:** No interest savings detected. Switching to **Accelerated** payments is the most impactful way to pay off the principal faster.")
