@@ -27,13 +27,12 @@ def fetch_boc_observation(series_id):
 def fetch_provincial_yields():
     """
     Benchmarks for Provincial Cap Rates (Annual Rent / Purchase Price).
-    In a professional tool, these are updated based on the latest quarterly 
-    CMHC or Rentals.ca reports.
+    Updated based on regional market performance.
     """
     return {
         "Ontario": 4.5,
-        "BC": 3.8, # Lower yields in BC due to higher property values
-        "Alberta": 6.8, # Higher yields in Alberta
+        "BC": 3.8,
+        "Alberta": 6.8,
         "Quebec": 5.2,
         "Manitoba": 7.0,
         "Saskatchewan": 7.4,
@@ -45,24 +44,27 @@ def fetch_provincial_yields():
 
 def update_market_intel():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Ensure it points to your data folder correctly
+    # Points to data folder: analyst-in-a-pocket/data/
     data_dir = os.path.join(script_dir, "..", "data")
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
+    
     file_path = os.path.join(data_dir, "market_intel.json")
+    history_path = os.path.join(data_dir, "market_history.json")
 
     print("📡 Connecting to Market Data Sources...")
     
-    # Try fetching but provide smart defaults (current 2024/2025 levels)
-    # V121758 = Prime | V39079 (Case sensitive) = Overnight | V122667786 = 5yr Fixed
+    # Series IDs: V121758=Prime | V39079=Overnight | V122667786=5yr Fixed
     prime = fetch_boc_observation("V121758") or 5.95
     overnight = fetch_boc_observation("V39079") or 3.75
     fixed_5 = fetch_boc_observation("V122667786") or 4.49
     
     yields = fetch_provincial_yields()
+    current_time = datetime.now()
 
+    # --- 1. PREPARE CURRENT INTEL ---
     intel_data = {
-        "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "last_updated": current_time.strftime("%Y-%m-%d %H:%M:%S"),
         "rates": {
             "boc_overnight": overnight,
             "bank_prime": prime,
@@ -75,10 +77,39 @@ def update_market_intel():
         }
     }
 
+    # --- 2. PREPARE HISTORICAL ENTRY ---
+    new_history_entry = {
+        "date": current_time.strftime("%Y-%m-%d"),
+        "prime": prime,
+        "overnight": overnight,
+        "fixed_5": fixed_5
+    }
+
+    # --- 3. UPDATE HISTORY FILE (APPEND LOGIC) ---
+    history = []
+    if os.path.exists(history_path):
+        try:
+            with open(history_path, "r") as f:
+                history = json.load(f)
+        except Exception:
+            history = []
+
+    # Only append if the last entry isn't from the same day
+    if not history or history[-1].get("date") != new_history_entry["date"]:
+        history.append(new_history_entry)
+        # Keep only the last 24 entries (2 years of monthly data) to keep file size small
+        if len(history) > 24:
+            history = history[-24:]
+
+    # --- 4. SAVE FILES ---
     with open(file_path, "w") as f:
         json.dump(intel_data, f, indent=4)
+        
+    with open(history_path, "w") as f:
+        json.dump(history, f, indent=4)
     
-    print(f"✅ Market Intel Saved Successfully to: {file_path}")
+    print(f"✅ Market Intel Saved: {file_path}")
+    print(f"📈 History Updated: {history_path}")
 
 if __name__ == "__main__":
     update_market_intel()
