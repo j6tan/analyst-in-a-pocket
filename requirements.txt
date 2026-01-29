@@ -3,7 +3,5 @@ pandas
 plotly
 numpy
 numpy-financial
-plaid-python
 requests
-plaid-python
-
+pdfplumber
