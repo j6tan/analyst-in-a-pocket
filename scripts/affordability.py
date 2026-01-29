@@ -84,7 +84,12 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 if not is_renter:
-    st.caption("<i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>")
+    st.markdown(f"""
+        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: -10px; margin-bottom: 20px;">
+            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; 
+            existing mortgage balances are not factored into this specific qualification limit.</i>
+        </p>
+    """, unsafe_allow_html=True)
 
 # --- 5. PERSISTENCE INITIALIZATION ---
 if "aff_store" not in st.session_state:
@@ -242,3 +247,4 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
+
