@@ -1,6 +1,8 @@
 import streamlit as st
 import json
 import os
+import pandas as pd  # Added for data handling
+import plotly.express as px  # Added for professional charting
 
 # --- 1. GLOBAL CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -19,7 +21,6 @@ if 'user_profile' not in st.session_state:
     }
 
 # --- 3. NAVIGATION ---
-# Added "🏢 Investment Qual" to the tools dictionary
 tools = {
     "👤 Client Profile": "MAIN",
     "📊 Affordability Primary": "affordability.py",
@@ -85,8 +86,38 @@ if selection == "👤 Client Profile":
             with sub_c2:
                 st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
                 st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
-                # Added heating input for primary residence to feed Investment Tool
                 st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
+
+    st.divider()
+
+    # --- HISTORICAL RATE CHART SECTION ---
+    def show_history():
+        history_path = 'data/market_history.json'
+        if os.path.exists(history_path):
+            with open(history_path, 'r') as f:
+                history_data = json.load(f)
+            
+            if len(history_data) > 0:
+                df = pd.DataFrame(history_data)
+                fig = px.line(df, x="date", y=["prime", "fixed_5"], 
+                              title="Interest Rate Trends (Historical)",
+                              labels={"value": "Rate (%)", "date": "Date"},
+                              template="plotly_white",
+                              markers=True)
+                
+                # Cleanup Legend Names
+                newnames = {'prime': 'Bank Prime', 'fixed_5': '5yr Fixed'}
+                fig.for_each_trace(lambda t: t.update(name = newnames[t.name]))
+                fig.update_layout(legend_title_text='Rate Type')
+                
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("📊 Historical data is currently being compiled.")
+        else:
+            st.warning("⚠️ Market history file not found. Check GitHub Action status.")
+
+    with st.expander("📈 View Historical Interest Rate Trends", expanded=False):
+        show_history()
 
     st.divider()
     st.subheader("💳 Monthly Liabilities")
@@ -108,4 +139,3 @@ else:
     file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
-
