@@ -86,7 +86,7 @@ st.markdown(f"""
 if not is_renter:
     # Fix: Use markdown with HTML to allow styling/bolding and added margin-top for space
     st.markdown(f"""
-        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px;">
+        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 10px; margin-bottom: 10px;">
             <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; 
             existing mortgage balances are not factored into this specific qualification limit.</i>
         </p>
@@ -248,5 +248,6 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
+
 
 
