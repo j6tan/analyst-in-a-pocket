@@ -72,10 +72,10 @@ if is_renter:
     story_body = f"This is the moment where your monthly rent becomes an investment in your future. Based on your current profile, we're mapping out the exact math needed to secure your first home in <b>{province}</b>."
 else:
     story_headline = f"📈 {household}: Planning Your Next Move"
-    story_body = f"Scaling up or relocating is a strategic play. We’ve analyzed your current income to determine how much house your wealth can truly buy in today's <b>{province}</b> market. <br><br><i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>"
+    story_body = f"Scaling up or relocating is a strategic play. We’ve analyzed your current income to determine how much house your wealth can truly buy in today's <b>{province}</b> market."
 
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">{story_headline}</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
         {story_body}
@@ -83,9 +83,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if not is_renter:
+    st.caption("<i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>")
+
 # --- 5. PERSISTENCE INITIALIZATION ---
 if "aff_store" not in st.session_state:
-    # Logic for dynamic defaults based on income
     t4_val = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
     bonus_val = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
     rental_val = float(prof.get('inv_rental_income', 0))
@@ -113,19 +115,13 @@ col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 
 with col_1:
     st.subheader("💰 Income Summary")
-    
     t4 = st.number_input("Combined T4 Income", value=store['t4'], key="w_t4")
     store['t4'] = t4 
-    
     bonus = st.number_input("Total Additional Income", value=store['bonus'], key="w_bonus")
     store['bonus'] = bonus
-    
     rental = st.number_input("Joint Rental Income", value=store['rental'], key="w_rental")
     store['rental'] = rental
-    
     total_qualifying = t4 + bonus + (rental * 0.80)
-    
-    # COSMETIC UPDATE: Black color, increased size, no grey halo
     st.markdown(f"""
         <div style="margin-top: 10px;">
             <span style="font-size: 1.15em; color: {SLATE_ACCENT}; font-weight: bold;">Qualifying Income: </span>
@@ -140,20 +136,16 @@ with col_2:
         city_options = ["Toronto", "Other/Outside Toronto"]
         try: city_idx = city_options.index(store['city'])
         except: city_idx = 0
-        
         target_city = st.selectbox("Property City", city_options, index=city_idx, key="w_city")
         store['city'] = target_city
     
     prop_options = ["House / Freehold", "Condo / Townhome"]
     try: prop_idx = prop_options.index(store['prop_type'])
     except: prop_idx = 0
-    
     prop_type = st.selectbox("Property Type", prop_options, index=prop_idx, key="w_prop_type")
     store['prop_type'] = prop_type
-    
     monthly_debt = st.number_input("Monthly Debts", value=store['monthly_debt'], key="w_debt")
     store['monthly_debt'] = monthly_debt
-    
     is_fthb = st.checkbox("First-Time Home Buyer?", value=store['is_fthb'], key="w_fthb")
     store['is_fthb'] = is_fthb
 
@@ -171,27 +163,19 @@ with col_3:
 
 with st.sidebar:
     st.header("⚙️ Underwriting")
-    
-    # Sync Button
     if st.button("🔄 Sync Market Rates"):
         store['contract_rate'] = float(intel['rates'].get('five_year_fixed_uninsured', 4.49))
         st.rerun()
-
     contract_rate = st.number_input("Bank Contract Rate %", step=0.01, value=store['contract_rate'], key="w_rate")
     store['contract_rate'] = contract_rate
-    
     stress_rate = max(5.25, contract_rate + 2.0)
     st.warning(f"**Qualifying Stress Rate:** {stress_rate:.2f}%")
-    
     down_payment = st.number_input("Down Payment ($)", value=store['down_payment'], key="w_dp")
     store['down_payment'] = down_payment
-    
     taxes = st.number_input("Annual Property Taxes", value=store['prop_taxes'], key="w_taxes")
     store['prop_taxes'] = taxes
-    
     heat = st.number_input("Monthly Heat", value=store['heat'], key="w_heat")
     store['heat'] = heat
-    
     if prop_type == "Condo / Townhome":
         strata = st.number_input("Monthly Strata", value=store['strata'], key="w_strata")
         store['strata'] = strata
@@ -210,33 +194,26 @@ if max_pi_stress > 0:
     loan_amt = max_pi_stress * (1 - (1+i_stress)**-(25*12)) / i_stress
     i_contract = (contract_rate/100)/12
     actual_pi = (loan_amt * i_contract) / (1 - (1 + i_contract)**-300) 
-    
     max_purchase = loan_amt + down_payment
-    
     min_required = calculate_min_downpayment(max_purchase)
     if down_payment < min_required:
         st.error("### 🛑 Down Payment Too Low")
         st.warning(f"Based on a \${max_purchase:,.0f} purchase price, the legal minimum down payment is \${min_required:,.0f}. You are currently short \${min_required - down_payment:,.0f}.")
         st.stop()
-
     total_ltt, total_rebate = calculate_ltt_and_fees(max_purchase, province, target_city, is_fthb)
-
     st.session_state['max_purchase_power'] = float(max_purchase)
     st.session_state['affordability_down_payment'] = float(down_payment)
-
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
     with m1: st.metric("Max Purchase Power", f"${max_purchase:,.0f}")
     with m2: st.metric("Max Loan Amount", f"${loan_amt:,.0f}")
     with m3: st.metric("Actual Monthly P&I", f"${actual_pi:,.0f}")
     with m4: st.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
-
     r1, r2 = st.columns([2, 1.2])
     with r1:
         fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
         fig.update_layout(height=350, margin=dict(t=50, b=20))
         st.plotly_chart(fig, use_container_width=True)
-
     with r2:
         st.subheader("⚖️ Cash-to-Close")
         breakdown = [
