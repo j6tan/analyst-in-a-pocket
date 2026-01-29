@@ -51,6 +51,7 @@ if selection == "👤 Client Profile":
             st.success("Profile Loaded!")
 
     st.subheader("👥 Household Income Details")
+    # Corrected indentations for consistency
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("### Primary Client")
@@ -97,7 +98,7 @@ if selection == "👤 Client Profile":
             with open(history_path, 'r') as f:
                 history_data = json.load(f)
             
-            if len(history_data) > 0:
+            if len(history_data) > 1:
                 df = pd.DataFrame(history_data)
                 fig = px.line(df, x="date", y=["prime", "fixed_5"], 
                               title="Interest Rate Trends (Historical)",
@@ -111,6 +112,12 @@ if selection == "👤 Client Profile":
                 fig.update_layout(legend_title_text='Rate Type')
                 
                 st.plotly_chart(fig, use_container_width=True)
+            elif len(history_data) == 1:
+                st.info("📈 **First data point recorded!** The trend line will appear once the next monthly update is processed.")
+                # Show the current single entry in a clean table
+                df_single = pd.DataFrame(history_data)
+                df_single.columns = ["Date", "Bank Prime", "BoC Overnight", "5yr Fixed"]
+                st.table(df_single)
             else:
                 st.info("📊 Historical data is currently being compiled.")
         else:
