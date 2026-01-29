@@ -34,7 +34,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # Updated to your specific data path
-          git add data/market_intel.json
-          git commit -m "Auto-update market rates: $(date)" || echo "No changes to commit"
+          # This line now adds EVERYTHING in the data folder
+          git add data/*.json 
+          git commit -m "Auto-update market data and history: $(date)" || echo "No changes to commit"
           git push
