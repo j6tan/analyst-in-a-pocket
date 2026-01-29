@@ -5,3 +5,4 @@ numpy
 numpy-financial
 requests
 pdfplumber
+openpyxl
