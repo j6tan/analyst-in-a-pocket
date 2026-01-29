@@ -9,7 +9,8 @@ __pycache__/
 
 # --- Local Data: Prevent your personal test data from leaking ---
 data/*.json
-!data/market_intel.json  # (Optional: the '!' tells Git to upload this specific file anyway)
+!data/market_intel.json
+!data/market_history.json
 
 # --- Operating System Junk ---
 .DS_Store
