@@ -105,6 +105,7 @@ if selection == "👤 Client Profile":
     st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
 
 else:
-    file_path = os.path.join("app_pages", tools[selection])
+    file_path = os.path.join("scripts", tools[selection])
     if os.path.exists(file_path):
         exec(open(file_path, encoding="utf-8").read(), globals())
+
