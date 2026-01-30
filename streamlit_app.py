@@ -1,8 +1,8 @@
 import streamlit as st
 import json
 import os
-import pandas as pd  # Added for data handling
-import plotly.express as px  # Added for professional charting
+import pandas as pd
+import plotly.express as px
 
 # --- 1. GLOBAL CONFIG ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
@@ -17,7 +17,7 @@ if 'user_profile' not in st.session_state:
         "car_loan": 0.0, "student_loan": 0.0, "cc_pmt": 0.0, "loc_pmt": 0.0, "loc_balance": 0.0,
         "housing_status": "Renting", "province": "Ontario",
         "m_bal": 0.0, "m_rate": 0.0, "m_amort": 25, "prop_taxes": 4200.0, "rent_pmt": 0.0,
-        "heat_pmt": 125.0 # Added for more accurate TDS calculations
+        "heat_pmt": 125.0
     }
 
 # --- 3. NAVIGATION ---
@@ -31,7 +31,20 @@ tools = {
     "⚖️ Buy vs Rent": "buy_vs_rent.py",
     "⚖️ Rental vs Stock": "rental_vs_stock.py",
 }
-selection = st.sidebar.radio("Go to", list(tools.keys()))
+
+# --- GLOBAL SIDEBAR SAVE ---
+with st.sidebar:
+    selection = st.radio("Go to", list(tools.keys()))
+    st.divider()
+    st.subheader("💾 Global Management")
+    profile_json = json.dumps(st.session_state.user_profile, indent=4)
+    st.download_button(
+        label="Download Client Profile",
+        data=profile_json,
+        file_name="client_profile.json",
+        mime="application/json",
+        use_container_width=True
+    )
 
 # --- 4. PROFILE PAGE ---
 if selection == "👤 Client Profile":
@@ -51,7 +64,6 @@ if selection == "👤 Client Profile":
             st.success("Profile Loaded!")
 
     st.subheader("👥 Household Income Details")
-    # Corrected indentations for consistency
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("### Primary Client")
@@ -91,7 +103,6 @@ if selection == "👤 Client Profile":
 
     st.divider()
 
-    # --- HISTORICAL RATE CHART SECTION ---
     def show_history():
         history_path = 'data/market_history.json'
         if os.path.exists(history_path):
@@ -105,23 +116,18 @@ if selection == "👤 Client Profile":
                               labels={"value": "Rate (%)", "date": "Date"},
                               template="plotly_white",
                               markers=True)
-                
-                # Cleanup Legend Names
                 newnames = {'prime': 'Bank Prime', 'fixed_5': '5yr Fixed'}
                 fig.for_each_trace(lambda t: t.update(name = newnames[t.name]))
                 fig.update_layout(legend_title_text='Rate Type')
-                
                 st.plotly_chart(fig, use_container_width=True)
             elif len(history_data) == 1:
-                st.info("📈 **First data point recorded!** The trend line will appear once the next monthly update is processed.")
-                # Show the current single entry in a clean table
+                st.info("📈 **First data point recorded!**")
                 df_single = pd.DataFrame(history_data)
-                df_single.columns = ["Date", "Bank Prime", "BoC Overnight", "5yr Fixed"]
                 st.table(df_single)
             else:
                 st.info("📊 Historical data is currently being compiled.")
         else:
-            st.warning("⚠️ Market history file not found. Check GitHub Action status.")
+            st.warning("⚠️ Market history file not found.")
 
     with st.expander("📈 View Historical Interest Rate Trends", expanded=False):
         show_history()
@@ -138,9 +144,6 @@ if selection == "👤 Client Profile":
     with l3:
         prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
         st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')))
-
-    profile_json = json.dumps(st.session_state.user_profile, indent=4)
-    st.download_button("💾 Download Profile", data=profile_json, file_name="client_profile.json", mime="application/json")
 
 else:
     file_path = os.path.join("scripts", tools[selection])
