@@ -33,14 +33,17 @@ def calculate_ltt_and_fees(price, province, is_fthb):
     if not tax_rules: return 0, 0
     rebates = tax_rules.get("rebates", {})
     
+    # 1. Provincial Tax Calculation
     prov_rules = tax_rules.get(province, [])
-    total_prov_tax, prev_h = 0, 0
+    total_prov_tax = 0
+    prev_h = 0
     for rule in prov_rules:
         if price > prev_h:
             taxable = min(price, rule["threshold"]) - prev_h
             total_prov_tax += taxable * rule["rate"]
             prev_h = rule["threshold"]
-            
+    
+    # 2. Rebate Logic
     total_rebate = 0
     if is_fthb:
         if province == "Ontario":
@@ -50,6 +53,7 @@ def calculate_ltt_and_fees(price, province, is_fthb):
                 total_rebate = total_prov_tax
             elif price <= rebates.get("BC_FTHB_Partial_Limit", 860000):
                 total_rebate = total_prov_tax * ((860000 - price) / 25000)
+
     return total_prov_tax, total_rebate
 
 def calculate_min_downpayment(price):
@@ -107,6 +111,7 @@ bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 
+# Provincial Defaults (Fixed for BC/ON)
 TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
 
