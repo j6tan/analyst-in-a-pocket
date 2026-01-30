@@ -91,18 +91,21 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 5. PERSISTENCE INITIALIZATION ---
+# --- 5. PERSISTENCE INITIALIZATION (BUG FIX APPLIED HERE) ---
+# Logic to sync from Global Profile every time the profile is updated
+t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
+bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
+rental_sum = float(prof.get('inv_rental_income', 0))
+debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
+
 if "aff_store" not in st.session_state:
-    t4_val = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
-    bonus_val = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
-    rental_val = float(prof.get('inv_rental_income', 0))
-    est_purchase = (t4_val + bonus_val + (rental_val * 0.80)) * 4.5
+    est_purchase = (t4_sum + bonus_sum + (rental_sum * 0.80)) * 4.5
 
     st.session_state.aff_store = {
-        "t4": t4_val,
-        "bonus": bonus_val,
-        "rental": rental_val,
-        "monthly_debt": float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0)),
+        "t4": t4_sum,
+        "bonus": bonus_sum,
+        "rental": rental_sum,
+        "monthly_debt": debt_sum,
         "down_payment": est_purchase * 0.20,
         "prop_taxes": est_purchase * 0.0075,
         "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
@@ -110,8 +113,18 @@ if "aff_store" not in st.session_state:
         "strata": 400.0,
         "city": "Outside Toronto",
         "prop_type": "House / Freehold",
-        "is_fthb": False
+        "is_fthb": False,
+        "last_synced_profile": hash(str(prof)) # Tracking tag
     }
+else:
+    # If the profile changed on the other page, sync the core values here
+    current_prof_hash = hash(str(prof))
+    if st.session_state.aff_store.get("last_synced_profile") != current_prof_hash:
+        st.session_state.aff_store["t4"] = t4_sum
+        st.session_state.aff_store["bonus"] = bonus_sum
+        st.session_state.aff_store["rental"] = rental_sum
+        st.session_state.aff_store["monthly_debt"] = debt_sum
+        st.session_state.aff_store["last_synced_profile"] = current_prof_hash
 
 store = st.session_state.aff_store
 
@@ -247,11 +260,3 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
-
-
-
-
-
-
-
-
