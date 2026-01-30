@@ -127,7 +127,7 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 6. PERSISTENCE INITIALIZATION ---
+# --- 6. PERSISTENCE INITIALIZATION (WITH CITY CHANGE DETECTION) ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
@@ -139,10 +139,9 @@ def get_defaults(t4, bonus, rental, debt, prov, city):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     
-    # Get localized tax rate from wide-range city data
     p_key = prov if prov in ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan"] else "Atlantic"
     city_rates = intel.get("city_tax_data", {}).get(p_key, {})
-    t_rate = city_rates.get(city, 0.0075) # Default to 0.75% if not found
+    t_rate = city_rates.get(city, 0.0075) 
     
     max_price, min_down = solve_max_affordability(qual_income, debt, stress_val, t_rate)
     return min_down, (max_price * t_rate), (max_price * 0.0002)
@@ -157,6 +156,15 @@ if "aff_store" not in st.session_state:
         "last_synced_profile": current_hash
     }
 else:
+    # SYNC 1: Detect if User changed the City in the Dropdown
+    if "w_city" in st.session_state and st.session_state.w_city != st.session_state.aff_store['city']:
+        new_city = st.session_state.w_city
+        new_dp, new_taxes, new_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, province, new_city)
+        st.session_state.aff_store.update({
+            "city": new_city, "down_payment": new_dp, "prop_taxes": new_taxes, "heat": new_heat
+        })
+
+    # SYNC 2: Detect if User updated Profile on the first page
     if st.session_state.aff_store.get("last_synced_profile") != current_hash:
         new_dp, new_taxes, new_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, province, st.session_state.aff_store['city'])
         st.session_state.aff_store.update({
@@ -183,7 +191,6 @@ with col_1:
 with col_2:
     st.subheader("💳 Debt & Status")
     
-    # DYNAMIC CITY FILTER BY PROVINCE
     p_key = province if province in ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan"] else "Atlantic"
     city_options = list(intel.get("city_tax_data", {}).get(p_key, {}).keys())
     if "Other" not in city_options: city_options.append("Other")
