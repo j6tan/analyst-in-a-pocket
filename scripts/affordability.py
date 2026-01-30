@@ -28,7 +28,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. DYNAMIC LTT/PTT CALCULATOR (Reads from Scraper) ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR ---
 def calculate_ltt_and_fees(price, province, city, is_fthb):
     tax_rules = intel.get("tax_rules", {})
     rebates = tax_rules.get("rebates", {})
@@ -91,37 +91,44 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 5. PERSISTENCE INITIALIZATION (SMART SYNC & 1M+ FIX) ---
+# --- 5. PERSISTENCE INITIALIZATION (FIXED SYNC LOGIC) ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
+current_hash = hash(str(prof))
+
+# Function to generate dynamic defaults based on income
+def get_dynamic_defaults(t4, bonus, rental):
+    est_purchase = (t4 + bonus + (rental * 0.80)) * 4.5
+    if est_purchase >= 1000000:
+        dp = est_purchase * 0.20
+    else:
+        dp = calculate_min_downpayment(est_purchase)
+    return dp, (est_purchase * 0.0075), (est_purchase * 0.0002)
 
 if "aff_store" not in st.session_state:
-    est_purchase = (t4_sum + bonus_sum + (rental_sum * 0.80)) * 4.5
-    # Fix: If initial estimate crosses 1M, ensure DP starts at exactly 20%
-    if est_purchase >= 1000000:
-        initial_dp = est_purchase * 0.20
-    else:
-        initial_dp = calculate_min_downpayment(est_purchase)
-
+    initial_dp, initial_taxes, initial_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum)
     st.session_state.aff_store = {
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
-        "down_payment": initial_dp,
-        "prop_taxes": est_purchase * 0.0075,
+        "down_payment": initial_dp, "prop_taxes": initial_taxes, "heat": initial_heat,
         "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
-        "heat": est_purchase * 0.0002,
         "strata": 400.0, "city": "Outside Toronto", "prop_type": "House / Freehold", "is_fthb": False,
-        "last_synced_profile": hash(str(prof))
+        "last_synced_profile": current_hash
     }
 else:
-    current_hash = hash(str(prof))
+    # If the global profile changed, update core income/debt but RECALCULATE the costs
     if st.session_state.aff_store.get("last_synced_profile") != current_hash:
-        st.session_state.aff_store.update({"t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum, "last_synced_profile": current_hash})
+        new_dp, new_taxes, new_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum)
+        st.session_state.aff_store.update({
+            "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
+            "down_payment": new_dp, "prop_taxes": new_taxes, "heat": new_heat,
+            "last_synced_profile": current_hash
+        })
 
 store = st.session_state.aff_store
 
-# --- 6. INPUTS & ENGINE ---
+# --- 6. INPUTS ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
