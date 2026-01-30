@@ -1,40 +1,37 @@
-name: Monthly Market Intel Update
+name: Monthly Market Data Sync
 
 on:
   schedule:
-    # Runs at 00:00 UTC on the 1st of every month
-    - cron: '0 0 1 * *'
-  workflow_dispatch: # Allows you to manually trigger it for testing
+    - cron: '0 0 1 * *' # Runs on the 1st of every month
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
-  build:
+  scrape:
     runs-on: ubuntu-latest
-    # Add these lines right here:
-    permissions:
-      contents: write
-    
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip' # Speeds up future runs
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
-          pip install requests
+          pip install requests beautifulsoup4 openai
 
       - name: Run Scraper
-        # Updated to your specific path
-        run: python scripts/rate_scraper.py 
+        env:
+          # Inject your secret OpenAI key into the script's environment
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: python scripts/rate_scraper.py
 
-      - name: Commit and push changes
+      - name: Commit and Push Changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          # This line now adds EVERYTHING in the data folder
-          git add data/*.json 
-          git commit -m "Auto-update market data and history: $(date)" || echo "No changes to commit"
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add data/market_intel.json
+          git commit -m "Automated Market Data Update - $(date +'%Y-%m-%d')" || exit 0
           git push
