@@ -32,18 +32,13 @@ intel = load_market_intel()
 def calculate_ltt_and_fees(price, province, city, is_fthb):
     tax_rules = intel.get("tax_rules", {})
     rebates = tax_rules.get("rebates", {})
-    
-    # 1. Calculate Provincial Tax
     prov_rules = tax_rules.get(province, [])
-    total_prov_tax = 0
-    prev_h = 0
+    total_prov_tax, prev_h = 0, 0
     for rule in prov_rules:
         if price > prev_h:
             taxable = min(price, rule["threshold"]) - prev_h
             total_prov_tax += taxable * rule["rate"]
             prev_h = rule["threshold"]
-    
-    # 2. Calculate Municipal Tax (Toronto)
     total_mun_tax = 0
     if province == "Ontario" and city == "Toronto":
         mun_rules = tax_rules.get("Toronto_Municipal", [])
@@ -53,22 +48,14 @@ def calculate_ltt_and_fees(price, province, city, is_fthb):
                 taxable_mun = min(price, rule["threshold"]) - prev_h_mun
                 total_mun_tax += taxable_mun * rule["rate"]
                 prev_h_mun = rule["threshold"]
-
-    # 3. Rebate Logic
     total_rebate = 0
     if is_fthb:
         if province == "Ontario":
             total_rebate += min(total_prov_tax, rebates.get("ON_FTHB_Max", 4000))
-            if city == "Toronto":
-                total_rebate += min(total_mun_tax, rebates.get("Toronto_FTHB_Max", 4475))
+            if city == "Toronto": total_rebate += min(total_mun_tax, rebates.get("Toronto_FTHB_Max", 4475))
         elif province == "BC":
-            # BC Exemption Logic
-            if price <= rebates.get("BC_FTHB_Threshold", 500000):
-                total_rebate = total_prov_tax
-            elif price <= rebates.get("BC_FTHB_Partial_Limit", 525000):
-                # Simple partial estimate for the partial limit range
-                total_rebate = total_prov_tax * ((525000 - price) / 25000)
-
+            if price <= rebates.get("BC_FTHB_Threshold", 500000): total_rebate = total_prov_tax
+            elif price <= rebates.get("BC_FTHB_Partial_Limit", 525000): total_rebate = total_prov_tax * ((525000 - price) / 25000)
     return (total_prov_tax + total_mun_tax), total_rebate
 
 def calculate_min_downpayment(price):
@@ -93,31 +80,30 @@ else:
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">{story_headline}</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        {story_body}
-    </p>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">{story_body}</p>
 </div>
 """, unsafe_allow_html=True)
 
 if not is_renter:
     st.markdown(f"""
         <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px; margin-left: 25px;">
-            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; 
-            existing mortgage balances are not factored into this specific qualification limit.</i>
+            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>
         </p>
     """, unsafe_allow_html=True)
 
-# --- 5. PERSISTENCE INITIALIZATION (SMART SYNC + DYNAMIC DEFAULTS) ---
+# --- 5. PERSISTENCE INITIALIZATION (SMART SYNC & 1M+ FIX) ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 
 if "aff_store" not in st.session_state:
-    # First time load
     est_purchase = (t4_sum + bonus_sum + (rental_sum * 0.80)) * 4.5
-    # Default DP: Check for 20% rule on $1M+
-    initial_dp = est_purchase * 0.20 if est_purchase >= 1000000 else calculate_min_downpayment(est_purchase)
+    # Fix: If initial estimate crosses 1M, ensure DP starts at exactly 20%
+    if est_purchase >= 1000000:
+        initial_dp = est_purchase * 0.20
+    else:
+        initial_dp = calculate_min_downpayment(est_purchase)
 
     st.session_state.aff_store = {
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
@@ -129,19 +115,14 @@ if "aff_store" not in st.session_state:
         "last_synced_profile": hash(str(prof))
     }
 else:
-    # SMART SYNC: Detect changes in Client Profile
     current_hash = hash(str(prof))
     if st.session_state.aff_store.get("last_synced_profile") != current_hash:
-        st.session_state.aff_store.update({
-            "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
-            "last_synced_profile": current_hash
-        })
+        st.session_state.aff_store.update({"t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum, "last_synced_profile": current_hash})
 
 store = st.session_state.aff_store
 
 # --- 6. INPUTS & ENGINE ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
-
 with col_1:
     st.subheader("💰 Income Summary")
     t4 = st.number_input("Combined T4 Income", value=store['t4'], key="w_t4")
@@ -155,18 +136,9 @@ with col_1:
 
 with col_2:
     st.subheader("💳 Debt & Status")
-    target_city = "Outside Toronto"
-    if province == "Ontario":
-        city_options = ["Toronto", "Other/Outside Toronto"]
-        try: city_idx = city_options.index(store['city'])
-        except: city_idx = 0
-        target_city = st.selectbox("Property City", city_options, index=city_idx, key="w_city")
-        store['city'] = target_city
-    
-    prop_options = ["House / Freehold", "Condo / Townhome"]
-    try: prop_idx = prop_options.index(store['prop_type'])
-    except: prop_idx = 0
-    prop_type = st.selectbox("Property Type", prop_options, index=prop_idx, key="w_prop_type")
+    target_city = st.selectbox("Property City", ["Toronto", "Other/Outside Toronto"], index=0 if store['city'] == "Toronto" else 1, key="w_city")
+    store['city'] = target_city
+    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], index=0 if store['prop_type'] == "House / Freehold" else 1, key="w_prop_type")
     store['prop_type'] = prop_type
     monthly_debt = st.number_input("Monthly Debts", value=store['monthly_debt'], key="w_debt")
     store['monthly_debt'] = monthly_debt
@@ -174,10 +146,14 @@ with col_2:
     store['is_fthb'] = is_fthb
 
 with col_3:
-    st.info("**💡 Underwriting Insights:** T4: 100%, Additional: 2yr Avg, Rental: 80% Haircut.")
+    st.info("""
+    **💡 Underwriting Insights:**
+    * **T4:** Banks use **100%** of base salary.
+    * **Additional Income:** Usually a **2-year average**.
+    * **Rental:** Typically 'haircut' to **80%**.
+    """)
     loc_balance = float(prof.get('loc_balance', 0))
-    if loc_balance > 0:
-        st.metric("LOC Qualifying Hit", f"-${loc_balance * 0.03:,.0f}", delta_color="inverse")
+    if loc_balance > 0: st.metric("LOC Qualifying Hit", f"-${loc_balance * 0.03:,.0f}", delta_color="inverse")
 
 with st.sidebar:
     st.header("⚙️ Underwriting")
@@ -208,27 +184,23 @@ if max_pi_stress > 0:
     loan_amt = max_pi_stress * (1 - (1+i_stress)**-(25*12)) / i_stress
     i_contract = (contract_rate/100)/12
     actual_pi = (loan_amt * i_contract) / (1 - (1 + i_contract)**-300) 
-    
     max_purchase = loan_amt + down_payment
     min_required = calculate_min_downpayment(max_purchase)
     
-    # Check legal minimums (especially 20% for $1M+)
     if down_payment < min_required:
         st.error("### 🛑 Down Payment Too Low")
         st.warning(f"Based on a \${max_purchase:,.0f} purchase price, the legal minimum down payment is \${min_required:,.0f}. You are currently short \${min_required - down_payment:,.0f}.")
         st.stop()
-
+        
     total_ltt, total_rebate = calculate_ltt_and_fees(max_purchase, province, target_city, is_fthb)
     st.session_state['max_purchase_power'] = float(max_purchase)
     st.session_state['affordability_down_payment'] = float(down_payment)
-
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
     with m1: st.metric("Max Purchase Power", f"${max_purchase:,.0f}")
     with m2: st.metric("Max Loan Amount", f"${loan_amt:,.0f}")
     with m3: st.metric("Actual Monthly P&I", f"${actual_pi:,.0f}")
     with m4: st.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
-
     r1, r2 = st.columns([2, 1.2])
     with r1:
         fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
@@ -239,13 +211,24 @@ if max_pi_stress > 0:
         breakdown = [
             {"Item": "Total Land Transfer Tax", "Cost": total_ltt},
             {"Item": "FTHB Rebate/Exemption", "Cost": -total_rebate},
-            {"Item": "Legal/Fees", "Cost": 2350}
+            {"Item": "Legal Fees & Disbursements", "Cost": 1850},
+            {"Item": "Title Insurance", "Cost": 500},
+            {"Item": "Prepaid Adjustments", "Cost": 1200},
+            {"Item": "Appraisal Fee", "Cost": 450}
         ]
         df_costs = pd.DataFrame(breakdown)
         st.table(df_costs.assign(Cost=df_costs['Cost'].map('${:,.0f}'.format)))
-        st.metric("Total Liquidity Required", f"${(down_payment + total_ltt - total_rebate + 2350):,.0f}")
-else:
-    st.error("Approval amount is $0. Please check income vs debt levels.")
+        st.metric("Total Liquidity Required", f"${(down_payment + df_costs['Cost'].sum()):,.0f}")
+else: st.error("Approval amount is $0. Please check income vs debt levels.")
 
 st.markdown("---")
+st.markdown("""
+<div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
+    <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
+        <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
+        This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
+        This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
