@@ -27,7 +27,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. DYNAMIC LTT/PTT CALCULATOR (FIXED BUG) ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR ---
 def calculate_ltt_and_fees(price, province, city, is_fthb):
     tax_rules = intel.get("tax_rules", {})
     if not tax_rules:
@@ -76,18 +76,20 @@ def calculate_min_downpayment(price):
     elif price <= 500000: return price * 0.05
     else: return (500000 * 0.05) + ((price - 500000) * 0.10)
 
-# --- 4. THE ULTIMATE SOLVER ---
-def solve_max_affordability(income_annual, debts_monthly, stress_rate):
+# --- 4. THE ULTIMATE SOLVER (Algebraic Circular Fix) ---
+def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate):
     m_inc = income_annual / 12
     HEAT_FACTOR = 0.0002
-    TAX_FACTOR = 0.0075 / 12
+    TAX_FACTOR = tax_rate / 12
     ALPHA = HEAT_FACTOR + TAX_FACTOR
     r_mo = (stress_rate / 100) / 12
     K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1) if r_mo > 0 else 1/300
     budget = min(m_inc * 0.39, (m_inc * 0.44) - debts_monthly)
+    
     p3 = budget / (0.80 * K + ALPHA)
     p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
     p1 = budget / (0.95 * K + ALPHA)
+    
     if p3 >= 1000000:
         fp, fd = p3, p3 * 0.20
     elif p2 >= 500000:
@@ -132,25 +134,31 @@ rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 current_hash = hash(str(prof))
 
-def get_defaults(t4, bonus, rental, debt):
+def get_defaults(t4, bonus, rental, debt, prov, city):
     rate_val = float(intel['rates'].get('five_year_fixed_uninsured', 4.49))
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
-    max_price, min_down = solve_max_affordability(qual_income, debt, stress_val)
-    return min_down, (max_price * 0.0075), (max_price * 0.0002)
+    
+    # Get localized tax rate from wide-range city data
+    p_key = prov if prov in ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan"] else "Atlantic"
+    city_rates = intel.get("city_tax_data", {}).get(p_key, {})
+    t_rate = city_rates.get(city, 0.0075) # Default to 0.75% if not found
+    
+    max_price, min_down = solve_max_affordability(qual_income, debt, stress_val, t_rate)
+    return min_down, (max_price * t_rate), (max_price * 0.0002)
 
 if "aff_store" not in st.session_state:
-    initial_dp, initial_taxes, initial_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
+    initial_dp, initial_taxes, initial_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, province, "Toronto")
     st.session_state.aff_store = {
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
         "down_payment": initial_dp, "prop_taxes": initial_taxes, "heat": initial_heat,
         "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
-        "strata": 400.0, "city": "Outside Toronto", "prop_type": "House / Freehold", "is_fthb": False,
+        "strata": 400.0, "city": "Toronto", "prop_type": "House / Freehold", "is_fthb": False,
         "last_synced_profile": current_hash
     }
 else:
     if st.session_state.aff_store.get("last_synced_profile") != current_hash:
-        new_dp, new_taxes, new_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
+        new_dp, new_taxes, new_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, province, st.session_state.aff_store['city'])
         st.session_state.aff_store.update({
             "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
             "down_payment": new_dp, "prop_taxes": new_taxes, "heat": new_heat,
@@ -175,17 +183,16 @@ with col_1:
 with col_2:
     st.subheader("💳 Debt & Status")
     
-    # FIX: Only show City if Province is Ontario
-    target_city = store['city']
-    if province == "Ontario":
-        city_options = ["Toronto", "Other/Outside Toronto"]
-        try: city_idx = city_options.index(store['city'])
-        except: city_idx = 0
-        target_city = st.selectbox("Property City", city_options, index=city_idx, key="w_city")
-        store['city'] = target_city
-    else:
-        # For non-Ontario, we default to "Outside Toronto" to avoid LTT errors
-        store['city'] = "Outside Toronto"
+    # DYNAMIC CITY FILTER BY PROVINCE
+    p_key = province if province in ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan"] else "Atlantic"
+    city_options = list(intel.get("city_tax_data", {}).get(p_key, {}).keys())
+    if "Other" not in city_options: city_options.append("Other")
+    
+    try: city_idx = city_options.index(store['city'])
+    except: city_idx = 0
+    
+    target_city = st.selectbox("Property City", city_options, index=city_idx, key="w_city")
+    store['city'] = target_city
     
     prop_options = ["House / Freehold", "Condo / Townhome"]
     try: prop_idx = prop_options.index(store['prop_type'])
@@ -222,7 +229,7 @@ with st.sidebar:
     store['prop_taxes'] = taxes
     heat = st.number_input("Monthly Heat", value=store['heat'], key="w_heat")
     store['heat'] = heat
-    strata = st.number_input("Monthly Strata", value=store['strata'], key="w_strata") if prop_type == "Condo / Townhome" else 0
+    strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
 
 # --- 8. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
