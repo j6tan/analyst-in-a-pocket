@@ -18,7 +18,6 @@ is_renter = prof.get('housing_status') == "Renting"
 
 household = f"{name1} and {name2}" if name2 else name1
 
-# --- DATA RETRIEVAL: MARKET INTEL ---
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
@@ -91,24 +90,32 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 5. PERSISTENCE INITIALIZATION (FIXED SYNC LOGIC) ---
+# --- 5. PERSISTENCE INITIALIZATION (SURGICAL FIX FOR DEFAULT DP) ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 current_hash = hash(str(prof))
 
-# Function to generate dynamic defaults based on income
-def get_dynamic_defaults(t4, bonus, rental):
-    est_purchase = (t4 + bonus + (rental * 0.80)) * 4.5
-    if est_purchase >= 1000000:
-        dp = est_purchase * 0.20
+def get_dynamic_defaults(t4, bonus, rental, debt):
+    # Calculate Max Loan first to see if we cross $1M
+    inc = t4 + bonus + (rental * 0.80)
+    m_inc = inc / 12
+    # Aggressive baseline estimate for max loan
+    max_loan_est = (m_inc * 0.30) * 150 
+    
+    # If the loan itself plus a basic DP hits $1M, force 20%
+    if max_loan_est + 50000 >= 1000000:
+        # For $1M+, Price = Loan / 0.8. Therefore DP = Price * 0.2
+        price_est = max_loan_est / 0.8
+        dp = price_est * 0.20
     else:
-        dp = calculate_min_downpayment(est_purchase)
-    return dp, (est_purchase * 0.0075), (est_purchase * 0.0002)
+        dp = calculate_min_downpayment(max_loan_est + 50000)
+        
+    return dp, (max_loan_est * 1.2 * 0.0075), (max_loan_est * 1.2 * 0.0002)
 
 if "aff_store" not in st.session_state:
-    initial_dp, initial_taxes, initial_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum)
+    initial_dp, initial_taxes, initial_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
     st.session_state.aff_store = {
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
         "down_payment": initial_dp, "prop_taxes": initial_taxes, "heat": initial_heat,
@@ -117,9 +124,8 @@ if "aff_store" not in st.session_state:
         "last_synced_profile": current_hash
     }
 else:
-    # If the global profile changed, update core income/debt but RECALCULATE the costs
     if st.session_state.aff_store.get("last_synced_profile") != current_hash:
-        new_dp, new_taxes, new_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum)
+        new_dp, new_taxes, new_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
         st.session_state.aff_store.update({
             "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
             "down_payment": new_dp, "prop_taxes": new_taxes, "heat": new_heat,
@@ -191,6 +197,7 @@ if max_pi_stress > 0:
     loan_amt = max_pi_stress * (1 - (1+i_stress)**-(25*12)) / i_stress
     i_contract = (contract_rate/100)/12
     actual_pi = (loan_amt * i_contract) / (1 - (1 + i_contract)**-300) 
+    
     max_purchase = loan_amt + down_payment
     min_required = calculate_min_downpayment(max_purchase)
     
@@ -227,6 +234,8 @@ if max_pi_stress > 0:
         st.table(df_costs.assign(Cost=df_costs['Cost'].map('${:,.0f}'.format)))
         st.metric("Total Liquidity Required", f"${(down_payment + df_costs['Cost'].sum()):,.0f}")
 else: st.error("Approval amount is $0. Please check income vs debt levels.")
+
+
 
 st.markdown("---")
 st.markdown("""
