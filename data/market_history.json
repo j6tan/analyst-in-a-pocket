@@ -4,5 +4,11 @@
         "prime": 5.95,
         "overnight": 2.25,
         "fixed_5": 4.26
+    },
+    {
+        "date": "2026-01-30",
+        "prime": 5.95,
+        "overnight": 2.25,
+        "fixed_5": 4.26
     }
 ]

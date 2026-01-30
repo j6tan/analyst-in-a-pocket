@@ -1,5 +1,5 @@
 {
-    "last_updated": "2026-01-29 19:12:08",
+    "last_updated": "2026-01-30 05:44:47",
     "rates": {
         "boc_overnight": 2.25,
         "bank_prime": 5.95,
@@ -17,8 +17,78 @@
         "PEI": 6.1,
         "NL": 6.2
     },
-    "tax_thresholds": {
-        "on_ltt_rebate_max": 4000,
-        "bc_fthb_exemption": 835000
+    "tax_rules": {
+        "Ontario": [
+            {
+                "threshold": 55000,
+                "rate": 0.005
+            },
+            {
+                "threshold": 250000,
+                "rate": 0.01
+            },
+            {
+                "threshold": 400000,
+                "rate": 0.015
+            },
+            {
+                "threshold": 2000000,
+                "rate": 0.02
+            },
+            {
+                "threshold": 999999999,
+                "rate": 0.025
+            }
+        ],
+        "Toronto_Municipal": [
+            {
+                "threshold": 55000,
+                "rate": 0.005
+            },
+            {
+                "threshold": 250000,
+                "rate": 0.01
+            },
+            {
+                "threshold": 400000,
+                "rate": 0.015
+            },
+            {
+                "threshold": 2000000,
+                "rate": 0.02
+            },
+            {
+                "threshold": 3000000,
+                "rate": 0.025
+            },
+            {
+                "threshold": 999999999,
+                "rate": 0.03
+            }
+        ],
+        "BC": [
+            {
+                "threshold": 200000,
+                "rate": 0.01
+            },
+            {
+                "threshold": 2000000,
+                "rate": 0.02
+            },
+            {
+                "threshold": 3000000,
+                "rate": 0.03
+            },
+            {
+                "threshold": 999999999,
+                "rate": 0.05
+            }
+        ],
+        "rebates": {
+            "ON_FTHB_Max": 4000,
+            "Toronto_FTHB_Max": 4475,
+            "BC_FTHB_Threshold": 500000,
+            "BC_FTHB_Partial_Limit": 525000
+        }
     }
 }
