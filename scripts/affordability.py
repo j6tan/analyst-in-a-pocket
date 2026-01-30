@@ -62,7 +62,67 @@ def calculate_min_downpayment(price):
     elif price <= 500000: return price * 0.05
     else: return (500000 * 0.05) + ((price - 500000) * 0.10)
 
-# --- 4. HEADER & STORY ---
+# --- 4. THE ULTIMATE SOLVER (Solves Circular Reference) ---
+def solve_max_affordability(income_annual, debts_monthly, stress_rate):
+    """
+    Algebraically solves for Max Price (P) where:
+    P = Loan + MinDown(P)
+    Loan is constrained by GDS/TDS which are reduced by Taxes/Heat(P).
+    """
+    m_inc = income_annual / 12
+    # Constants
+    HEAT_FACTOR = 0.0002
+    TAX_FACTOR = 0.0075 / 12
+    ALPHA = HEAT_FACTOR + TAX_FACTOR  # Combined monthly cost factor per dollar of Price
+    
+    # Calculate Payment Factor (K) for 25-year AM
+    r_mo = (stress_rate / 100) / 12
+    if r_mo == 0: K = 1 / 300
+    else: K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1)
+    
+    # Calculate Max Budget for Principal+Interest (before heat/taxes)
+    # GDS Limit: 39% of Income
+    # TDS Limit: 44% of Income - Debts
+    budget = min(m_inc * 0.39, (m_inc * 0.44) - debts_monthly)
+    
+    # We solve P for three different down payment scenarios (Cases)
+    
+    # CASE 1: Price < $500k (Down = 5%)
+    # P = Loan / 0.95
+    # Loan * K = Budget - ALPHA * P
+    # (0.95 P) * K = Budget - ALPHA * P
+    # P (0.95 K + ALPHA) = Budget
+    p1 = budget / (0.95 * K + ALPHA)
+    
+    # CASE 2: $500k <= Price < $1M (Down = 10% on portion over 500k)
+    # Down = 0.05*500k + 0.10*(P-500k) = 25000 + 0.1P - 50000 = 0.1P - 25000
+    # Loan = P - (0.1P - 25000) = 0.9P + 25000
+    # (0.9P + 25000) * K = Budget - ALPHA * P
+    # 0.9 K P + 25000 K + ALPHA P = Budget
+    # P (0.9 K + ALPHA) = Budget - 25000 K
+    p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
+    
+    # CASE 3: Price >= $1M (Down = 20%)
+    # Down = 0.2P
+    # Loan = 0.8P
+    # (0.8P) * K = Budget - ALPHA * P
+    # P (0.8 K + ALPHA) = Budget
+    p3 = budget / (0.80 * K + ALPHA)
+    
+    # Select the valid case
+    if p3 >= 1000000:
+        final_price = p3
+        final_down = final_price * 0.20
+    elif p2 >= 500000:
+        final_price = p2
+        final_down = (500000 * 0.05) + ((final_price - 500000) * 0.10)
+    else:
+        final_price = p1
+        final_down = final_price * 0.05
+        
+    return final_price, final_down
+
+# --- 5. HEADER & STORY ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
@@ -90,35 +150,26 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 5. PERSISTENCE INITIALIZATION (SOLVING CIRCULAR DOWNPAYMENT) ---
+# --- 6. PERSISTENCE INITIALIZATION (USING SOLVER) ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 current_hash = hash(str(prof))
 
-def get_dynamic_defaults(t4, bonus, rental, debt):
-    inc = t4 + bonus + (rental * 0.80)
-    m_inc = inc / 12
-    # Determine the maximum loan possible based on income alone (39% GDS)
-    # This acts as the "anchor" for the circular calculation
-    max_loan_est = (m_inc * 0.30) * 160 
+def get_defaults(t4, bonus, rental, debt):
+    # Get rates
+    rate_val = float(intel['rates'].get('five_year_fixed_uninsured', 4.49))
+    stress_val = max(5.25, rate_val + 2.0)
+    qual_income = t4 + bonus + (rental * 0.80)
     
-    # Check if this loan level forces us into the $1M+ (uninsured) category
-    # If the loan itself represents 80% of a million-dollar home ($800k+ loan)
-    if max_loan_est >= 800000:
-        # At $1M+, Max Purchase = Loan / 0.8. Min Downpay = Purchase * 0.2
-        est_p = max_loan_est / 0.8
-        dp = est_p * 0.20
-    else:
-        # For homes <$1M, use tiered calculation
-        est_p = max_loan_est + (max_loan_est * 0.10)
-        dp = calculate_min_downpayment(est_p)
-        
-    return dp, (est_p * 0.0075), (est_p * 0.0002)
+    # RUN SOLVER
+    max_price, min_down = solve_max_affordability(qual_income, debt, stress_val)
+    
+    return min_down, (max_price * 0.0075), (max_price * 0.0002)
 
 if "aff_store" not in st.session_state:
-    initial_dp, initial_taxes, initial_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
+    initial_dp, initial_taxes, initial_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
     st.session_state.aff_store = {
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
         "down_payment": initial_dp, "prop_taxes": initial_taxes, "heat": initial_heat,
@@ -128,7 +179,7 @@ if "aff_store" not in st.session_state:
     }
 else:
     if st.session_state.aff_store.get("last_synced_profile") != current_hash:
-        new_dp, new_taxes, new_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
+        new_dp, new_taxes, new_heat = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
         st.session_state.aff_store.update({
             "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
             "down_payment": new_dp, "prop_taxes": new_taxes, "heat": new_heat,
@@ -137,7 +188,7 @@ else:
 
 store = st.session_state.aff_store
 
-# --- 6. INPUTS & ENGINE ---
+# --- 7. INPUTS & ENGINE ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
@@ -188,7 +239,7 @@ with st.sidebar:
     store['heat'] = heat
     strata = st.number_input("Monthly Strata", value=store['strata'], key="w_strata") if prop_type == "Condo / Townhome" else 0
 
-# --- 7. CALCULATION LOGIC ---
+# --- 8. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
 loc_pmt = prof.get('loc_balance', 0) * 0.03
 gds_max = (monthly_inc * 0.39) - heat - (taxes/12) - (strata*0.5 if "Condo" in prop_type else 0)
@@ -204,7 +255,7 @@ if max_pi_stress > 0:
     max_purchase = loan_amt + down_payment
     min_required = calculate_min_downpayment(max_purchase)
     
-    if down_payment < min_required:
+    if down_payment < min_required - 1.0: # Small buffer for float precision
         st.error("### 🛑 Down Payment Too Low")
         st.warning(f"Based on a \${max_purchase:,.0f} purchase price, the legal minimum down payment is \${min_required:,.0f}. You are currently short \${min_required - down_payment:,.0f}.")
         st.stop()
@@ -237,8 +288,6 @@ if max_pi_stress > 0:
         st.table(df_costs.assign(Cost=df_costs['Cost'].map('${:,.0f}'.format)))
         st.metric("Total Liquidity Required", f"${(down_payment + df_costs['Cost'].sum()):,.0f}")
 else: st.error("Approval amount is $0. Please check income vs debt levels.")
-
-
 
 st.markdown("---")
 st.markdown("""
