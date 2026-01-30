@@ -27,17 +27,25 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. DYNAMIC LTT/PTT CALCULATOR ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR (FIXED BUG) ---
 def calculate_ltt_and_fees(price, province, city, is_fthb):
     tax_rules = intel.get("tax_rules", {})
+    if not tax_rules:
+        return 0, 0
+        
     rebates = tax_rules.get("rebates", {})
+    
+    # 1. Provincial Tax Calculation
     prov_rules = tax_rules.get(province, [])
-    total_prov_tax, prev_h = 0, 0
+    total_prov_tax = 0
+    prev_h = 0
     for rule in prov_rules:
         if price > prev_h:
             taxable = min(price, rule["threshold"]) - prev_h
             total_prov_tax += taxable * rule["rate"]
             prev_h = rule["threshold"]
+    
+    # 2. Municipal Tax (Toronto Only)
     total_mun_tax = 0
     if province == "Ontario" and city == "Toronto":
         mun_rules = tax_rules.get("Toronto_Municipal", [])
@@ -47,14 +55,20 @@ def calculate_ltt_and_fees(price, province, city, is_fthb):
                 taxable_mun = min(price, rule["threshold"]) - prev_h_mun
                 total_mun_tax += taxable_mun * rule["rate"]
                 prev_h_mun = rule["threshold"]
+
+    # 3. Rebate Logic
     total_rebate = 0
     if is_fthb:
         if province == "Ontario":
             total_rebate += min(total_prov_tax, rebates.get("ON_FTHB_Max", 4000))
-            if city == "Toronto": total_rebate += min(total_mun_tax, rebates.get("Toronto_FTHB_Max", 4475))
+            if city == "Toronto":
+                total_rebate += min(total_mun_tax, rebates.get("Toronto_FTHB_Max", 4475))
         elif province == "BC":
-            if price <= rebates.get("BC_FTHB_Threshold", 500000): total_rebate = total_prov_tax
-            elif price <= rebates.get("BC_FTHB_Partial_Limit", 525000): total_rebate = total_prov_tax * ((525000 - price) / 25000)
+            if price <= rebates.get("BC_FTHB_Threshold", 500000):
+                total_rebate = total_prov_tax
+            elif price <= rebates.get("BC_FTHB_Partial_Limit", 525000):
+                total_rebate = total_prov_tax * ((525000 - price) / 25000)
+
     return (total_prov_tax + total_mun_tax), total_rebate
 
 def calculate_min_downpayment(price):
@@ -62,65 +76,26 @@ def calculate_min_downpayment(price):
     elif price <= 500000: return price * 0.05
     else: return (500000 * 0.05) + ((price - 500000) * 0.10)
 
-# --- 4. THE ULTIMATE SOLVER (Solves Circular Reference) ---
+# --- 4. THE ULTIMATE SOLVER ---
 def solve_max_affordability(income_annual, debts_monthly, stress_rate):
-    """
-    Algebraically solves for Max Price (P) where:
-    P = Loan + MinDown(P)
-    Loan is constrained by GDS/TDS which are reduced by Taxes/Heat(P).
-    """
     m_inc = income_annual / 12
-    # Constants
     HEAT_FACTOR = 0.0002
     TAX_FACTOR = 0.0075 / 12
-    ALPHA = HEAT_FACTOR + TAX_FACTOR  # Combined monthly cost factor per dollar of Price
-    
-    # Calculate Payment Factor (K) for 25-year AM
+    ALPHA = HEAT_FACTOR + TAX_FACTOR
     r_mo = (stress_rate / 100) / 12
-    if r_mo == 0: K = 1 / 300
-    else: K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1)
-    
-    # Calculate Max Budget for Principal+Interest (before heat/taxes)
-    # GDS Limit: 39% of Income
-    # TDS Limit: 44% of Income - Debts
+    K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1) if r_mo > 0 else 1/300
     budget = min(m_inc * 0.39, (m_inc * 0.44) - debts_monthly)
-    
-    # We solve P for three different down payment scenarios (Cases)
-    
-    # CASE 1: Price < $500k (Down = 5%)
-    # P = Loan / 0.95
-    # Loan * K = Budget - ALPHA * P
-    # (0.95 P) * K = Budget - ALPHA * P
-    # P (0.95 K + ALPHA) = Budget
-    p1 = budget / (0.95 * K + ALPHA)
-    
-    # CASE 2: $500k <= Price < $1M (Down = 10% on portion over 500k)
-    # Down = 0.05*500k + 0.10*(P-500k) = 25000 + 0.1P - 50000 = 0.1P - 25000
-    # Loan = P - (0.1P - 25000) = 0.9P + 25000
-    # (0.9P + 25000) * K = Budget - ALPHA * P
-    # 0.9 K P + 25000 K + ALPHA P = Budget
-    # P (0.9 K + ALPHA) = Budget - 25000 K
-    p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
-    
-    # CASE 3: Price >= $1M (Down = 20%)
-    # Down = 0.2P
-    # Loan = 0.8P
-    # (0.8P) * K = Budget - ALPHA * P
-    # P (0.8 K + ALPHA) = Budget
     p3 = budget / (0.80 * K + ALPHA)
-    
-    # Select the valid case
+    p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
+    p1 = budget / (0.95 * K + ALPHA)
     if p3 >= 1000000:
-        final_price = p3
-        final_down = final_price * 0.20
+        fp, fd = p3, p3 * 0.20
     elif p2 >= 500000:
-        final_price = p2
-        final_down = (500000 * 0.05) + ((final_price - 500000) * 0.10)
+        fp = p2
+        fd = (500000 * 0.05) + ((fp - 500000) * 0.10)
     else:
-        final_price = p1
-        final_down = final_price * 0.05
-        
-    return final_price, final_down
+        fp, fd = p1, p1 * 0.05
+    return fp, fd
 
 # --- 5. HEADER & STORY ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -150,7 +125,7 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 6. PERSISTENCE INITIALIZATION (USING SOLVER) ---
+# --- 6. PERSISTENCE INITIALIZATION ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
@@ -158,14 +133,10 @@ debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.ge
 current_hash = hash(str(prof))
 
 def get_defaults(t4, bonus, rental, debt):
-    # Get rates
     rate_val = float(intel['rates'].get('five_year_fixed_uninsured', 4.49))
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
-    
-    # RUN SOLVER
     max_price, min_down = solve_max_affordability(qual_income, debt, stress_val)
-    
     return min_down, (max_price * 0.0075), (max_price * 0.0002)
 
 if "aff_store" not in st.session_state:
@@ -203,9 +174,23 @@ with col_1:
 
 with col_2:
     st.subheader("💳 Debt & Status")
-    target_city = st.selectbox("Property City", ["Toronto", "Other/Outside Toronto"], index=0 if store['city'] == "Toronto" else 1, key="w_city")
-    store['city'] = target_city
-    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], index=0 if store['prop_type'] == "House / Freehold" else 1, key="w_prop_type")
+    
+    # FIX: Only show City if Province is Ontario
+    target_city = store['city']
+    if province == "Ontario":
+        city_options = ["Toronto", "Other/Outside Toronto"]
+        try: city_idx = city_options.index(store['city'])
+        except: city_idx = 0
+        target_city = st.selectbox("Property City", city_options, index=city_idx, key="w_city")
+        store['city'] = target_city
+    else:
+        # For non-Ontario, we default to "Outside Toronto" to avoid LTT errors
+        store['city'] = "Outside Toronto"
+    
+    prop_options = ["House / Freehold", "Condo / Townhome"]
+    try: prop_idx = prop_options.index(store['prop_type'])
+    except: prop_idx = 0
+    prop_type = st.selectbox("Property Type", prop_options, index=prop_idx, key="w_prop_type")
     store['prop_type'] = prop_type
     monthly_debt = st.number_input("Monthly Debts", value=store['monthly_debt'], key="w_debt")
     store['monthly_debt'] = monthly_debt
@@ -255,7 +240,7 @@ if max_pi_stress > 0:
     max_purchase = loan_amt + down_payment
     min_required = calculate_min_downpayment(max_purchase)
     
-    if down_payment < min_required - 1.0: # Small buffer for float precision
+    if down_payment < min_required - 1.0: 
         st.error("### 🛑 Down Payment Too Low")
         st.warning(f"Based on a \${max_purchase:,.0f} purchase price, the legal minimum down payment is \${min_required:,.0f}. You are currently short \${min_required - down_payment:,.0f}.")
         st.stop()
