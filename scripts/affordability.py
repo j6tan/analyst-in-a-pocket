@@ -90,7 +90,7 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 5. PERSISTENCE INITIALIZATION (SURGICAL FIX FOR DEFAULT DP) ---
+# --- 5. PERSISTENCE INITIALIZATION (SOLVING CIRCULAR DOWNPAYMENT) ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
@@ -98,21 +98,24 @@ debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.ge
 current_hash = hash(str(prof))
 
 def get_dynamic_defaults(t4, bonus, rental, debt):
-    # Calculate Max Loan first to see if we cross $1M
     inc = t4 + bonus + (rental * 0.80)
     m_inc = inc / 12
-    # Aggressive baseline estimate for max loan
-    max_loan_est = (m_inc * 0.30) * 150 
+    # Determine the maximum loan possible based on income alone (39% GDS)
+    # This acts as the "anchor" for the circular calculation
+    max_loan_est = (m_inc * 0.30) * 160 
     
-    # If the loan itself plus a basic DP hits $1M, force 20%
-    if max_loan_est + 50000 >= 1000000:
-        # For $1M+, Price = Loan / 0.8. Therefore DP = Price * 0.2
-        price_est = max_loan_est / 0.8
-        dp = price_est * 0.20
+    # Check if this loan level forces us into the $1M+ (uninsured) category
+    # If the loan itself represents 80% of a million-dollar home ($800k+ loan)
+    if max_loan_est >= 800000:
+        # At $1M+, Max Purchase = Loan / 0.8. Min Downpay = Purchase * 0.2
+        est_p = max_loan_est / 0.8
+        dp = est_p * 0.20
     else:
-        dp = calculate_min_downpayment(max_loan_est + 50000)
+        # For homes <$1M, use tiered calculation
+        est_p = max_loan_est + (max_loan_est * 0.10)
+        dp = calculate_min_downpayment(est_p)
         
-    return dp, (max_loan_est * 1.2 * 0.0075), (max_loan_est * 1.2 * 0.0002)
+    return dp, (est_p * 0.0075), (est_p * 0.0002)
 
 if "aff_store" not in st.session_state:
     initial_dp, initial_taxes, initial_heat = get_dynamic_defaults(t4_sum, bonus_sum, rental_sum, debt_sum)
@@ -134,7 +137,7 @@ else:
 
 store = st.session_state.aff_store
 
-# --- 6. INPUTS ---
+# --- 6. INPUTS & ENGINE ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
