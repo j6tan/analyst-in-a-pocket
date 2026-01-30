@@ -1,5 +1,5 @@
 {
-    "last_updated": "2026-01-30 05:44:47",
+    "last_updated": "2026-01-30 05:59:18",
     "rates": {
         "boc_overnight": 2.25,
         "bank_prime": 5.95,
@@ -16,6 +16,84 @@
         "NB": 6.5,
         "PEI": 6.1,
         "NL": 6.2
+    },
+    "city_tax_data": {
+        "Ontario": {
+            "Toronto": 0.00754,
+            "Ottawa": 0.01227,
+            "Mississauga": 0.0086,
+            "Brampton": 0.01015,
+            "Hamilton": 0.01497,
+            "London": 0.01573,
+            "Markham": 0.0065,
+            "Vaughan": 0.00695,
+            "Kitchener": 0.01356,
+            "Windsor": 0.0185,
+            "Oakville": 0.0076,
+            "Burlington": 0.0086,
+            "Oshawa": 0.01376,
+            "Barrie": 0.01291,
+            "Guelph": 0.01229,
+            "Kingston": 0.01445,
+            "Thunder Bay": 0.01709,
+            "Sudbury": 0.0165,
+            "Outside Toronto": 0.0075
+        },
+        "BC": {
+            "Vancouver": 0.00311,
+            "Surrey": 0.0034,
+            "Burnaby": 0.0048,
+            "Richmond": 0.0032,
+            "Coquitlam": 0.0038,
+            "Langley": 0.0039,
+            "Kelowna": 0.00444,
+            "Victoria": 0.0052,
+            "Abbotsford": 0.00412,
+            "Nanaimo": 0.0072,
+            "Kamloops": 0.0068,
+            "Prince George": 0.0089,
+            "West Vancouver": 0.00243,
+            "Other BC": 0.004
+        },
+        "Alberta": {
+            "Calgary": 0.00618,
+            "Edmonton": 0.00816,
+            "Red Deer": 0.0094,
+            "Lethbridge": 0.01059,
+            "St. Albert": 0.0102,
+            "Medicine Hat": 0.0112,
+            "Other Alberta": 0.0065
+        },
+        "Quebec": {
+            "Montreal": 0.00767,
+            "Quebec City": 0.0088,
+            "Laval": 0.0091,
+            "Gatineau": 0.0105,
+            "Longueuil": 0.0102,
+            "Sherbrooke": 0.0118,
+            "Other Quebec": 0.0085
+        },
+        "Manitoba": {
+            "Winnipeg": 0.01242,
+            "Brandon": 0.021,
+            "Steinbach": 0.0115,
+            "Other Manitoba": 0.012
+        },
+        "Saskatchewan": {
+            "Saskatoon": 0.01339,
+            "Regina": 0.01364,
+            "Moose Jaw": 0.0142,
+            "Other Saskatchewan": 0.0135
+        },
+        "Atlantic": {
+            "Halifax": 0.0111,
+            "Moncton": 0.016,
+            "Saint John": 0.0179,
+            "Fredericton": 0.0155,
+            "St. John's": 0.0091,
+            "Charlottetown": 0.0167,
+            "Other Atlantic": 0.012
+        }
     },
     "tax_rules": {
         "Ontario": [
