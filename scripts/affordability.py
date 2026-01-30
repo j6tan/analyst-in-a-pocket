@@ -27,7 +27,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. DYNAMIC LTT/PTT CALCULATOR ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR (Fixed for Province Only) ---
 def calculate_ltt_and_fees(price, province, is_fthb):
     tax_rules = intel.get("tax_rules", {})
     if not tax_rules: return 0, 0
@@ -49,7 +49,6 @@ def calculate_ltt_and_fees(price, province, is_fthb):
         if province == "Ontario":
             total_rebate += min(total_prov_tax, rebates.get("ON_FTHB_Max", 4000))
         elif province == "BC":
-            # 2026 BC Thresholds extracted by AI Scraper
             fthb_limit = rebates.get("BC_FTHB_Threshold", 835000)
             partial_limit = rebates.get("BC_FTHB_Partial_Limit", 860000)
             if price <= fthb_limit:
@@ -114,7 +113,7 @@ bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 
-# Provincial Defaults (Fixed for BC/ON)
+# Provincial Defaults (Vancouver for BC, Toronto for ON)
 TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
 
@@ -185,7 +184,6 @@ if max_pi_stress > 0:
         st.error(f"### 🛑 Down Payment Too Low. Legal min for ${max_purchase:,.0f} is ${min_required:,.0f}")
         st.stop()
         
-    # FIXED: Function now only takes 3 arguments (price, province, is_fthb)
     total_ltt, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'])
     
     st.divider()
