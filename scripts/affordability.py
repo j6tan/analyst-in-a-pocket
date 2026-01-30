@@ -49,10 +49,13 @@ def calculate_ltt_and_fees(price, province, is_fthb):
         if province == "Ontario":
             total_rebate += min(total_prov_tax, rebates.get("ON_FTHB_Max", 4000))
         elif province == "BC":
-            if price <= rebates.get("BC_FTHB_Threshold", 835000):
+            # 2026 BC Thresholds extracted by AI Scraper
+            fthb_limit = rebates.get("BC_FTHB_Threshold", 835000)
+            partial_limit = rebates.get("BC_FTHB_Partial_Limit", 860000)
+            if price <= fthb_limit:
                 total_rebate = total_prov_tax
-            elif price <= rebates.get("BC_FTHB_Partial_Limit", 860000):
-                total_rebate = total_prov_tax * ((860000 - price) / 25000)
+            elif price <= partial_limit:
+                total_rebate = total_prov_tax * ((partial_limit - price) / (partial_limit - fthb_limit))
 
     return total_prov_tax, total_rebate
 
@@ -168,8 +171,8 @@ with st.sidebar:
 
 # --- 8. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
-gds_max = (monthly_inc * 0.39) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5)
-tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5) - store['monthly_debt']
+gds_max = (monthly_inc * 0.39) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5 if prop_type == "Condo / Townhome" else 0)
+tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5 if prop_type == "Condo / Townhome" else 0) - store['monthly_debt']
 max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
@@ -182,7 +185,9 @@ if max_pi_stress > 0:
         st.error(f"### 🛑 Down Payment Too Low. Legal min for ${max_purchase:,.0f} is ${min_required:,.0f}")
         st.stop()
         
+    # FIXED: Function now only takes 3 arguments (price, province, is_fthb)
     total_ltt, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'])
+    
     st.divider()
     m1, m2, m3 = st.columns(3)
     m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
