@@ -27,7 +27,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. DYNAMIC LTT/PTT CALCULATOR (Fixed for Province Only) ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR ---
 def calculate_ltt_and_fees(price, province, is_fthb):
     tax_rules = intel.get("tax_rules", {})
     if not tax_rules: return 0, 0
@@ -113,7 +113,7 @@ bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
 
-# Provincial Defaults (Vancouver for BC, Toronto for ON)
+# Provincial Defaults
 TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
 
@@ -170,6 +170,7 @@ with st.sidebar:
 
 # --- 8. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
+# Fixed: heating and strata logic
 gds_max = (monthly_inc * 0.39) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5 if prop_type == "Condo / Townhome" else 0)
 tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5 if prop_type == "Condo / Townhome" else 0) - store['monthly_debt']
 max_pi_stress = min(gds_max, tds_max)
@@ -184,6 +185,7 @@ if max_pi_stress > 0:
         st.error(f"### 🛑 Down Payment Too Low. Legal min for ${max_purchase:,.0f} is ${min_required:,.0f}")
         st.stop()
         
+    # FIXED: Function call now only passes 3 arguments as defined in Section 3
     total_ltt, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'])
     
     st.divider()
