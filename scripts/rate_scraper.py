@@ -56,13 +56,25 @@ def update_market_intel():
             "five_year_fixed_uninsured": fixed_5
         },
         "provincial_yields": yields,
+        "city_property_tax_rates": {
+            "Toronto": 0.00715,
+            "Vancouver": 0.00298,
+            "Calgary": 0.00635,
+            "Edmonton": 0.00938,
+            "Montreal": 0.00767,
+            "Ottawa": 0.01188,
+            "Winnipeg": 0.01242,
+            "Halifax": 0.01050,
+            "Saskatoon": 0.00921,
+            "Outside Toronto": 0.0075  # Default baseline
+        },
         "tax_rules": {
             "Ontario": [
                 {"threshold": 55000, "rate": 0.005},
                 {"threshold": 250000, "rate": 0.01},
                 {"threshold": 400000, "rate": 0.015},
                 {"threshold": 2000000, "rate": 0.02},
-                {"threshold": 999999999, "rate": 0.025} # Catch-all high threshold
+                {"threshold": 999999999, "rate": 0.025}
             ],
             "Toronto_Municipal": [
                 {"threshold": 55000, "rate": 0.005},
@@ -70,19 +82,19 @@ def update_market_intel():
                 {"threshold": 400000, "rate": 0.015},
                 {"threshold": 2000000, "rate": 0.02},
                 {"threshold": 3000000, "rate": 0.025},
-                {"threshold": 999999999, "rate": 0.03} # Toronto has higher luxury brackets
+                {"threshold": 999999999, "rate": 0.03}
             ],
             "BC": [
                 {"threshold": 200000, "rate": 0.01},
                 {"threshold": 2000000, "rate": 0.02},
                 {"threshold": 3000000, "rate": 0.03},
-                {"threshold": 999999999, "rate": 0.05} # BC Additional Tax on $3M+
+                {"threshold": 999999999, "rate": 0.05}
             ],
             "rebates": {
                 "ON_FTHB_Max": 4000,
                 "Toronto_FTHB_Max": 4475,
-                "BC_FTHB_Threshold": 500000, # Full exemption limit
-                "BC_FTHB_Partial_Limit": 525000 # Partial exemption limit
+                "BC_FTHB_Threshold": 500000,
+                "BC_FTHB_Partial_Limit": 525000
             }
         }
     }
@@ -116,7 +128,7 @@ def update_market_intel():
     with open(history_path, "w") as f:
         json.dump(history, f, indent=4)
     
-    print(f"✅ Market Intel & Tax Brackets Saved: {file_path}")
+    print(f"✅ Market Intel, Tax Brackets & City Rates Saved: {file_path}")
     print(f"📈 History Updated: {history_path}")
 
 if __name__ == "__main__":
