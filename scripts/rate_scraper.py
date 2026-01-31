@@ -91,6 +91,9 @@ def update_market_intel():
     print("🧠 Consulting AI for BC Legislative Updates...")
     bc_rules = get_ai_interpreted_bc_rules()
 
+    print("📈 Analyzing Provincial Rental Yields...")
+    yields = get_monthly_provincial_yields() 
+    
     intel_data = {
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "rates": {
@@ -98,6 +101,7 @@ def update_market_intel():
             "five_year_fixed_uninsured": fixed_5,
             "boc_overnight": overnight
         },
+        "provincial_yields": yields,
         "tax_rules": {
             "BC": [
                 {"threshold": 200000, "rate": 0.01},
