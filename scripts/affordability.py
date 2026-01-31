@@ -11,7 +11,7 @@ SLATE_ACCENT = "#4A4E5A"
 
 # --- 2. DATA RETRIEVAL ---
 prof = st.session_state.get('user_profile', {})
-province = prof.get('province', 'Ontario') 
+province = prof.get('province', 'Ontario')
 name1 = prof.get('p1_name', 'Primary Client')
 name2 = prof.get('p2_name', '')
 is_renter = prof.get('housing_status') == "Renting"
@@ -27,41 +27,37 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. DYNAMIC LTT/PTT CALCULATOR (Fixed for Ontario Keys & Types) ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR (Fixed for Ontario) ---
 def calculate_ltt_and_fees(price, province_name, is_fthb, is_toronto=False):
     tax_rules = intel.get("tax_rules", {})
     if not tax_rules: return 0.0, 0.0
     rebates = tax_rules.get("rebates", {})
     
-    # Strict matching to JSON keys
-    lookup_key = str(province_name).strip()
+    # Surgical Fix: Ensure "Ontario" matches regardless of profile input formatting
+    lookup_key = "Ontario" if "Ontario" in str(province_name) else str(province_name).strip()
     prov_rules = tax_rules.get(lookup_key, [])
     
-    # Provincial Tax Calculation
-    total_prov_tax = 0.0
-    prev_h = 0.0
+    total_prov_tax, prev_h = 0.0, 0.0
     for rule in prov_rules:
-        curr_threshold = float(rule["threshold"])
-        curr_rate = float(rule["rate"])
+        # Cast to float to avoid JSON string errors
+        h, r = float(rule["threshold"]), float(rule["rate"])
         if price > prev_h:
-            taxable_amount = min(float(price), curr_threshold) - prev_h
-            total_prov_tax += taxable_amount * curr_rate
-            prev_h = curr_threshold
+            taxable = min(float(price), h) - prev_h
+            total_prov_tax += taxable * r
+            prev_h = h
     
-    # Toronto Municipal Tax Calculation
     total_muni_tax = 0.0
     if is_toronto and lookup_key == "Ontario":
         muni_rules = tax_rules.get("Toronto_Municipal", [])
         prev_m = 0.0
         for rule in muni_rules:
-            m_threshold = float(rule["threshold"])
-            m_rate = float(rule["rate"])
+            # Applying 2026 luxury graduated rates for Toronto
+            mh, mr = float(rule["threshold"]), float(rule["rate"])
             if price > prev_m:
-                taxable_m = min(float(price), m_threshold) - prev_m
-                total_muni_tax += taxable_m * m_rate
-                prev_m = m_threshold
+                taxable_m = min(float(price), mh) - prev_m
+                total_muni_tax += taxable_m * mr
+                prev_m = mh
 
-    # Rebate Logic
     total_rebate = 0.0
     if is_fthb:
         if lookup_key == "Ontario":
@@ -69,12 +65,12 @@ def calculate_ltt_and_fees(price, province_name, is_fthb, is_toronto=False):
             if is_toronto:
                 total_rebate += min(total_muni_tax, float(rebates.get("Toronto_FTHB_Max", 4475)))
         elif lookup_key == "BC":
-            fthb_limit = float(rebates.get("BC_FTHB_Threshold", 835000))
-            partial_limit = float(rebates.get("BC_FTHB_Partial_Limit", 860000))
-            if price <= fthb_limit: 
+            f_lim = float(rebates.get("BC_FTHB_Threshold", 835000))
+            p_lim = float(rebates.get("BC_FTHB_Partial_Limit", 860000))
+            if price <= f_lim: 
                 total_rebate = total_prov_tax
-            elif price <= partial_limit:
-                total_rebate = total_prov_tax * ((partial_limit - price) / (partial_limit - fthb_limit))
+            elif price <= p_lim: 
+                total_rebate = total_prov_tax * ((p_lim - price) / (p_lim - f_lim))
 
     return (total_prov_tax + total_muni_tax), total_rebate
 
@@ -143,31 +139,31 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
     return min_d, (max_p * tax_rate), (max_p * 0.0002)
 
-if "aff_vfinal" not in st.session_state:
+if "aff_v_complete" not in st.session_state:
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
-    st.session_state.aff_vfinal = {
+    st.session_state.aff_v_complete = {
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
         "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht, "is_fthb": False, "is_toronto": False
     }
-store = st.session_state.aff_vfinal
+store = st.session_state.aff_v_complete
 
-# --- 7. INPUTS & UI ---
+# --- 7. INPUTS & ENGINE ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
-    store['t4'] = st.number_input("Combined T4 Income", value=store['t4'], key="f_t4")
-    store['bonus'] = st.number_input("Total Additional Income", value=store['bonus'], key="f_bonus")
-    store['rental'] = st.number_input("Joint Rental Income", value=store['rental'], key="f_rental")
+    store['t4'] = st.number_input("Combined T4 Income", value=store['t4'], key="c_t4")
+    store['bonus'] = st.number_input("Total Additional Income", value=store['bonus'], key="c_bonus")
+    store['rental'] = st.number_input("Joint Rental Income", value=store['rental'], key="c_rental")
     total_qualifying = store['t4'] + store['bonus'] + (store['rental'] * 0.80)
     st.markdown(f"""<div style="margin-top: 10px;"><span style="font-size: 1.15em; color: {SLATE_ACCENT}; font-weight: bold;">Qualifying Income: </span><span style="font-size: 1.25em; color: black; font-weight: bold;">${total_qualifying:,.0f}</span></div>""", unsafe_allow_html=True)
 
 with col_2:
     st.subheader("💳 Debt & Status")
-    p_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
-    store['monthly_debt'] = st.number_input("Monthly Debts", value=store['monthly_debt'], key="f_debt")
-    store['is_fthb'] = st.checkbox("First-Time Home Buyer?", value=store['is_fthb'], key="f_fthb")
+    p_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="c_type")
+    store['monthly_debt'] = st.number_input("Monthly Debts", value=store['monthly_debt'], key="c_debt")
+    store['is_fthb'] = st.checkbox("First-Time Home Buyer?", value=store['is_fthb'], key="c_fthb")
     if province == "Ontario":
-        store['is_toronto'] = st.checkbox("Within Toronto City Limits?", value=store['is_toronto'], key="f_toronto")
+        store['is_toronto'] = st.checkbox("Within Toronto City Limits?", value=store['is_toronto'], key="c_toronto")
 
 with col_3:
     st.info("""
@@ -179,12 +175,12 @@ with col_3:
 
 with st.sidebar:
     st.header("⚙️ Underwriting")
-    c_rate = st.number_input("Bank Contract Rate %", value=4.26, step=0.01, key="f_crate")
+    c_rate = st.number_input("Bank Contract Rate %", value=4.26, step=0.01)
     s_rate = max(5.25, c_rate + 2.0)
     st.warning(f"**Qualifying Rate:** {s_rate:.2f}%")
-    store['down_payment'] = st.number_input("Down Payment ($)", value=store['down_payment'], key="f_dp")
-    store['prop_taxes'] = st.number_input("Annual Property Taxes", value=store['prop_taxes'], key="f_ptax")
-    store['heat'] = st.number_input("Monthly Heat", value=store['heat'], key="f_heat")
+    store['down_payment'] = st.number_input("Down Payment ($)", value=store['down_payment'])
+    store['prop_taxes'] = st.number_input("Annual Property Taxes", value=store['prop_taxes'])
+    store['heat'] = st.number_input("Monthly Heat", value=store['heat'])
     strata = st.number_input("Monthly Strata", value=400.0) if p_type == "Condo / Townhome" else 0
 
 # --- 8. CALCULATION LOGIC ---
@@ -203,11 +199,11 @@ if max_pi_stress > 0:
         st.error(f"### 🛑 Down Payment Too Low. Legal min for ${max_purchase:,.0f} is ${min_required:,.0f}")
         st.stop()
         
-    total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
+    total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store['is_toronto'])
     
-    # Costs Itemization
-    legal_total = 1500 + 500 + 350 # Legal + Title + Appraisal
-    total_cash_required = store['down_payment'] + total_tax - total_rebate + legal_total
+    # Cost Itemization
+    legals, title, appraisal = 1500, 500, 350
+    total_cash_required = store['down_payment'] + total_tax - total_rebate + legals + title + appraisal
 
     st.divider()
     m1, m2, m3 = st.columns(3)
@@ -226,10 +222,10 @@ if max_pi_stress > 0:
             {"Item": "Down Payment", "Cost": store['down_payment']},
             {"Item": "Land Transfer Tax", "Cost": total_tax},
             {"Item": "FTHB Rebate", "Cost": -total_rebate},
-            {"Item": "Closing Fees*", "Cost": legal_total}
+            {"Item": "Legal Fees", "Cost": legals},
+            {"Item": "Title / Appraisal", "Cost": (title + appraisal)}
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
-        
         st.markdown(f"""
         <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;">
             <p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required</p>
