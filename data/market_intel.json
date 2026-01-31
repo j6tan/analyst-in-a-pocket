@@ -1,7 +1,7 @@
 {
-    "last_updated": "2026-01-31 06:41:19",
+    "last_updated": "2026-01-31 06:49:13",
     "rates": {
-        "bank_prime": 4.45,
+        "bank_prime": 2.25,
         "five_year_fixed_uninsured": 4.26,
         "boc_overnight": 2.25
     },
@@ -46,10 +46,62 @@
                 "rate": 0.025
             }
         ],
+        "Toronto_Municipal": [
+            {
+                "threshold": 55000,
+                "rate": 0.005
+            },
+            {
+                "threshold": 250000,
+                "rate": 0.01
+            },
+            {
+                "threshold": 400000,
+                "rate": 0.015
+            },
+            {
+                "threshold": 2000000,
+                "rate": 0.02
+            },
+            {
+                "threshold": 3000000,
+                "rate": 0.025
+            },
+            {
+                "threshold": 4000000,
+                "rate": 0.044
+            },
+            {
+                "threshold": 5000000,
+                "rate": 0.0545
+            },
+            {
+                "threshold": 10000000,
+                "rate": 0.065
+            },
+            {
+                "threshold": 20000000,
+                "rate": 0.0755
+            },
+            {
+                "threshold": 999999999,
+                "rate": 0.086
+            }
+        ],
         "rebates": {
             "BC_FTHB_Threshold": 835000,
             "BC_FTHB_Partial_Limit": 860000,
-            "ON_FTHB_Max": 4000
+            "ON_FTHB_Max": 4000,
+            "Toronto_FTHB_Max": 4475
+        }
+    },
+    "city_tax_data": {
+        "BC": {
+            "Vancouver": 0.00311,
+            "Victoria": 0.0052
+        },
+        "Ontario": {
+            "Toronto": 0.0076
         }
     }
 }
