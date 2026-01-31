@@ -1,9 +1,19 @@
 {
-    "last_updated": "2026-01-31 07:45:19",
+    "last_updated": "2026-01-31 07:53:48",
     "rates": {
         "bank_prime": 4.45,
         "five_year_fixed_uninsured": 4.26,
         "boc_overnight": 2.25
+    },
+    "provincial_yields": {
+        "Ontario": 4.1,
+        "BC": 3.8,
+        "Alberta": 6.2,
+        "Manitoba": 5.8,
+        "Quebec": 4.5,
+        "Nova Scotia": 5.2,
+        "New Brunswick": 5.5,
+        "Saskatchewan": 6.4
     },
     "tax_rules": {
         "BC": [
