@@ -195,6 +195,14 @@ if max_pi_stress > 0:
         st.stop()
         
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
+    
+    # Itemized Closing Costs
+    legal_fees = 1500
+    title_ins = 500
+    appraisal = 350
+    total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
+    total_cash_required = store['down_payment'] + total_closing_costs
+
     st.divider()
     m1, m2, m3 = st.columns(3)
     m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
@@ -208,8 +216,21 @@ if max_pi_stress > 0:
         st.plotly_chart(fig, use_container_width=True)
     with r_c2:
         st.subheader("⚖️ Cash-to-Close")
-        breakdown = [{"Item": "Land Transfer Tax", "Cost": total_tax}, {"Item": "FTHB Rebate", "Cost": -total_rebate}, {"Item": "Legal Fees/Closing", "Cost": 2350}]
+        breakdown = [
+            {"Item": "Down Payment", "Cost": store['down_payment']},
+            {"Item": "Land Transfer Tax", "Cost": total_tax},
+            {"Item": "FTHB Rebate", "Cost": -total_rebate},
+            {"Item": "Legal Fees", "Cost": legal_fees},
+            {"Item": "Title Insurance", "Cost": title_ins},
+            {"Item": "Appraisal Fee", "Cost": appraisal}
+        ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
+        st.markdown(f"""
+        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 15px; border-radius: 5px; text-align: center;">
+            <h4 style="margin: 0; color: white;">Total Cash Required</h4>
+            <h2 style="margin: 0; color: white;">${total_cash_required:,.0f}</h2>
+        </div>
+        """, unsafe_allow_html=True)
 else: st.error("Approval amount is $0.")
 
 st.markdown("---")
