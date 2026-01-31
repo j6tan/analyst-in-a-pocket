@@ -84,6 +84,18 @@ def update_market_intel():
                 {"threshold": 2000000, "rate": 0.02},
                 {"threshold": 999999999, "rate": 0.025}
             ],
+            "Toronto_Municipal": [
+                {"threshold": 55000, "rate": 0.005},
+                {"threshold": 250000, "rate": 0.01},
+                {"threshold": 400000, "rate": 0.015},
+                {"threshold": 2000000, "rate": 0.02},
+                {"threshold": 3000000, "rate": 0.025},
+                {"threshold": 4000000, "rate": 0.044},   # April 2026 Luxury
+                {"threshold": 5000000, "rate": 0.0545},  # April 2026 Luxury
+                {"threshold": 10000000, "rate": 0.065},  # April 2026 Luxury
+                {"threshold": 20000000, "rate": 0.0755}, # April 2026 Luxury
+                {"threshold": 999999999, "rate": 0.086}  # April 2026 Luxury
+            ],
             "Manitoba": [
                 {"threshold": 30000, "rate": 0.00},
                 {"threshold": 90000, "rate": 0.005},
