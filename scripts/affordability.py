@@ -197,9 +197,7 @@ if max_pi_stress > 0:
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
     # Itemized Closing Costs
-    legal_fees = 1500
-    title_ins = 500
-    appraisal = 350
+    legal_fees, title_ins, appraisal = 1500, 500, 350
     total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
     total_cash_required = store['down_payment'] + total_closing_costs
 
@@ -220,15 +218,15 @@ if max_pi_stress > 0:
             {"Item": "Down Payment", "Cost": store['down_payment']},
             {"Item": "Land Transfer Tax", "Cost": total_tax},
             {"Item": "FTHB Rebate", "Cost": -total_rebate},
-            {"Item": "Legal Fees", "Cost": legal_fees},
-            {"Item": "Title Insurance", "Cost": title_ins},
-            {"Item": "Appraisal Fee", "Cost": appraisal}
+            {"Item": "Legal / Title / Appraisal", "Cost": (legal_fees + title_ins + appraisal)}
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
+        
+        # SLIMMED DOWN TOTAL BOX
         st.markdown(f"""
-        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 15px; border-radius: 5px; text-align: center;">
-            <h4 style="margin: 0; color: white;">Total Cash Required</h4>
-            <h2 style="margin: 0; color: white;">${total_cash_required:,.0f}</h2>
+        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;">
+            <p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required</p>
+            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_cash_required:,.0f}</p>
         </div>
         """, unsafe_allow_html=True)
 else: st.error("Approval amount is $0.")
