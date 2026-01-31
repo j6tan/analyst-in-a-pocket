@@ -191,7 +191,8 @@ if max_pi_stress > 0:
     min_required = calculate_min_downpayment(max_purchase)
     
     if store['down_payment'] < min_required - 1.0: 
-        st.error(f"### 🛑 Down Payment Too Low. Legal min for ${max_purchase:,.0f} is ${min_required:,.0f}")
+        st.error(f"#### 🛑 Down Payment Too Low")
+        st.warning(f"Minimum Requirement for purchase price of **\${max_purchase:,.0f}** is **\${min_required:,.0f}**.")
         st.stop()
         
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
@@ -242,3 +243,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
