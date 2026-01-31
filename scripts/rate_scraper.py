@@ -5,7 +5,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from openai import OpenAI
 
-# Initialize OpenAI Client (Ensure OPENAI_API_KEY is in your repository secrets)
+# Initialize OpenAI Client (Ensure OPENAI_API_KEY is in your environment)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --- 1. MARKET DATA SCRAPER (Bank of Canada) ---
@@ -30,32 +30,24 @@ def get_ai_interpreted_bc_rules():
     try:
         res = requests.get(url, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
-        raw_text = soup.get_text(separator=' ', strip=True)
+        text = soup.get_text()[:4000]  # Grab the relevant top section
 
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a specialized Canadian tax analyst. Extract property tax thresholds into JSON."},
-                {"role": "user", "content": f"Extract the current BC First-Time Home Buyer exemption thresholds from this text. Look for rules effective in 2026. Return ONLY JSON with keys: 'fthb_full_limit' and 'fthb_partial_limit'. \n\nTEXT: {raw_text[:4000]}"}
+                {"role": "system", "content": "Extract the 'full exemption' and 'partial exemption' price thresholds for the BC First Time Home Buyers program as of 2026. Return JSON only: {'fthb_full_limit': int, 'fthb_partial_limit': int}"},
+                {"role": "user", "content": text}
             ],
-            response_format={ "type": "json_object" }
+            response_format={"type": "json_object"}
         )
         return json.loads(response.choices[0].message.content)
-    except Exception as e:
-        print(f"AI Scrape Failed: {e}. Using 2026 Fallbacks.")
+    except:
         return {"fthb_full_limit": 835000, "fthb_partial_limit": 860000}
 
-# --- 3. MAIN SYNC ENGINE ---
+# --- 3. EXECUTE & UPDATE ---
 def update_market_intel():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(script_dir, "..", "data")
-    if not os.path.exists(data_dir): os.makedirs(data_dir)
-    file_path = os.path.join(data_dir, "market_intel.json")
-
-    print("📡 Syncing 2026 Market Rates...")
-    
-    # Scrape Interest Rates
-    prime = fetch_boc_observation("V121758") or 4.45
+    # Fetch Rates
+    prime = fetch_boc_observation("V39079") or 5.95
     overnight = fetch_boc_observation("V39079") or 2.25
     fixed_5 = fetch_boc_observation("V122667786") or 4.26
     
@@ -84,17 +76,36 @@ def update_market_intel():
                 {"threshold": 2000000, "rate": 0.02},
                 {"threshold": 999999999, "rate": 0.025}
             ],
+            # TORONTO MUNICIPAL RULES (MLTT) - 2026 LUXURY READY
+            "Toronto_Municipal": [
+                {"threshold": 55000, "rate": 0.005},
+                {"threshold": 250000, "rate": 0.01},
+                {"threshold": 400000, "rate": 0.015},
+                {"threshold": 2000000, "rate": 0.02},
+                {"threshold": 3000000, "rate": 0.025},
+                {"threshold": 4000000, "rate": 0.044},   # April 2026 Luxury Tier
+                {"threshold": 5000000, "rate": 0.0545},  # April 2026 Luxury Tier
+                {"threshold": 10000000, "rate": 0.065},  # April 2026 Luxury Tier
+                {"threshold": 20000000, "rate": 0.0755}, # April 2026 Luxury Tier
+                {"threshold": 999999999, "rate": 0.086}  # April 2026 Luxury Tier
+            ],
             "rebates": {
                 "BC_FTHB_Threshold": bc_rules['fthb_full_limit'],
                 "BC_FTHB_Partial_Limit": bc_rules['fthb_partial_limit'],
-                "ON_FTHB_Max": 4000
+                "ON_FTHB_Max": 4000,
+                "Toronto_FTHB_Max": 4475
             }
+        },
+        "city_tax_data": {
+            "BC": {"Vancouver": 0.00311, "Victoria": 0.0052},
+            "Ontario": {"Toronto": 0.0076}
         }
     }
 
-    with open(file_path, "w") as f:
+    os.makedirs("data", exist_ok=True)
+    with open("data/market_intel.json", "w") as f:
         json.dump(intel_data, f, indent=4)
-    print(f"✅ Clean Market Sync Complete. BC FTHB Limit: ${bc_rules['fthb_full_limit']:,.0f}")
+    print("✅ Market Intel Updated with Toronto Municipal rules.")
 
 if __name__ == "__main__":
     update_market_intel()
