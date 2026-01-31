@@ -24,31 +24,24 @@ def load_market_intel():
 intel = load_market_intel()
 scraped_yield_val = intel.get("provincial_yields", {}).get(province, 3.8)
 
-# DYNAMIC DEFAULT LOGIC (Requirement 3)
-# We tie these to the baseline max acquisition price of $542,682
+# DYNAMIC DEFAULT LOGIC
 qual_purchase_baseline = 542682.0 
 tax_rate = 0.0031 if province == "BC" else 0.0064 if province == "Alberta" else 0.0076
 
-# --- 2. PERSISTENCE ---
-defaults = {
-    "down_payment": 200000.0,
-    "is_rental": True,
-    "manual_rent": 0.0,
-    "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
-    "annual_prop_tax": qual_purchase_baseline * tax_rate,
-    "strata_condo": qual_purchase_baseline * 0.0008,
-    "insurance_mo": qual_purchase_baseline * 0.0002,
-    "repair_maint_mo": qual_purchase_baseline * 0.0003,
-    "vacancy_months": 1,
-    "mgmt_fee_percent": 5.0
-}
-
+# --- 2. PERSISTENCE (FIXED: ONLY LOADS DEFAULTS IF STORE IS EMPTY) ---
 if "aff_second_store" not in st.session_state:
-    st.session_state.aff_second_store = defaults
-else:
-    for k, v in defaults.items():
-        if k not in st.session_state.aff_second_store:
-            st.session_state.aff_second_store[k] = v
+    st.session_state.aff_second_store = {
+        "down_payment": 200000.0,
+        "is_rental": True,
+        "manual_rent": 0.0, # Will trigger auto-calc if 0
+        "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
+        "annual_prop_tax": qual_purchase_baseline * tax_rate,
+        "strata_mo": qual_purchase_baseline * 0.0008,
+        "insurance_mo": qual_purchase_baseline * 0.0002,
+        "repair_maint_mo": qual_purchase_baseline * 0.0003,
+        "vacancy_months": 1,
+        "mgmt_fee_percent": 5.0
+    }
 
 store = st.session_state.aff_second_store
 
@@ -77,40 +70,32 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📊 Capital Deployment")
-    down_payment = st.number_input("Available Cash for Down Payment ($)", value=float(store['down_payment']), step=5000.0)
-    store['down_payment'] = down_payment
+    store['down_payment'] = st.number_input("Available Cash for Down Payment ($)", value=float(store['down_payment']), step=5000.0)
+    store['contract_rate'] = st.number_input("Assumed Investment Mortgage Rate (%)", value=float(store['contract_rate']), step=0.1)
     
-    contract_rate = st.number_input("Assumed Investment Mortgage Rate (%)", value=float(store['contract_rate']), step=0.1)
-    store['contract_rate'] = contract_rate
-    
-    stress_rate = max(5.25, contract_rate + 2.0)
+    stress_rate = max(5.25, store['contract_rate'] + 2.0)
     st.markdown(f"<p style='color: #6c757d; font-size: 0.85em; margin-top: -10px;'>🛡️ Bank Qualifying Rate: <b>{stress_rate:.2f}%</b></p>", unsafe_allow_html=True)
 
-    # BACK-ENGINEERING RENT (Requirement 2)
     auto_rent_calc = (qual_purchase_baseline * (scraped_yield_val/100))/12
-    manual_rent = st.number_input("Projected Monthly Rental Income ($)", value=float(store['manual_rent']) if store['manual_rent'] > 0 else auto_rent_calc)
-    store['manual_rent'] = manual_rent
+    display_rent = auto_rent_calc if store['manual_rent'] == 0 else store['manual_rent']
+    store['manual_rent'] = st.number_input("Projected Monthly Rental Income ($)", value=float(display_rent))
     
-    # CONCISE METHODOLOGY NOTE (Requirement 2)
     st.markdown(f"<p style='color: #0056b3; font-size: 0.8em; margin-top: -10px;'>ℹ️ Initial rent is based on <b>{scraped_yield_val}%</b> rental yield of {province} based on max purchase price.</p>", unsafe_allow_html=True)
     
-    v_months = st.slider("Vacancy Provision (Months/Year)", 0, 3, int(store['vacancy_months']))
-    store['vacancy_months'] = v_months
-
-    realized_rent = (manual_rent * (12 - v_months)) / 12
-    st.markdown(f"<p style='color: #1e40af; font-size: 0.95em; font-weight: 600; margin-top: -5px;'>Effective Gross Income: ${realized_rent:,.0f}/mo</p>", unsafe_allow_html=True)
+    store['vacancy_months'] = st.slider("Vacancy Provision (Months/Year)", 0, 3, int(store['vacancy_months']))
+    realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12
 
 with col2:
     st.subheader("🏙️ Rental Carrying Costs")
-    tax_ann = st.number_input("Annual Property Tax ($)", value=float(store['annual_prop_tax']))
-    strata_mo = st.number_input("Monthly Strata ($)", value=float(store['strata_condo']))
-    ins_mo = st.number_input("Monthly Insurance ($)", value=float(store['insurance_mo']))
-    rm_mo = st.number_input("Monthly Repairs & Maint. ($)", value=float(store['repair_maint_mo']))
-    mgmt_pct = st.number_input("Management Fee (%)", value=float(store['mgmt_fee_percent']))
+    store['annual_prop_tax'] = st.number_input("Annual Property Tax ($)", value=float(store['annual_prop_tax']))
+    store['strata_mo'] = st.number_input("Monthly Strata ($)", value=float(store['strata_mo']))
+    store['insurance_mo'] = st.number_input("Monthly Insurance ($)", value=float(store['insurance_mo']))
+    store['repair_maint_mo'] = st.number_input("Monthly Repairs & Maint. ($)", value=float(store['repair_maint_mo']))
+    store['mgmt_fee_percent'] = st.number_input("Management Fee (%)", value=float(store['mgmt_fee_percent']))
     
-    tax_mo = tax_ann / 12
-    mgmt_mo = manual_rent * (mgmt_pct / 100)
-    total_rental_opex = tax_mo + strata_mo + ins_mo + rm_mo + mgmt_mo
+    tax_mo = store['annual_prop_tax'] / 12
+    mgmt_mo = store['manual_rent'] * (store['mgmt_fee_percent'] / 100)
+    total_rental_opex = tax_mo + store['strata_mo'] + store['insurance_mo'] + store['repair_maint_mo'] + mgmt_mo
 
     m_bal = prof.get('m_bal', 0)
     m_rate_primary = (prof.get('m_rate', 4.5)/100)/12
@@ -132,13 +117,13 @@ stress_factor = i_stress / (1 - (1 + i_stress)**-300)
 personal_debts = prof.get('car_loan',0) + prof.get('student_loan',0) + prof.get('cc_pmt',0) + (prof.get('loc_balance',0)*0.03)
 
 rent_offset = realized_rent * 0.80 
-qualifying_room = (t4_monthly * 0.44) + rent_offset - total_obligation - personal_debts - (tax_mo + strata_mo + 125.0)
+qualifying_room = (t4_monthly * 0.44) + rent_offset - total_obligation - personal_debts - (tax_mo + store['strata_mo'] + 125.0)
 
 if qualifying_room > 0:
     max_loan = qualifying_room / stress_factor
-    final_purchase = max_loan + down_payment
-    final_loan = final_purchase - down_payment
-    i_contract = (contract_rate/100)/12
+    final_purchase = max_loan + store['down_payment']
+    final_loan = final_purchase - store['down_payment']
+    i_contract = (store['contract_rate']/100)/12
     new_mtg_pmt = (final_loan * i_contract) / (1 - (1 + i_contract)**-300)
 
     # --- 6. TOP LEVEL STATS ---
@@ -148,7 +133,7 @@ if qualifying_room > 0:
     r2.metric("Required Financing", f"${final_loan:,.0f}")
     r3.metric("Stabilized Rent", f"${realized_rent:,.0f}")
 
-    # --- 7. CASH FLOW TABLES (Requirement 4 RE-ORG) ---
+    # --- 7. CASH FLOW TABLES ---
     st.subheader("📝 Monthly Household Cash Flow")
     net_t4 = (t4_monthly * 12 * 0.7) / 12
     asset_net = realized_rent - total_rental_opex - new_mtg_pmt
@@ -171,7 +156,7 @@ if qualifying_room > 0:
 
     # --- 8. STRATEGY METRICS ---
     st.divider()
-    cash_on_cash = (asset_net * 12) / down_payment if down_payment > 0 else 0
+    cash_on_cash = (asset_net * 12) / store['down_payment'] if store['down_payment'] > 0 else 0
     total_in = net_t4 + realized_rent
     total_out = total_obligation + personal_debts + new_mtg_pmt + total_rental_opex
     savings_rate = ((total_in - total_out) / total_in) * 100 if total_in > 0 else 0
