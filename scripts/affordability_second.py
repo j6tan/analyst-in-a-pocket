@@ -20,7 +20,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA RETRIEVAL ---
+# --- 2. DATA CROSS-REFERENCING ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Dori')
@@ -128,7 +128,7 @@ with c_left:
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
         store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
-        st.info(f"ℹ️ Portfolio Impact: Income must support carrying costs in {asset_province}.")
+        st.info(f"ℹ️ Secondary Home: Household income must support costs in {asset_province}.")
 
 with c_right:
     st.subheader("🏙️ Carrying Costs")
@@ -158,13 +158,14 @@ target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12 if is_rental else 0
-asset_net = realized_rent - total_opex_mo - new_p_i
+asset_net = realized_rent - total_opex - new_p_i
 
 net_h_inc = (p1_annual + p2_annual + get_float('inv_rental_income')) * 0.75 / 12
 overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carrying + p_debts + new_p_i + total_opex_mo)
 safety_margin = (overall_cash_flow / (net_h_inc + realized_rent) * 100) if (net_h_inc + realized_rent) > 0 else 0
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
+
 c1, c2 = st.columns(2)
 with c1:
     st.markdown("**Household Ecosystem**")
@@ -189,30 +190,42 @@ m2.metric("Cash-on-Cash Return", f"{(asset_net * 12 / store['down_payment'] * 10
 m3.metric("Household Safety Margin", f"{safety_margin:.1f}%")
 m4.metric("Overall Cash Flow", f"${overall_cash_flow:,.0f}")
 
-# --- 9. STRATEGIC VERDICT ---
+# --- 9. STRATEGIC VERDICT (FIXED) ---
 st.subheader("🎯 Strategic Verdict")
 
-# Hierarchical Status Logic
-if overall_cash_flow < 0:
+is_neg_carry = is_rental and asset_net < 0
+is_low_safety = not is_rental and safety_margin < 45
+is_unsustainable = overall_cash_flow < 0
+
+if is_unsustainable:
     v_status, v_color, v_bg = "❌ Unsustainable Move", "#dc2626", "#FEF2F2"
-    v_msg = "Your total monthly obligations currently exceed your net income."
-elif (is_rental and asset_net < 0) or (not is_rental and safety_margin < 45):
+    v_msg = "Total monthly obligations exceed your current net income inflow."
+elif is_neg_carry or is_low_safety:
     v_status, v_color, v_bg = "⚠️ Speculative Move", "#ca8a04", "#FFFBEB"
     v_msg = "This acquisition is viable on paper but carries significant lifestyle opportunity costs."
 else:
     v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
+# Pre-calculate warning strings to avoid HTML nesting errors
+blind_spot = f"• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable."
 
+neg_carry_warning = ""
+if is_neg_carry:
+    neg_carry_warning = f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>"
+
+safety_warning = ""
+if is_low_safety:
+    safety_warning = f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>"
 
 st.markdown(f"""
-<div style="background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color};">
+<div style="background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};">
     <h4 style="color: {v_color}; margin-top: 0;">{v_status}</h4>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;">{v_msg}</p>
-    <div style="color: {SLATE_ACCENT}; font-size: 1em;">
-        <p style="margin: 5px 0;">• <b>The "Blind Spot" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable.</p>
-        {"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>$" + f"{abs(round(asset_net)):,}" + "</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>" if is_rental and asset_net < 0 else ""}
-        {"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>" + f"{safety_margin:.1f}" + "%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>" if not is_rental and safety_margin < 45 else ""}
+    <p style="font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;">{v_msg}</p>
+    <div style="font-size: 1em;">
+        <p style="margin: 5px 0;">{blind_spot}</p>
+        {neg_carry_warning}
+        {safety_warning}
     </div>
 </div>
 """, unsafe_allow_html=True)
