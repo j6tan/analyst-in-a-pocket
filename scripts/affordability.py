@@ -41,118 +41,222 @@ def load_market_intel():
     if os.path.exists(path):
         with open(path, "r") as f:
             return json.load(f)
-    return {"rates": {"five_year_fixed_uninsured": 4.49}}
+    return {"rates": {"five_year_fixed_uninsured": 4.26}}
 
 intel = load_market_intel()
 
-# --- 3. SIDEBAR CALCULATIONS ---
+# --- 3. DYNAMIC LTT/PTT CALCULATOR ---
+def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
+    tax_rules = intel.get("tax_rules", {})
+    if not tax_rules: return 0, 0
+    rebates = tax_rules.get("rebates", {})
+    
+    prov_rules = tax_rules.get(province_val, [])
+    total_prov_tax, prev_h = 0, 0
+    for rule in prov_rules:
+        if price > prev_h:
+            taxable = min(price, rule["threshold"]) - prev_h
+            total_prov_tax += taxable * rule["rate"]
+            prev_h = rule["threshold"]
+    
+    total_muni_tax = 0
+    if is_toronto and province_val == "Ontario":
+        muni_rules = tax_rules.get("Toronto_Municipal", [])
+        prev_m = 0
+        for rule in muni_rules:
+            if price > prev_m:
+                taxable = min(price, rule["threshold"]) - prev_m
+                total_muni_tax += taxable * rule["rate"]
+                prev_m = rule["threshold"]
+
+    total_rebate = 0
+    if is_fthb:
+        if province_val == "Ontario":
+            total_rebate += min(total_prov_tax, rebates.get("ON_FTHB_Max", 4000))
+            if is_toronto:
+                total_rebate += min(total_muni_tax, rebates.get("Toronto_FTHB_Max", 4475))
+        elif province_val == "BC":
+            fthb_limit = rebates.get("BC_FTHB_Threshold", 835000)
+            partial_limit = rebates.get("BC_FTHB_Partial_Limit", 860000)
+            if price <= fthb_limit: total_rebate = total_prov_tax
+            elif price <= partial_limit:
+                total_rebate = total_prov_tax * ((partial_limit - price) / (partial_limit - fthb_limit))
+
+    return total_prov_tax + total_muni_tax, total_rebate
+
+def calculate_min_downpayment(price):
+    if price >= 1000000: return price * 0.20
+    elif price <= 500000: return price * 0.05
+    else: return (500000 * 0.05) + ((price - 500000) * 0.10)
+
+# --- 4. THE ULTIMATE SOLVER ---
+def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate):
+    m_inc = income_annual / 12
+    HEAT_FACTOR, TAX_FACTOR = 0.0002, tax_rate / 12
+    ALPHA = HEAT_FACTOR + TAX_FACTOR
+    r_mo = (stress_rate / 100) / 12
+    K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1) if r_mo > 0 else 1/300
+    budget = min(m_inc * 0.39, (m_inc * 0.44) - debts_monthly)
+    p3 = budget / (0.80 * K + ALPHA)
+    p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
+    p1 = budget / (0.95 * K + ALPHA)
+    if p3 >= 1000000: fp, fd = p3, p3 * 0.20
+    elif p2 >= 500000: fp = p2; fd = 25000 + (fp - 500000) * 0.10
+    else: fp, fd = p1, p1 * 0.05
+    return fp, fd
+
+# --- 5. HEADER & STORY ---
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col1:
+    if os.path.exists("logo.png"): st.image("logo.png", width=140)
+with header_col2:
+    st.title("Mortgage Affordability Analysis")
+
+if is_renter:
+    story_headline = f"🚀 {household}: From Renting to Ownership"
+    story_body = f"This is the moment where your monthly rent becomes an investment in your future. Based on your current profile, we're mapping out the exact math needed to secure your first home in <b>{province}</b>."
+else:
+    story_headline = f"📈 {household}: Planning Your Next Move"
+    story_body = f"Scaling up or relocating is a strategic play. We’ve analyzed your current income to determine how much house your wealth can truly buy in today's <b>{province}</b> market."
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">{story_headline}</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">{story_body}</p>
+</div>
+""", unsafe_allow_html=True)
+
+if not is_renter:
+    st.markdown(f"""
+        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px; margin-left: 25px;">
+            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>
+        </p>
+    """, unsafe_allow_html=True)
+
+# --- 6. PERSISTENCE ---
+t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
+bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
+rental_sum = float(prof.get('inv_rental_income', 0))
+debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
+
+TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
+prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
+
+def get_defaults(t4, bonus, rental, debt, tax_rate):
+    rate_val = float(intel['rates'].get('five_year_fixed_uninsured', 4.26))
+    stress_val = max(5.25, rate_val + 2.0)
+    qual_income = t4 + bonus + (rental * 0.80)
+    max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
+    return custom_round_up(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
+
+if "aff_final" not in st.session_state:
+    d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
+    st.session_state.aff_final = {
+        "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
+        "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht, "is_fthb": False, "is_toronto": False
+    }
+store = st.session_state.aff_final
+
+# --- 7. INPUTS & UI ---
+col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
+with col_1:
+    st.subheader("💰 Income Summary")
+    store['t4'] = st.number_input("Combined T4 Income", value=store['t4'], key="f_t4")
+    store['bonus'] = st.number_input("Total Additional Income", value=store['bonus'], key="f_bonus")
+    store['rental'] = st.number_input("Joint Rental Income", value=store['rental'], key="f_rental")
+    total_qualifying = store['t4'] + store['bonus'] + (store['rental'] * 0.80)
+    st.markdown(f"""<div style="margin-top: 10px;"><span style="font-size: 1.15em; color: {SLATE_ACCENT}; font-weight: bold;">Qualifying Income: </span><span style="font-size: 1.25em; color: black; font-weight: bold;">${total_qualifying:,.0f}</span></div>""", unsafe_allow_html=True)
+
+with col_2:
+    st.subheader("💳 Debt & Status")
+    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
+    store['monthly_debt'] = st.number_input("Monthly Debts", value=store['monthly_debt'], key="f_debt")
+    store['is_fthb'] = st.checkbox("First-Time Home Buyer?", value=store['is_fthb'], key="f_fthb")
+    if province == "Ontario":
+        store['is_toronto'] = st.checkbox("Within Toronto City Limits?", value=store['is_toronto'], key="f_toronto")
+
+with col_3:
+    st.info("""
+    **💡 Underwriting Insights:**
+    * **T4:** Banks use **100%** of base salary.
+    * **Additional:** Usually a **2-year average**.
+    * **Rental:** Typically 'haircut' to **80%**.
+    """)
+
 with st.sidebar:
-    st.header("🛠️ Scenario Tuning")
+    st.header("⚙️ Underwriting")
+    c_rate = st.number_input("Bank Contract Rate %", value=4.26, step=0.01, key="f_crate")
+    s_rate = max(5.25, c_rate + 2.0)
+    st.warning(f"**Qualifying Rate:** {s_rate:.2f}%")
+    store['down_payment'] = st.number_input("Down Payment ($)", value=store['down_payment'], key="f_dp")
+    store['prop_taxes'] = st.number_input("Annual Property Taxes", value=store['prop_taxes'], key="f_ptax")
+    store['heat'] = st.number_input("Monthly Heat", value=store['heat'], key="f_heat")
+    strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
+
+# --- 8. CALCULATION LOGIC ---
+monthly_inc = total_qualifying / 12
+gds_max = (monthly_inc * 0.39) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5)
+tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5) - store['monthly_debt']
+max_pi_stress = min(gds_max, tds_max)
+
+if max_pi_stress > 0:
+    # Stress Test Calculation
+    r_mo_stress = (s_rate/100)/12
+    raw_loan_amt = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress
+    loan_amt = custom_round_up(raw_loan_amt)
     
-    if 'aff_store' not in st.session_state:
-        # Initial defaults
-        st.session_state.aff_store = {
-            'down_payment': 200000.0,
-            'contract_rate': float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
-            'prop_taxes': 4200.0,
-            'heat_pmt': 125.0
-        }
+    # Actual P&I Calculation (using contract rate)
+    r_mo_actual = (c_rate/100)/12
+    actual_pi = (loan_amt * r_mo_actual) / (1 - (1 + r_mo_actual)**-300)
     
-    store = st.session_state.aff_store
+    # Ownership Monthly Expense Calculation
+    total_monthly_expense = actual_pi + (store['prop_taxes']/12) + store['heat'] + strata
 
-    # The user input is now the absolute source of truth
-    store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=1000.0)
-    store['contract_rate'] = st.number_input("Mortgage Rate (%)", value=float(store['contract_rate']), step=0.01)
-    store['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(store['prop_taxes']), step=10.0)
-    store['heat_pmt'] = st.number_input("Monthly Heat Cost ($)", value=float(store['heat_pmt']), step=5.0)
+    max_purchase = loan_amt + store['down_payment']
+    min_required = calculate_min_downpayment(max_purchase)
+    
+    if store['down_payment'] < min_required:
+        store['down_payment'] = custom_round_up(min_required)
+        max_purchase = loan_amt + store['down_payment']
 
-# --- 4. QUALIFICATION LOGIC ---
-def get_float(k, d=0.0):
-    try: return float(prof.get(k, d))
-    except: return d
-
-p1_inc = get_float('p1_t4') + get_float('p1_bonus') + get_float('p1_commission')
-p2_inc = get_float('p2_t4') + get_float('p2_bonus') + get_float('p2_commission')
-rental_inc = get_float('inv_rental_income') * 0.80
-total_gross_mo = (p1_inc + p2_inc + rental_inc) / 12
-
-monthly_debts = (
-    get_float('car_loan') + 
-    get_float('student_loan') + 
-    get_float('cc_pmt') + 
-    (get_float('loc_balance') * 0.03)
-)
-
-stress_rate = max(5.25, store['contract_rate'] + 2.0)
-r_stress = (stress_rate / 100) / 12
-k_stress = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
-
-available_for_housing = (total_gross_mo * 0.44) - monthly_debts
-monthly_taxes_heat = (store['prop_taxes'] / 12) + store['heat_pmt']
-qualifying_mortgage_pmt = available_for_housing - monthly_taxes_heat
-
-# BUG FIXED: We calculate the Max Loan first, then add the USER'S down payment to find Max Purchase.
-max_loan = qualifying_mortgage_pmt / k_stress if qualifying_mortgage_pmt > 0 else 0
-max_purchase = max_loan + store['down_payment']
-
-# Min Down Payment Calculation for Warning Message
-def calculate_min_down(price):
-    if price <= 500000: return price * 0.05
-    elif price <= 999999.99: return (500000 * 0.05) + ((price - 500000) * 0.10)
-    else: return price * 0.20
-
-legal_min_down = calculate_min_down(max_purchase)
-
-# --- 5. DISPLAY ---
-st.title("The Opportunity Map")
-st.markdown(f"### Analysis for {household}")
-
-if max_purchase > 0:
-    # Error message triggers if user input is below legal threshold
-    if store['down_payment'] < legal_min_down:
-        st.error(f"🛑 **Down payment too low.** Based on a purchase price of ${max_purchase:,.0f}, the legal minimum requirement is **${legal_min_down:,.2f}**.")
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Max Purchase Power", f"${custom_round_up(max_purchase):,.0f}")
-    col2.metric("Qualifying Mortgage", f"${max_loan:,.0f}")
-    col3.metric("Stress Test Rate", f"{stress_rate:.2f}%")
-
-    st.session_state['max_purchase_power'] = max_purchase
-    st.session_state['affordability_down_payment'] = store['down_payment']
-
-    # Closing & Carrying Costs
-    land_transfer_tax = 12000 
-    legal_fees = 1500.0
-    total_cash_required = store['down_payment'] + land_transfer_tax + legal_fees
-
-    r_contract = (store['contract_rate'] / 100) / 12
-    actual_pmt = (max_loan * r_contract) / (1 - (1 + r_contract)**-300)
-    total_monthly_expense = actual_pmt + monthly_taxes_heat
+    total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
+    
+    legal_fees, title_ins, appraisal = 1500, 500, 350
+    total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
+    total_cash_required = store['down_payment'] + total_closing_costs
 
     st.divider()
-    res_col1, res_col2 = st.columns(2)
+    # Updated Metric Line (4 items)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
+    m2.metric("Max Loan Amount", f"${loan_amt:,.0f}")
+    m3.metric("Actual P&I", f"${actual_pi:,.0f}")
+    m4.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
     
-    with res_col1:
-        st.subheader("🏦 Mortgage & Equity")
-        fig = go.Figure(go.Pie(
-            labels=['Mortgage Amount', 'Your Down Payment'],
-            values=[max_loan, store['down_payment']],
-            hole=.4,
-            marker_colors=[SLATE_ACCENT, PRIMARY_GOLD]
-        ))
-        fig.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=250)
+    r_c1, r_c2 = st.columns([2, 1.2])
+    with r_c1:
+        fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
+        fig.update_layout(height=350, margin=dict(t=50, b=20))
         st.plotly_chart(fig, use_container_width=True)
-
-    with res_col2:
-        st.subheader("💰 Cash & Carrying Costs")
+    with r_c2:
+        st.subheader("⚖️ Cash-to-Close")
+        breakdown = [
+            {"Item": "Down Payment", "Cost": store['down_payment']},
+            {"Item": "Land Transfer Tax", "Cost": total_tax},
+            {"Item": "FTHB Rebate", "Cost": -total_rebate},
+            {"Item": "Legal / Title / Appraisal", "Cost": (legal_fees + title_ins + appraisal)}
+        ]
+        st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
         
+        # Reworded Total Cash Box
         st.markdown(f"""
-        <div style="background-color: {OFF_WHITE}; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
-            <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: {SLATE_ACCENT};">Total Cash Required at Closing</p>
-            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2; color: {SLATE_ACCENT};">${total_cash_required:,.0f}</p>
+        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
+            <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required at Closing</p>
+            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_cash_required:,.0f}</p>
         </div>
         """, unsafe_allow_html=True)
 
+        # New Ownership Expense Box
         st.markdown(f"""
         <div style="background-color: {SLATE_ACCENT}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #33363F;">
             <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Estimated Monthly Ownership Expense</p>
@@ -162,14 +266,11 @@ if max_purchase > 0:
 
 else: st.error("Approval amount is $0.")
 
-# --- 6. LEGAL DISCLAIMER ---
 st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
     <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
-        <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
-        This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
-        This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+        <strong>⚠️ Errors and Omissions Disclaimer:</strong> This tool is for informational purposes only. Consult with a professional before making significant financial decisions.
     </p>
 </div>
 """, unsafe_allow_html=True)
