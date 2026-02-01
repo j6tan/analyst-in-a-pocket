@@ -10,7 +10,7 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
 # Color constants for metrics
-CRIMSON_RED = "#A52A2A"  # Brighter than burgundy, but professional
+CRIMSON_RED = "#A52A2A"
 DARK_GREEN = "#1B4D3E"
 
 # --- ROUNDING UTILITY ---
@@ -64,7 +64,8 @@ with ts_col1:
     def_idx = prov_options.index(current_res_prov) if current_res_prov in prov_options else 0
     asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=def_idx)
 with ts_col2:
-    use_case = st.selectbox("Primary Use Case:", ["Rental Property", "Family Vacation Home"])
+    # UPDATED LABEL 1
+    use_case = st.selectbox("Use of the Second Home:", ["Rental Property", "Family Vacation Home"])
     is_rental = True if use_case == "Rental Property" else False
 
 scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
@@ -115,7 +116,8 @@ c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
-    store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=5000.0)
+    # UPDATED LABEL 2
+    store['down_payment'] = st.number_input("Down Payment ($)", value=float(store['down_payment']), step=5000.0)
     new_price = st.number_input(f"Maximum Buying Power (Qualified: ${max_buying_power:,.0f})", 
                                 value=min(float(store['target_price']), max_buying_power), 
                                 max_value=max_buying_power, step=5000.0)
@@ -130,7 +132,8 @@ with c_left:
     if is_rental:
         store['manual_rent'] = st.number_input("Monthly Projected Rent ($)", value=float(store['manual_rent']))
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
-        store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
+        # UPDATED LABEL 3
+        store['vacancy_months'] = st.number_input("Vacancy (no. of months. max 12 mo)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
         st.info(f"ℹ️ Secondary Home: Household income must support costs in {asset_province}.")
 
@@ -190,7 +193,6 @@ with c2:
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
 with m1:
-    # UPDATED: Color-coding for self-sufficiency
     m_color = DARK_GREEN if asset_net >= 0 else CRIMSON_RED
     st.markdown(f"<b style='font-size: 0.85em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='color:{m_color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
@@ -205,7 +207,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 9. STRATEGIC VERDICT (TOTAL REFACTOR) ---
+# --- 9. STRATEGIC VERDICT ---
 st.subheader("🎯 Strategic Verdict")
 
 is_neg_carry = is_rental and asset_net < 0
@@ -222,24 +224,24 @@ else:
     v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
-# Build HTML line-by-line to avoid indentation/Markdown formatting bugs
-verdict_parts = []
-verdict_parts.append(f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>")
-verdict_parts.append(f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>")
-verdict_parts.append(f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>")
-verdict_parts.append("<div style='font-size: 1em;'>")
-verdict_parts.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel.</p>")
+# Build HTML line-by-line for stability
+v_html = []
+v_html.append(f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>")
+v_html.append(f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>")
+v_html.append(f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>")
+v_html.append("<div style='font-size: 1em;'>")
+# UPDATED LABEL 4
+v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses such as food, utilities, shopping, childcare, etc.</p>")
 
 if is_neg_carry:
-    verdict_parts.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
 
 if is_low_safety:
-    verdict_parts.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are high-leverage for secondary homes.</p>")
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>")
 
-verdict_parts.append("</div></div>")
+v_html.append("</div></div>")
 
-# Join and render
-st.markdown("".join(verdict_parts), unsafe_allow_html=True)
+st.markdown("".join(v_html), unsafe_allow_html=True)
 
 # --- 10. ERROR & OMISSION DISCLAIMER ---
 st.markdown("---")
