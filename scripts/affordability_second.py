@@ -158,14 +158,15 @@ target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12 if is_rental else 0
-asset_net = realized_rent - total_opex - new_p_i
+
+# FIXED: Replaced undefined 'total_opex' with 'total_opex_mo'
+asset_net = realized_rent - total_opex_mo - new_p_i
 
 net_h_inc = (p1_annual + p2_annual + get_float('inv_rental_income')) * 0.75 / 12
 overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carrying + p_debts + new_p_i + total_opex_mo)
 safety_margin = (overall_cash_flow / (net_h_inc + realized_rent) * 100) if (net_h_inc + realized_rent) > 0 else 0
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
-
 c1, c2 = st.columns(2)
 with c1:
     st.markdown("**Household Ecosystem**")
@@ -190,7 +191,7 @@ m2.metric("Cash-on-Cash Return", f"{(asset_net * 12 / store['down_payment'] * 10
 m3.metric("Household Safety Margin", f"{safety_margin:.1f}%")
 m4.metric("Overall Cash Flow", f"${overall_cash_flow:,.0f}")
 
-# --- 9. STRATEGIC VERDICT (FIXED) ---
+# --- 9. STRATEGIC VERDICT ---
 st.subheader("🎯 Strategic Verdict")
 
 is_neg_carry = is_rental and asset_net < 0
@@ -207,7 +208,7 @@ else:
     v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
-# Pre-calculate warning strings to avoid HTML nesting errors
+# Pre-calculate strings to avoid f-string nesting errors
 blind_spot = f"• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable."
 
 neg_carry_warning = ""
