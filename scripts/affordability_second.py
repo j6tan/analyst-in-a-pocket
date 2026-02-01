@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
 import os
 import json
 import math
@@ -20,7 +21,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING (SAFE FETCH) ---
+# --- 2. DATA CROSS-REFERENCING ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Client 1')
@@ -35,7 +36,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. TITLE & STORYTELLING ---
+# --- 3. TITLE & STORYTELLING BOX ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
@@ -57,10 +58,8 @@ st.markdown(f"""
 ts_col1, ts_col2 = st.columns(2)
 with ts_col1:
     prov_options = ["BC", "Alberta", "Ontario", "Manitoba", "Quebec", "Saskatchewan", "Nova Scotia", "New Brunswick"]
-    # Default to user's province if valid, else first option
     def_idx = prov_options.index(current_res_prov) if current_res_prov in prov_options else 0
     asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=def_idx)
-
 with ts_col2:
     use_case = st.selectbox("Primary Use Case:", ["Rental Property", "Family Vacation Home"])
     is_rental = True if use_case == "Rental Property" else False
@@ -69,41 +68,28 @@ scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
 tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 default_tax_rate = tax_rate_lookup.get(asset_province, 0.0075)
 
-# --- 5. SAFETY INITIALIZATION (FIXES KEYERROR) ---
-# We verify every single key exists in the dictionary. If not, we add it.
+# --- 5. SAFETY INITIALIZATION ---
 if "aff_second_store" not in st.session_state:
     st.session_state.aff_second_store = {}
 
 defaults = {
-    "down_payment": 200000.0,
-    "target_price": 600000.0,
-    "manual_rent": 0.0,
+    "down_payment": 200000.0, "target_price": 600000.0, "manual_rent": 0.0,
     "contract_rate": float(intel.get('rates', {}).get('five_year_fixed_uninsured', 4.26)),
-    "strata_mo": 400.0,
-    "insurance_mo": 100.0,
-    "vacancy_months": 1.0,
-    "rm_mo": 150.0,
-    "mgmt_pct": 5.0
+    "strata_mo": 400.0, "insurance_mo": 100.0, "vacancy_months": 1.0, "rm_mo": 150.0, "mgmt_pct": 5.0
 }
-
 for key, val in defaults.items():
     if key not in st.session_state.aff_second_store:
         st.session_state.aff_second_store[key] = val
-
 store = st.session_state.aff_second_store
 
-# --- 6. CALCULATIONS & LOGIC ---
-# Helper to safely get floats from profile
+# Defensive Profile Fetching
 def get_float(k, d=0.0):
-    try:
-        return float(prof.get(k, d))
-    except:
-        return d
+    try: return float(prof.get(k, d))
+    except: return d
 
 p1_annual = get_float('p1_t4') + get_float('p1_bonus') + get_float('p1_commission')
 p2_annual = get_float('p2_t4') + get_float('p2_bonus') + get_float('p2_commission')
-m_inc = (p1_annual + p2_annual + (get_float('inv_rental_income') * 0.80)) / 12
-
+m_inc = (p1_annual + p2_annual + (get_float('inv_rental_income', 0) * 0.80)) / 12
 m_bal = get_float('m_bal')
 m_rate_p = (get_float('m_rate', 4.0) / 100) / 12
 primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 0
@@ -118,10 +104,9 @@ rent_offset = (store.get('manual_rent', 0) * 0.80) if is_rental else 0
 qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['target_price'] * default_tax_rate / 12)
 max_buying_power = custom_round_up((qual_room / stress_k) + store['down_payment']) if qual_room > 0 else store['down_payment']
 
-# --- 7. INPUTS UI ---
+# --- 6. INPUTS ---
 st.divider()
 c_left, c_right = st.columns(2)
-
 with c_left:
     st.subheader("💰 Capital Requirement")
     store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=5000.0)
@@ -129,14 +114,11 @@ with c_left:
                                            value=min(float(store['target_price']), max_buying_power), 
                                            max_value=max_buying_power, step=5000.0)
     store['contract_rate'] = st.number_input("Mortgage Contract Rate (%)", value=float(store['contract_rate']), step=0.1)
-    
     if is_rental:
         auto_rent = (store['target_price'] * (scraped_yield/100)) / 12
         store['manual_rent'] = st.number_input("Monthly Projected Rent ($)", value=float(auto_rent))
-        st.caption(f"💡 {asset_province} Yield Estimate: {scraped_yield}%")
         store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
-    else:
-        st.info(f"ℹ️ Vacation Home: Income must support 100% of costs in {asset_province}.")
+    else: st.info(f"ℹ️ Secondary Home: Income must support 100% of costs in {asset_province}.")
 
 with c_right:
     st.subheader("🏙️ Carrying Costs")
@@ -145,67 +127,48 @@ with c_right:
     store['strata_mo'] = st.number_input("Monthly Strata ($)", value=float(store['strata_mo']))
     store['insurance_mo'] = st.number_input("Monthly Insurance ($)", value=float(store['insurance_mo']))
     store['rm_mo'] = st.number_input("Repairs & Maintenance (Monthly)", value=float(store['rm_mo']))
-    
     bc_extra_mo = 0
     if asset_province == "BC" and not is_rental:
-        st.markdown("---")
         spec_tax = store['target_price'] * 0.005
-        vanc_check = st.checkbox("Property is within City of Vancouver?")
+        vanc_check = st.checkbox("Property in Vancouver?")
         vanc_empty_tax = store['target_price'] * 0.03 if vanc_check else 0
-        st.warning(f"🌲 BC Specifics: Spec Tax: ${spec_tax:,.0f} | Empty Home Tax: ${vanc_empty_tax:,.0f}")
         bc_extra_mo = (spec_tax + vanc_empty_tax) / 12
-
     mgmt_fee = (store.get('manual_rent', 0) * (store['mgmt_pct'] / 100)) if is_rental else 0
-    if is_rental: store['mgmt_pct'] = st.slider("Property Management Fee %", 0.0, 12.0, float(store['mgmt_pct']))
-    
+    if is_rental: store['mgmt_pct'] = st.slider("Management Fee %", 0.0, 12.0, float(store['mgmt_pct']))
     total_opex_mo = (ann_tax / 12) + store['strata_mo'] + store['insurance_mo'] + store['rm_mo'] + bc_extra_mo + mgmt_fee
-    st.markdown(f"""<div style="background-color: {SLATE_ACCENT}; color: white; padding: 5px 15px; border-radius: 5px; text-align: center; margin-top: 10px;">
-        Total Monthly OpEx: <b>${total_opex_mo:,.0f}</b></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div style="background-color: {SLATE_ACCENT}; color: white; padding: 5px 15px; border-radius: 5px; text-align: center; margin-top: 10px;">Total Monthly OpEx: <b>${total_opex_mo:,.0f}</b></div>""", unsafe_allow_html=True)
 
-# --- 8. BREAKDOWNS ---
+# --- 7. ANALYSIS & VISUALS ---
 target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 realized_rent = (store.get('manual_rent', 0) * (12 - store.get('vacancy_months', 1))) / 12 if is_rental else 0
 asset_net = realized_rent - total_opex_mo - new_p_i
-
 net_h_inc = (p1_annual + p2_annual + get_float('inv_rental_income')) * 0.75 / 12
 overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carrying + p_debts + new_p_i + total_opex_mo)
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
-c1, c2 = st.columns(2)
-with c1:
-    st.markdown("**Household Ecosystem**")
+c_ch, c_tb = st.columns([1.5, 2])
+with c_ch:
+    fig = go.Figure(data=[
+        go.Bar(name='Income', x=['Asset Flow'], y=[realized_rent], marker_color='#16a34a'),
+        go.Bar(name='Expenses', x=['Asset Flow'], y=[total_opex_mo + new_p_i], marker_color='#dc2626')
+    ])
+    fig.update_layout(barmode='group', height=300, margin=dict(t=20, b=20, l=0, r=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    st.plotly_chart(fig, use_container_width=True)
+
+with c_tb:
     st.table(pd.DataFrame([
-        {"Item": "Net Household Income", "Amount": f"${net_h_inc:,.0f}"},
-        {"Item": "Primary Home & Debts", "Amount": f"-${primary_mtg + primary_carrying + p_debts:,.0f}"},
-        {"Item": "Monthly Surplus", "Amount": f"${net_h_inc - (primary_mtg + primary_carrying + p_debts):,.0f}"}
-    ]))
-with c2:
-    st.markdown("**Secondary Asset Impact**")
-    st.table(pd.DataFrame([
-        {"Item": "Realized Rent", "Amount": f"${realized_rent:,.0f}"},
-        {"Item": "OpEx & New Mortgage", "Amount": f"-${total_opex_mo + new_p_i:,.0f}"},
-        {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"}
+        {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"},
+        {"Item": "Monthly Overall Cash Flow", "Amount": f"${overall_cash_flow:,.0f}"}
     ]))
 
-# --- 9. METRICS ---
+# --- 8. METRICS ---
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
-with m1:
-    st.markdown(f"<b style='font-size: 0.85em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
-    color = "#16a34a" if asset_net >= 0 else "#dc2626"
-    st.markdown(f"<h3 style='color:{color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
-with m2:
-    coc = (asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0
-    st.markdown(f"<b style='font-size: 0.85em;'>Cash-on-Cash Return</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='margin-top: 0;'>{coc:.1f}%</h3>", unsafe_allow_html=True)
-with m3:
-    safety = (overall_cash_flow / (net_h_inc + realized_rent) * 100) if (net_h_inc + realized_rent) > 0 else 0
-    st.markdown(f"<b style='font-size: 0.85em;'>Household Safety Margin</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='color:{'#16a34a' if safety > 10 else '#ca8a04'}; margin-top: 0;'>{safety:.1f}%</h3>", unsafe_allow_html=True)
-with m4:
-    st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
-
+m1.metric("Asset Self-Sufficiency", f"${asset_net:,.0f}/mo")
+m2.metric("Cash-on-Cash Return", f"{(asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0:.1f}%")
+safety = (overall_cash_flow / (net_h_inc + realized_rent) * 100) if (net_h_inc + realized_rent) > 0 else 0
+m3.metric("Household Safety Margin", f"{safety:.1f}%")
+m4.metric("Overall Cash Flow", f"${overall_cash_flow:,.0f}")
 st.caption(f"Analyst in a Pocket | Asset Province: {asset_province}")
