@@ -208,7 +208,7 @@ if max_pi_stress > 0:
     total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
     total_cash_required = store['down_payment'] + total_closing_costs
     
-    # New Monthly Home Cost Calculation
+    # Monthly Home Cost calculation
     monthly_home_cost = contract_pi + (store['prop_taxes']/12) + store['heat']
 
     st.divider()
