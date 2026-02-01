@@ -10,7 +10,7 @@ PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
-# --- ROUNDING UTILITY ---
+# --- NEW ROUNDING LOGIC ---
 def custom_round_up(n):
     if n <= 0:
         return 0.0
@@ -147,7 +147,7 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # ROUNDING APPLIED TO INITIAL VALUES
+    # Applying rounding up to initial defaults
     return custom_round_up(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
@@ -180,7 +180,7 @@ with col_3:
     st.info("""
     **💡 Underwriting Insights:**
     * **T4:** Banks use **100%** of base salary.
-    * **Additional Income:** Usually a **2-year average**.
+    * **Additional:** Usually a **2-year average**.
     * **Rental:** Typically 'haircut' to **80%**.
     """)
 
@@ -202,18 +202,18 @@ max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
     r_mo = (s_rate/100)/12
-    # CALCULATE RAW LOAN THEN ROUND UP
+    # Calculating max loan and applying rounding
     raw_loan_amt = max_pi_stress * (1 - (1+r_mo)**-300) / r_mo
     loan_amt = custom_round_up(raw_loan_amt)
     
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
-    if store['down_payment'] < min_required - 1.0: 
-        st.error(f"#### 🛑 Down Payment Too Low")
-        st.warning(f"Minimum Requirement for purchase price of **\${max_purchase:,.0f}** is **\${min_required:,.0f}**.")
-        st.stop()
-        
+    # Ensure down payment meets minimum legal requirements after rounding
+    if store['down_payment'] < min_required:
+        store['down_payment'] = custom_round_up(min_required)
+        max_purchase = loan_amt + store['down_payment']
+
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
     legal_fees, title_ins, appraisal = 1500, 500, 350
@@ -254,9 +254,7 @@ st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
     <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
         <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
-        This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
-        This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+        This tool is for informational and educational purposes only. Consult with a professional before making significant financial decisions.
     </p>
 </div>
 """, unsafe_allow_html=True)
-st.caption("Analyst in a Pocket | Strategic Equity Strategy")
