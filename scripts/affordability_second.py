@@ -20,7 +20,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Dori')
@@ -35,7 +35,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. TITLE & STORYTELLING BOX (RESTORED) ---
+# --- 3. TITLE & STORYTELLING BOX ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
@@ -128,7 +128,7 @@ with c_left:
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
         store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
-        st.info(f"ℹ️ Secondary Home: Income must support costs in {asset_province}.")
+        st.info(f"ℹ️ Portfolio Impact: Income must support carrying costs in {asset_province}.")
 
 with c_right:
     st.subheader("🏙️ Carrying Costs")
@@ -184,36 +184,35 @@ with c2:
 # --- 8. METRICS BAR ---
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
-with m1:
-    st.markdown(f"<b style='font-size: 0.85em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
-    color = "#16a34a" if asset_net >= 0 else "#dc2626"
-    st.markdown(f"<h3 style='color:{color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
-with m2:
-    coc = (asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0
-    st.markdown(f"<b style='font-size: 0.85em;'>Cash-on-Cash Return</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='margin-top: 0;'>{coc:.1f}%</h3>", unsafe_allow_html=True)
-with m3:
-    st.markdown(f"<b style='font-size: 0.85em;'>Household Safety Margin</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='color:{'#16a34a' if safety_margin > 10 else '#ca8a04'}; margin-top: 0;'>{safety_margin:.1f}%</h3>", unsafe_allow_html=True)
-with m4:
-    st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
+m1.metric("Asset Self-Sufficiency", f"${asset_net:,.0f}/mo")
+m2.metric("Cash-on-Cash Return", f"{(asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0:.1f}%")
+m3.metric("Household Safety Margin", f"{safety_margin:.1f}%")
+m4.metric("Overall Cash Flow", f"${overall_cash_flow:,.0f}")
 
 # --- 9. STRATEGIC VERDICT ---
 st.subheader("🎯 Strategic Verdict")
-v_color = "#dc2626" if overall_cash_flow < 0 else "#16a34a"
-v_bg = "#FEF2F2" if overall_cash_flow < 0 else "#F0FDF4"
+
+# Hierarchical Status Logic
+if overall_cash_flow < 0:
+    v_status, v_color, v_bg = "❌ Unsustainable Move", "#dc2626", "#FEF2F2"
+    v_msg = "Your total monthly obligations currently exceed your net income."
+elif (is_rental and asset_net < 0) or (not is_rental and safety_margin < 45):
+    v_status, v_color, v_bg = "⚠️ Speculative Move", "#ca8a04", "#FFFBEB"
+    v_msg = "This acquisition is viable on paper but carries significant lifestyle opportunity costs."
+else:
+    v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
+    v_msg = "Your household ecosystem shows strong resilience for this acquisition."
+
+
 
 st.markdown(f"""
 <div style="background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color};">
-    <h4 style="color: {v_color}; margin-top: 0;">{"🚨 High Financial Risk" if overall_cash_flow < 0 else "✅ Viable Scenario"}</h4>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;">
-        {"Your total monthly obligations currently exceed your net income. This scenario is unsustainable without significant adjustments." if overall_cash_flow < 0 else "Based on the provided figures, your household maintains a positive surplus after accounting for the new acquisition."}
-    </p>
+    <h4 style="color: {v_color}; margin-top: 0;">{v_status}</h4>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;">{v_msg}</p>
     <div style="color: {SLATE_ACCENT}; font-size: 1em;">
-        <p style="margin: 5px 0;">• <b>Lifestyle Reminder:</b> Note that the 'Overall Cash Flow' of <b>${overall_cash_flow:,.0f}</b> represents funds remaining <b>before</b> non-housing expenses such as utilities, food, travel, and child education.</p>
-        {"<p style='margin: 5px 0;'>• <b>Rental Warning:</b> The property is currently in a <b>Negative Carry</b> position. You will need to out-of-pocket approximately <b>$" + f"{abs(round(asset_net)):,}" + "</b> per month to sustain this asset.</p>" if is_rental and asset_net < 0 else ""}
-        {"<p style='margin: 5px 0;'>• <b>Safety Warning:</b> Your Household Safety Margin is <b>" + f"{safety_margin:.1f}" + "%</b>. At thresholds below 45% (pre-lifestyle costs), your budget may be vulnerable to interest rate shocks or vacancy.</p>" if not is_rental and safety_margin < 45 else ""}
+        <p style="margin: 5px 0;">• <b>The "Blind Spot" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable.</p>
+        {"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>$" + f"{abs(round(asset_net)):,}" + "</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>" if is_rental and asset_net < 0 else ""}
+        {"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>" + f"{safety_margin:.1f}" + "%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>" if not is_rental and safety_margin < 45 else ""}
     </div>
 </div>
 """, unsafe_allow_html=True)
