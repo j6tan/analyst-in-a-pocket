@@ -28,19 +28,22 @@ scraped_yield_val = intel.get("provincial_yields", {}).get(province, 3.8)
 qual_purchase_baseline = 542682.0 
 tax_rate = 0.0031 if province == "BC" else 0.0064 if province == "Alberta" else 0.0076
 
-# --- 2. PERSISTENCE (FIXED: ONLY LOADS DEFAULTS IF STORE IS EMPTY) ---
+# --- 2. PERSISTENCE ---
 if "aff_second_store" not in st.session_state:
     st.session_state.aff_second_store = {
         "down_payment": 200000.0,
         "is_rental": True,
-        "manual_rent": 0.0, # Will trigger auto-calc if 0
+        "target_price": 500000.0,
+        "manual_rent": 0.0,
         "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
         "annual_prop_tax": qual_purchase_baseline * tax_rate,
         "strata_mo": qual_purchase_baseline * 0.0008,
         "insurance_mo": qual_purchase_baseline * 0.0002,
         "repair_maint_mo": qual_purchase_baseline * 0.0003,
         "vacancy_months": 1,
-        "mgmt_fee_percent": 5.0
+        "mgmt_fee_percent": 5.0,
+        "bc_spec_tax": 0.0,
+        "vancouver_empty_tax": 0.0
     }
 
 store = st.session_state.aff_second_store
@@ -48,167 +51,150 @@ store = st.session_state.aff_second_store
 # --- 3. STORYTELLING HEADER ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
-    if os.path.exists("logo.png"): 
-        st.image("logo.png", width=140)
+    if os.path.exists("logo.png"): st.image("logo.png", width=140)
 with header_col2:
     st.title("The Portfolio Expansion Map")
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em; letter-spacing: -0.5px;">🏢 The Scenario: Building Beyond the Primary Home</h3>
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em; letter-spacing: -0.5px;">🏢 Scenario Analysis: Secondary Home Acquisition</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        <b>{p1}</b> and <b>{p2}</b> have already secured their primary residence and have successfully built up liquid capital. 
-        Now, you are exploring if that capital can be deployed to acquire a rental property—turning idle savings into a cash-flowing asset. 
-        Below, we test the math to see how an investment property fits into your total household ecosystem.
+        Exploring the deployment of capital for either a <b>Rental Asset</b> or a <b>Secondary Family Residence</b> in {province}. 
+        We test the household ecosystem for long-term viability and cash-flow impact.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. INPUTS ---
+# --- 4. MATH ENGINE PRE-CALC (FOR DYNAMIC MAX) ---
+t4_monthly = (prof.get('p1_t4', 0) + prof.get('p2_t4', 0)) / 12
+personal_debts = prof.get('car_loan',0) + prof.get('student_loan',0) + prof.get('cc_pmt',0) + (prof.get('loc_balance',0)*0.03)
+m_bal = prof.get('m_bal', 0)
+m_rate_primary = (prof.get('m_rate', 4.5)/100)/12
+p_mtg = (m_bal * m_rate_primary) / (1 - (1 + m_rate_primary)**-300) if m_bal > 0 else 0
+primary_tax_heat = (prof.get('prop_taxes', 4200)/12) + 125.0
+total_obligation = p_mtg + primary_tax_heat
+
+# Initial Max Estimation
+temp_stress = max(5.25, store['contract_rate'] + 2.0)
+i_stress = (temp_stress / 100) / 12
+stress_factor = i_stress / (1 - (1 + i_stress)**-300)
+# Offset used for rental Max calculation
+rent_est = (qual_purchase_baseline * (scraped_yield_val/100))/12
+rent_offset_est = rent_est * 0.80 if store['is_rental'] else 0
+qual_room_est = (t4_monthly * 0.44) + rent_offset_est - total_obligation - personal_debts - ((qual_purchase_baseline*tax_rate/12) + 400.0)
+max_purchase_limit = (qual_room_est / stress_factor) + store['down_payment'] if qual_room_est > 0 else store['down_payment']
+
+# --- 5. INPUTS ---
 st.divider()
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("📊 Capital Deployment")
-    store['down_payment'] = st.number_input("Available Cash for Down Payment ($)", value=float(store['down_payment']), step=5000.0)
-    store['contract_rate'] = st.number_input("Assumed Investment Mortgage Rate (%)", value=float(store['contract_rate']), step=0.1)
+    st.subheader("📊 Capital & Use Case")
+    store['is_rental'] = st.toggle("Rental Property Use Case", value=store['is_rental'], help="Toggle off for family/secondary home (No rental income offset).")
+    store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=5000.0)
+    store['target_price'] = st.number_input("Target Purchase Price ($)", value=min(float(store['target_price']), max_purchase_limit), max_value=max_purchase_limit, help=f"Maximum qualified price: ${max_purchase_limit:,.0f}")
+    store['contract_rate'] = st.number_input("Mortgage Interest Rate (%)", value=float(store['contract_rate']), step=0.1)
     
-    stress_rate = max(5.25, store['contract_rate'] + 2.0)
-    st.markdown(f"<p style='color: #6c757d; font-size: 0.85em; margin-top: -10px;'>🛡️ Bank Qualifying Rate: <b>{stress_rate:.2f}%</b></p>", unsafe_allow_html=True)
-
-    auto_rent_calc = (qual_purchase_baseline * (scraped_yield_val/100))/12
-    display_rent = auto_rent_calc if store['manual_rent'] == 0 else store['manual_rent']
-    store['manual_rent'] = st.number_input("Projected Monthly Rental Income ($)", value=float(display_rent))
-    
-    st.markdown(f"<p style='color: #0056b3; font-size: 0.8em; margin-top: -10px;'>ℹ️ Initial rent is based on <b>{scraped_yield_val}%</b> rental yield of {province} based on max purchase price.</p>", unsafe_allow_html=True)
-    
-    store['vacancy_months'] = st.slider("Vacancy Provision (Months/Year)", 0, 3, int(store['vacancy_months']))
-    realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12
+    if store['is_rental']:
+        auto_rent_calc = (store['target_price'] * (scraped_yield_val/100))/12
+        display_rent = auto_rent_calc if store['manual_rent'] == 0 else store['manual_rent']
+        store['manual_rent'] = st.number_input("Projected Monthly Rent ($)", value=float(display_rent))
+        store['vacancy_months'] = st.number_input("Vacancy Months / Year", 0.0, 12.0, float(store['vacancy_months']))
+        realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12
+    else:
+        realized_rent = 0.0
+        st.info("ℹ️ Household income must support 100% of this property's carrying costs.")
 
 with col2:
-    st.subheader("🏙️ Rental Carrying Costs")
+    st.subheader("🏙️ Carrying Costs")
     store['annual_prop_tax'] = st.number_input("Annual Property Tax ($)", value=float(store['annual_prop_tax']))
     store['strata_mo'] = st.number_input("Monthly Strata ($)", value=float(store['strata_mo']))
     store['insurance_mo'] = st.number_input("Monthly Insurance ($)", value=float(store['insurance_mo']))
-    store['repair_maint_mo'] = st.number_input("Monthly Repairs & Maint. ($)", value=float(store['repair_maint_mo']))
-    store['mgmt_fee_percent'] = st.number_input("Management Fee (%)", value=float(store['mgmt_fee_percent']))
     
-    tax_mo = store['annual_prop_tax'] / 12
-    mgmt_mo = store['manual_rent'] * (store['mgmt_fee_percent'] / 100)
-    total_rental_opex = tax_mo + store['strata_mo'] + store['insurance_mo'] + store['repair_maint_mo'] + mgmt_mo
-
-    m_bal = prof.get('m_bal', 0)
-    m_rate_primary = (prof.get('m_rate', 4.5)/100)/12
-    p_mtg = (m_bal * m_rate_primary) / (1 - (1 + m_rate_primary)**-300) if m_bal > 0 else 0
-    primary_tax_heat = (prof.get('prop_taxes', 4200)/12) + 125.0
-    total_obligation = p_mtg + primary_tax_heat
-
-    st.markdown(f"""
-    <div style="background-color: #f8fafc; padding: 10px 15px; border-radius: 5px; border: 1px dotted #64748b; margin-top: 10px;">
-        <span style="color: #475569;">Monthly Operating Expenses: </span>
-        <span style="color: #475569; font-weight: 500;">${total_rental_opex:,.0f}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-# --- 5. MATH ENGINE ---
-t4_monthly = (prof.get('p1_t4', 0) + prof.get('p2_t4', 0)) / 12
-i_stress = (stress_rate / 100) / 12
-stress_factor = i_stress / (1 - (1 + i_stress)**-300)
-personal_debts = prof.get('car_loan',0) + prof.get('student_loan',0) + prof.get('cc_pmt',0) + (prof.get('loc_balance',0)*0.03)
-
-rent_offset = realized_rent * 0.80 
-qualifying_room = (t4_monthly * 0.44) + rent_offset - total_obligation - personal_debts - (tax_mo + store['strata_mo'] + 125.0)
-
-if qualifying_room > 0:
-    max_loan = qualifying_room / stress_factor
-    final_purchase = max_loan + store['down_payment']
-    final_loan = final_purchase - store['down_payment']
-    i_contract = (store['contract_rate']/100)/12
-    new_mtg_pmt = (final_loan * i_contract) / (1 - (1 + i_contract)**-300)
-
-    # --- 6. TOP LEVEL STATS ---
-    st.divider()
-    r1, r2, r3 = st.columns(3)
-    r1.metric("Maximum Acquisition", f"${final_purchase:,.0f}")
-    r2.metric("Required Financing", f"${final_loan:,.0f}")
-    r3.metric("Stabilized Rent", f"${realized_rent:,.0f}")
-
-    # --- 7. CASH FLOW TABLES ---
-    st.subheader("📝 Monthly Household Cash Flow")
-    net_t4 = (t4_monthly * 12 * 0.7) / 12
-    asset_net = realized_rent - total_rental_opex - new_mtg_pmt
+    if province == "BC":
+        with st.expander("🌲 BC-Specific Taxes"):
+            store['bc_spec_tax'] = st.number_input("Annual Speculation & Vacancy Tax ($)", value=float(store['bc_spec_tax']))
+            store['vancouver_empty_tax'] = st.number_input("Annual Empty Homes Tax ($)", value=float(store['vancouver_empty_tax']))
     
-    c_in, c_out = st.columns(2)
-    with c_in:
-        st.markdown("**Household Ecosystem**")
-        st.table(pd.DataFrame([
-            {"Item": "Net Household Income (T4+)", "Amount": f"${net_t4:,.0f}"},
-            {"Item": "Primary Home & Personal Debt", "Amount": f"-${total_obligation + personal_debts:,.0f}"},
-            {"Item": "Current Monthly Surplus", "Amount": f"${net_t4 - (total_obligation + personal_debts):,.0f}"}
-        ]))
-    with c_out:
-        st.markdown("**Asset Performance**")
-        st.table(pd.DataFrame([
-            {"Item": "Realized Rental Income", "Amount": f"${realized_rent:,.0f}"},
-            {"Item": "Rental OpEx & Mortgage", "Amount": f"-${total_rental_opex + new_mtg_pmt:,.0f}"},
-            {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"}
-        ]))
+    tax_mo = (store['annual_prop_tax'] + store['bc_spec_tax'] + store['vancouver_empty_tax']) / 12
+    mgmt_mo = (store['manual_rent'] * (store['mgmt_fee_percent'] / 100)) if store['is_rental'] else 0
+    total_rental_opex = tax_mo + store['strata_mo'] + store['insurance_mo'] + mgmt_mo
 
-    # --- 8. STRATEGY METRICS ---
-    st.divider()
-    cash_on_cash = (asset_net * 12) / store['down_payment'] if store['down_payment'] > 0 else 0
-    total_in = net_t4 + realized_rent
-    total_out = total_obligation + personal_debts + new_mtg_pmt + total_rental_opex
-    savings_rate = ((total_in - total_out) / total_in) * 100 if total_in > 0 else 0
+# --- 6. FINAL MATH ENGINE ---
+target_loan = store['target_price'] - store['down_payment']
+i_contract = (store['contract_rate']/100)/12
+new_mtg_pmt = (target_loan * i_contract) / (1 - (1 + i_contract)**-300) if target_loan > 0 else 0
 
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        color = "#16a34a" if asset_net > 0 else "#dc2626"
-        st.markdown(f"<b style='font-size: 1.1em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
-        st.markdown(f"<h2 style='color:{color}; margin-top: 2px; margin-bottom: 0;'>${asset_net:,.0f}<small>/mo</small></h2>", unsafe_allow_html=True)
-    with m2:
-        st.markdown(f"<b style='font-size: 1.1em;'>Cash-on-Cash Return</b>", unsafe_allow_html=True)
-        st.markdown(f"<h2 style='margin-top: 2px; margin-bottom: 0;'>{cash_on_cash:.2f}%</h2>", unsafe_allow_html=True)
-    with m3:
-        s_color = "#16a34a" if savings_rate > 15 else "#ca8a04" if savings_rate > 5 else "#dc2626"
-        st.markdown(f"<b style='font-size: 1.1em;'>Household Safety Margin</b>", unsafe_allow_html=True)
-        st.markdown(f"<h2 style='color:{s_color}; margin-top: 2px; margin-bottom: 0;'>{savings_rate:.1f}%</h2>", unsafe_allow_html=True)
+# --- 7. TOP LEVEL STATS ---
+st.divider()
+r1, r2, r3 = st.columns(3)
+r1.metric("Target Acquisition", f"${store['target_price']:,.0f}")
+r2.metric("Qualified Max", f"${max_purchase_limit:,.0f}")
+r3.metric("Required Financing", f"${target_loan:,.0f}")
 
-    # --- 9. TIGHTENED DIAGNOSIS BOX ---
-    st.markdown("---")
-    if savings_rate < 8:
-        status, t_color, b_color = "⚠️ HIGH RISK", "#dc2626", "#FFF5F5"
-        msg = "The household margin is thin. One major repair or vacancy month creates a deficit."
-    elif asset_net < 0:
-        status, t_color, b_color = "💸 NEGATIVE CASH FLOW", "#8b5cf6", "#F5F3FF"
-        msg = "The asset is not self-sustaining. Your T4 income is subsidizing this investment."
-    else:
-        status, t_color, b_color = "✅ STRATEGIC SURPLUS", "#16a34a", "#F0FDF4"
-        msg = "This asset is self-sustaining and you maintain a healthy household safety buffer."
+# --- 8. CASH FLOW TABLES ---
+st.subheader("📝 Monthly Household Cash Flow")
+net_t4 = (t4_monthly * 12 * 0.7) / 12
+asset_net = realized_rent - total_rental_opex - new_mtg_pmt
 
-    st.markdown(f"""
-    <div style="background-color: {b_color}; padding: 8px 15px; border-radius: 8px; border: 1.5px solid {t_color}; text-align: center; max-width: 650px; margin: 0 auto; line-height: 1.1;">
-        <h3 style="color: {t_color}; margin: 0; font-size: 1.25em;">{status}</h3>
-        <p style="color: {SLATE_ACCENT}; font-size: 0.95em; margin: 3px 0;">{msg}</p>
-        <p style="font-size: 1.1em; color: #475569; margin: 5px 0 0 0; padding-top: 5px; border-top: 1px solid {t_color}33;">
-            Net Monthly Household Surplus: <b style="color: {SLATE_ACCENT};">${(total_in - total_out):,.0f}</b>
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+c_in, c_out = st.columns(2)
+with c_in:
+    st.markdown("**Household Ecosystem**")
+    st.table(pd.DataFrame([
+        {"Item": "Net Household Income (T4+)", "Amount": f"${net_t4:,.0f}"},
+        {"Item": "Primary Home & Personal Debt", "Amount": f"-${total_obligation + personal_debts:,.0f}"},
+        {"Item": "Current Monthly Surplus", "Amount": f"${net_t4 - (total_obligation + personal_debts):,.0f}"}
+    ]))
+with c_out:
+    st.markdown("**Secondary Asset Impact**")
+    st.table(pd.DataFrame([
+        {"Item": "Realized Rental Income", "Amount": f"${realized_rent:,.0f}"},
+        {"Item": "OpEx & New Mortgage", "Amount": f"-${total_rental_opex + new_mtg_pmt:,.0f}"},
+        {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"}
+    ]))
 
-else:
-    st.error("🛑 Qualifying Room: $0. Total debt load exceeds maximum bank ratios.")
+# --- 9. STRATEGY METRICS ---
+st.divider()
+cash_on_cash = (asset_net * 12) / store['down_payment'] if store['down_payment'] > 0 else 0
+total_in = net_t4 + realized_rent
+total_out = total_obligation + personal_debts + new_mtg_pmt + total_rental_opex
+overall_cash_flow = total_in - total_out
+savings_rate = (overall_cash_flow / total_in) * 100 if total_in > 0 else 0
 
-# --- 12. LEGAL DISCLAIMER ---
+m1, m2, m3, m4 = st.columns(4)
+with m1:
+    color = "#16a34a" if asset_net >= 0 else "#dc2626"
+    st.markdown(f"<b style='font-size: 0.9em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:{color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
+with m2:
+    st.markdown(f"<b style='font-size: 0.9em;'>Cash-on-Cash</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin-top: 0;'>{cash_on_cash:.2f}%</h3>", unsafe_allow_html=True)
+with m3:
+    s_color = "#16a34a" if savings_rate > 15 else "#ca8a04" if savings_rate > 5 else "#dc2626"
+    st.markdown(f"<b style='font-size: 0.9em;'>Household Safety Margin</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:{s_color}; margin-top: 0;'>{savings_rate:.1f}%</h3>", unsafe_allow_html=True)
+with m4:
+    st.markdown(f"<b style='font-size: 0.9em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
+
+# --- 10. DIAGNOSIS BOX ---
 st.markdown("---")
-st.markdown("""
-<div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
-    <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
-        <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
-        This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
-        This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
-    </p>
+if overall_cash_flow < 0:
+    status, t_color, b_color = "🚨 DEFICIT DETECTED", "#dc2626", "#FFF5F5"
+    msg = "This scenario exceeds your monthly cash flow capacity. Adjust price or down payment."
+elif asset_net < 0 and store['is_rental']:
+    status, t_color, b_color = "💸 NEGATIVE CASH FLOW", "#8b5cf6", "#F5F3FF"
+    msg = "The rental is not self-sustaining. Your T4 income is subsidizing this investment."
+else:
+    status, t_color, b_color = "✅ SUSTAINABLE SCENARIO", "#16a34a", "#F0FDF4"
+    msg = "You maintain a positive monthly surplus after all property and household obligations."
+
+st.markdown(f"""
+<div style="background-color: {b_color}; padding: 10px 15px; border-radius: 8px; border: 1.5px solid {t_color}; text-align: center; max-width: 650px; margin: 0 auto;">
+    <h3 style="color: {t_color}; margin: 0; font-size: 1.25em;">{status}</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 0.95em; margin: 5px 0 0 0;">{msg}</p>
 </div>
 """, unsafe_allow_html=True)
 
-st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
+st.divider()
+st.caption("Analyst in a Pocket | Strategic Portfolio Expansion Tool")
