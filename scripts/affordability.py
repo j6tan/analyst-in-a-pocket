@@ -15,6 +15,7 @@ def apply_rounding_rule(value):
     s = str(int(abs(value)))
     n = len(s)
     if n <= 2: return round(value, -1)
+    # Rule: $1,234 -> $1,200 (keeps first two digits and zeros out the rest)
     factor = 10 ** (n - 2)
     return float((value // factor) * factor)
 
@@ -98,9 +99,9 @@ if "aff_v_final_v2" not in st.session_state:
         "bonus": float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0)),
         "rental": float(prof.get('inv_rental_income', 0)),
         "monthly_debt": float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0)),
-        "down_payment": apply_rounding_rule(100000.0), # Rounding
-        "prop_taxes": apply_rounding_rule(5000.0),     # Rounding
-        "heat": apply_rounding_rule(125.0),           # Rounding
+        "down_payment": apply_rounding_rule(100000.0), # Rounding applied
+        "prop_taxes": apply_rounding_rule(5000.0),     # Rounding applied
+        "heat": apply_rounding_rule(125.0),           # Rounding applied
         "contract_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
         "is_fthb": False, "is_toronto": False, "prop_type": "House / Freehold"
     }
@@ -145,12 +146,11 @@ max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
-    # Requirement 2: Round Max Loan based on rule
+    # Rounding Rule applied to Loan Amount
     loan_amt = apply_rounding_rule(max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress)
-    # Requirement 2: Round Max Purchase to nearest dollar
+    # Round to nearest dollar for Power and P&I
     max_purchase = round(loan_amt + store['down_payment'])
     
-    # Requirement 3: Contracted P&I
     r_mo_contract = (c_rate/100)/12
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300)
 
@@ -162,12 +162,10 @@ if max_pi_stress > 0:
         
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
-    # Closing Costs
     legal_fees, title_ins, appraisal = 1500, 500, 350
     total_cash_required = store['down_payment'] + total_tax - total_rebate + (legal_fees + title_ins + appraisal)
 
     st.divider()
-    # Requirement 3: Updated Metrics
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
     m2.metric("Max Loan Amount", f"${loan_amt:,.0f}")
@@ -188,15 +186,20 @@ if max_pi_stress > 0:
             {"Item": "Legal / Title / Appraisal", "Cost": (legal_fees + title_ins + appraisal)}
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
-        st.markdown(f"""<div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;"><p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase;">Total Cash Required</p><p style="margin: 0; font-size: 1.6em; font-weight: 800;">${total_cash_required:,.0f}</p></div>""", unsafe_allow_html=True)
+        
+        st.markdown(f"""
+        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;">
+            <p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required</p>
+            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_cash_required:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
 else: st.error("Approval amount is $0.")
 
 st.markdown("---")
-# Restoration of Error and Omission box
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
     <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
-        <strong>⚠️ Errors and Omissions Disclaimer:</strong> This tool is for informational purposes only. Figures are based on mathematical estimates and bank guidelines. Consult a professional before making financial decisions.
+        <strong>⚠️ Errors and Omissions Disclaimer:</strong> This tool is for informational and educational purposes only. Figures are based on mathematical estimates and historical data. This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
     </p>
 </div>
 """, unsafe_allow_html=True)
