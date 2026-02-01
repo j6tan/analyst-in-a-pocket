@@ -215,6 +215,7 @@ if max_pi_stress > 0:
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
+    # FIX: Show error if downpayment is too low, but do not force change the value
     if store['down_payment'] < min_required:
         st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of ${max_purchase:,.0f} should be ${min_required:,.0f}.")
 
@@ -273,4 +274,3 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
-
