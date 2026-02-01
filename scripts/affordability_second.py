@@ -20,12 +20,11 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING ---
+# --- 2. DATA CROSS-REFERENCING & SAFETY ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Client 1')
 p2_name = prof.get('p2_name', 'Client 2')
-household = f"{p1_name} & {p2_name}".strip(" & ")
 
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
@@ -36,7 +35,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. TITLE & STORYTELLING BOX (RESTORED) ---
+# --- 3. TITLE & STORYTELLING BOX ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
@@ -67,7 +66,7 @@ scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
 tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 default_tax_rate = tax_rate_lookup.get(asset_province, 0.0075)
 
-# --- 5. PERSISTENCE & INITIAL CALCS ---
+# --- 5. PERSISTENCE ---
 if "aff_second_store" not in st.session_state:
     st.session_state.aff_second_store = {
         "down_payment": 200000.0,
@@ -82,7 +81,7 @@ if "aff_second_store" not in st.session_state:
     }
 store = st.session_state.aff_second_store
 
-# Defensive Income/Debt Fetching
+# Defensive Math Engine - Uses .get() with 0.0 default for all profile keys
 p1_annual = float(prof.get('p1_t4', 0) + prof.get('p1_bonus', 0) + prof.get('p1_commission', 0))
 p2_annual = float(prof.get('p2_t4', 0) + prof.get('p2_bonus', 0) + prof.get('p2_commission', 0))
 m_inc = (p1_annual + p2_annual + (float(prof.get('inv_rental_income', 0)) * 0.80)) / 12
@@ -93,7 +92,7 @@ primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 
 primary_carrying = (float(prof.get('prop_taxes', 4200)) / 12) + float(prof.get('heat_pmt', 125))
 p_debts = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0) + (float(prof.get('loc_balance', 0)) * 0.03))
 
-# Max Buying Power Calculation
+# Maximum Buying Power Logic
 stress_rate = max(5.25, store.get('contract_rate', 4.26) + 2.0)
 r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
@@ -116,10 +115,10 @@ with c_left:
     if is_rental:
         auto_rent = (store['target_price'] * (scraped_yield/100)) / 12
         store['manual_rent'] = st.number_input("Monthly Projected Rent ($)", value=float(auto_rent))
-        st.caption(f"💡 {asset_province} Yield Est: {scraped_yield}%")
+        st.caption(f"💡 {asset_province} Yield Estimate: {scraped_yield}%")
         store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
-        st.info(f"ℹ️ Secondary Home: Income must support 100% of costs.")
+        st.info(f"ℹ️ Secondary Home: Household income must support 100% of costs in {asset_province}.")
 
 with c_right:
     st.subheader("🏙️ Carrying Costs")
