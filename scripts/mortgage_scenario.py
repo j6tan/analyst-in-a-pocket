@@ -12,6 +12,7 @@ client_name2 = prof.get('p2_name', 'Kevin')
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
 # Retrieve raw data from Affordability (if available)
+# These keys are generated in your affordability (6).py script
 raw_afford_max = st.session_state.get('max_purchase_power', 800000.0)
 raw_afford_down = st.session_state.get('affordability_down_payment', 160000.0)
 
