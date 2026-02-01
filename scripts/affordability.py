@@ -9,13 +9,13 @@ PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
-# --- ROUNDING LOGIC (Requirement 1) ---
+# --- ROUNDING LOGIC ---
 def apply_rounding_rule(value):
     if value == 0: return 0
     s = str(int(abs(value)))
     n = len(s)
     if n <= 2: return round(value, -1)
-    # Rule: $1,234 -> $1,200 (keeps first two digits and zeros out the rest)
+    # Rule: Keep first two digits, zero out the rest (e.g., 1234 -> 1200)
     factor = 10 ** (n - 2)
     return float((value // factor) * factor)
 
@@ -146,14 +146,9 @@ max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
-    # Rounding Rule applied to Loan Amount
-    loan_amt = apply_rounding_rule(max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress)
-    # Round to nearest dollar for Power and P&I
-    max_purchase = round(loan_amt + store['down_payment'])
+    loan_amt = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress
+    max_purchase = loan_amt + store['down_payment']
     
-    r_mo_contract = (c_rate/100)/12
-    contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300)
-
     min_required = calculate_min_downpayment(max_purchase)
     if store['down_payment'] < min_required - 1.0: 
         st.error(f"#### 🛑 Down Payment Too Low")
@@ -162,16 +157,15 @@ if max_pi_stress > 0:
         
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
+    # Closing Costs
     legal_fees, title_ins, appraisal = 1500, 500, 350
     total_cash_required = store['down_payment'] + total_tax - total_rebate + (legal_fees + title_ins + appraisal)
 
     st.divider()
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3 = st.columns(3)
     m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
     m2.metric("Max Loan Amount", f"${loan_amt:,.0f}")
-    m3.metric("Stress Test P&I", f"${round(max_pi_stress):,.0f}")
-    m4.metric("Contracted P&I", f"${round(contract_pi):,.0f}")
-    st.caption(f"Note: Stress test P&I is using qualifying rate {s_rate:.2f}%")
+    m3.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
     
     r_c1, r_c2 = st.columns([2, 1.2])
     with r_c1:
@@ -187,6 +181,7 @@ if max_pi_stress > 0:
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
         
+        # TOTAL BOX
         st.markdown(f"""
         <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;">
             <p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required</p>
@@ -199,8 +194,8 @@ st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
     <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
-        <strong>⚠️ Errors and Omissions Disclaimer:</strong> This tool is for informational and educational purposes only. Figures are based on mathematical estimates and historical data. This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+        <strong>⚠️ Errors and Omissions Disclaimer:</strong> This tool is for informational and educational purposes only. Figures are based on mathematical estimates and bank guidelines. Consult a professional before making financial decisions.
     </p>
 </div>
-""", unsafe_allow_html=True)
+""")
 st.caption("Analyst in a Pocket | Strategic Debt Planning & Equity Strategy")
