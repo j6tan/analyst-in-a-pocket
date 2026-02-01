@@ -20,7 +20,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA RETRIEVAL (MAPPING TO YOUR JSON) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.get('user_profile', {})
 province = prof.get('province', 'BC')
 p1 = prof.get('p1_name', 'Client A')
@@ -45,7 +45,7 @@ if "aff_second_store" not in st.session_state:
         "target_price": 500000.0,
         "manual_rent": 0.0,
         "contract_rate": float(intel.get('rates', {}).get('five_year_fixed_uninsured', 4.26)),
-        "annual_prop_tax": 3500.0,
+        "annual_prop_tax": 4500.0,
         "strata_mo": 400.0,
         "insurance_mo": 100.0,
         "vacancy_months": 1.0,
@@ -54,21 +54,21 @@ if "aff_second_store" not in st.session_state:
     }
 store = st.session_state.aff_second_store
 
-# --- 4. CALCULATION ENGINE ---
-# Income: T4 + Bonus + Commission
-p1_income = prof.get('p1_t4', 0) + prof.get('p1_bonus', 0) + prof.get('p1_commission', 0)
-p2_income = prof.get('p2_t4', 0) + prof.get('p2_bonus', 0) + prof.get('p2_commission', 0)
-total_annual_qual = p1_income + p2_income + (prof.get('inv_rental_income', 0) * 0.80)
+# --- 4. CALCULATION ENGINE (KEYERROR PREVENTION) ---
+p1_inc = prof.get('p1_t4', 0) + prof.get('p1_bonus', 0) + prof.get('p1_commission', 0)
+p2_inc = prof.get('p2_t4', 0) + prof.get('p2_bonus', 0) + prof.get('p2_commission', 0)
+rental_existing = prof.get('inv_rental_income', 0)
+total_annual_qual = p1_inc + p2_inc + (rental_existing * 0.80)
 m_inc = total_annual_qual / 12
 
-# Primary Liabilities
+# Primary Residence Costs
 m_bal = prof.get('m_bal', 0)
-m_rate_primary = (prof.get('m_rate', 4.0) / 100) / 12
-primary_mtg_pmt = (m_bal * m_rate_primary) / (1 - (1 + m_rate_primary)**-300) if m_bal > 0 else 0
+m_rate_p = (prof.get('m_rate', 4.0) / 100) / 12
+primary_p_i = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 0
 primary_carrying = (prof.get('prop_taxes', 4200) / 12) + prof.get('heat_pmt', 125)
 
-# Personal Debts
-personal_debts = prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0) + (prof.get('loc_balance', 0) * 0.03)
+# Personal Debts (including 3% of LOC balance as per stress test rules)
+p_debts = prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0) + (prof.get('loc_balance', 0) * 0.03)
 
 # QUALIFYING MAX CALC
 stress_rate = max(5.25, store['contract_rate'] + 2.0)
@@ -76,7 +76,7 @@ r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
 
 rental_offset = (store['manual_rent'] * 0.80) if store['is_rental'] else 0
-qual_room = (m_inc * 0.44) + rental_offset - primary_mtg_pmt - primary_carrying - personal_debts - (store['annual_prop_tax']/12)
+qual_room = (m_inc * 0.44) + rental_offset - primary_p_i - primary_carrying - p_debts - (store['annual_prop_tax']/12)
 max_loan = qual_room / stress_k if qual_room > 0 else 0
 max_affordable = custom_round_up(max_loan + store['down_payment'])
 
@@ -88,56 +88,58 @@ with header_col2:
     st.title("Portfolio Expansion Map")
 
 st.markdown(f"""<div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD};">
-    <b>Scenario:</b> Secondary Acquisition for {household} in {province}.
+    <b>Household Context:</b> Analyzing acquisition capacity for {household} in {province}.
 </div>""", unsafe_allow_html=True)
 
 st.divider()
-col_left, col_right = st.columns(2)
+c_left, c_right = st.columns(2)
 
-with col_left:
-    st.subheader("🏠 Purchase Plan")
+with c_left:
+    st.subheader("🏠 Acquisition Strategy")
     store['is_rental'] = st.toggle("Rental Property Use Case", value=store['is_rental'])
-    store['down_payment'] = st.number_input("Down Payment ($)", value=float(store['down_payment']), step=5000.0)
+    store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=5000.0)
     
-    # Target Price Input (Capped by Max)
-    store['target_price'] = st.number_input(f"Target Purchase Price (Max: ${max_affordable:,.0f})", 
+    # Target Price capped by dynamic Max affordability
+    store['target_price'] = st.number_input(f"Target Purchase Price (Max Qual: ${max_affordable:,.0f})", 
                                            value=min(float(store['target_price']), max_affordable), 
                                            max_value=max_affordable, step=5000.0)
     
-    store['contract_rate'] = st.number_input("Mortgage Rate (%)", value=float(store['contract_rate']), step=0.1)
+    store['contract_rate'] = st.number_input("Mortgage Contract Rate (%)", value=float(store['contract_rate']), step=0.1)
     
     if store['is_rental']:
-        if store['manual_rent'] == 0: store['manual_rent'] = (store['target_price'] * (scraped_yield/100)) / 12
-        store['manual_rent'] = st.number_input("Monthly Rent ($)", value=float(store['manual_rent']))
+        if store['manual_rent'] == 0: 
+            store['manual_rent'] = (store['target_price'] * (scraped_yield/100)) / 12
+        store['manual_rent'] = st.number_input("Monthly Projected Rent ($)", value=float(store['manual_rent']))
         store['vacancy_months'] = st.number_input("Vacancy Months / Year", 0.0, 12.0, value=float(store['vacancy_months']))
 
-with col_right:
-    st.subheader("📑 Carrying Costs")
+with c_right:
+    st.subheader("📑 Operating Expenses")
     store['annual_prop_tax'] = st.number_input("Annual Property Tax ($)", value=float(store['annual_prop_tax']))
     store['strata_mo'] = st.number_input("Monthly Strata ($)", value=float(store['strata_mo']))
     store['insurance_mo'] = st.number_input("Monthly Insurance ($)", value=float(store['insurance_mo']))
     
     bc_extra = 0
     if province == "BC":
-        with st.expander("🌲 BC Vacancy/Empty Home Taxes"):
-            store['bc_spec_tax'] = st.number_input("Speculation & Vacancy Tax", value=float(store['bc_spec_tax']))
-            store['vancouver_empty_tax'] = st.number_input("Vancouver Empty Homes Tax", value=float(store['vancouver_empty_tax']))
+        with st.expander("🌲 BC Vacancy & Empty Home Taxes"):
+            store['bc_spec_tax'] = st.number_input("Speculation Tax ($)", value=float(store['bc_spec_tax']))
+            store['vancouver_empty_tax'] = st.number_input("Vancouver Empty Homes Tax ($)", value=float(store['vancouver_empty_tax']))
             bc_extra = (store['bc_spec_tax'] + store['vancouver_empty_tax']) / 12
 
-# --- 6. FINAL CALCULATIONS ---
+# --- 6. FINAL ANALYSIS ---
 target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 
+# Adjust rent for vacancy months
 realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12 if store['is_rental'] else 0
 total_opex = (store['annual_prop_tax'] / 12) + store['strata_mo'] + store['insurance_mo'] + bc_extra
 asset_net = realized_rent - total_opex - new_p_i
 
-# Overall Household Surplus (Net Income Approx 75% of Gross)
+# Overall Surplus (Estimated 75% of gross income is net-of-tax)
 net_h_inc = (total_annual_qual * 0.75) / 12
-overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg_pmt + primary_carrying + personal_debts + new_p_i + total_opex)
+overall_cash_flow = (net_h_inc + realized_rent) - (primary_p_i + primary_carrying + p_debts + new_p_i + total_opex)
 
-# --- 7. METRICS ROW ---
+# --- 7. UNIFIED METRICS BAR ---
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
 with m1:
@@ -156,7 +158,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Monthly Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 8. SUMMARY STATS ---
+# --- 8. RESULTS SUMMARY ---
 st.divider()
 s1, s2, s3 = st.columns(3)
 s1.metric("Target Acquisition", f"${store['target_price']:,.0f}")
