@@ -12,8 +12,10 @@ client_name2 = prof.get('p2_name', 'Kevin')
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
 # Retrieve raw data from Affordability (if available)
-raw_afford_max = st.session_state.get('max_purchase_power', 800000.0)
-raw_afford_down = st.session_state.get('affordability_down_payment', 160000.0)
+# UPDATED: Now accesses the 'aff_store' dictionary correctly
+aff_store = st.session_state.get('aff_store', {})
+raw_afford_max = aff_store.get('max_purchase_power', 800000.0)
+raw_afford_down = aff_store.get('down_payment', 160000.0)
 
 # Retrieve rate from Affordability Store
 def get_default_rate():
@@ -39,8 +41,6 @@ def smart_round_price(price):
 
 # --- 3. PERSISTENCE INITIALIZATION (SHADOW STORE) ---
 if 'scen_store' not in st.session_state:
-    # PATCHED: These were previously hard-coded to 800000 and 160000.
-    # They now correctly pull from your affordability session data.
     st.session_state.scen_store = {
         "price": float(smart_round_price(raw_afford_max)),
         "down": float(raw_afford_down),
