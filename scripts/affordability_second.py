@@ -20,7 +20,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING & SAFETY ---
+# --- 2. DATA CROSS-REFERENCING (SAFETY FIRST) ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Client 1')
@@ -53,12 +53,12 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. TOP LEVEL SELECTORS ---
-ts_col1, ts_col2 = st.columns(2)
-with ts_col1:
-    prov_options = ["BC", "Alberta", "Ontario", "Manitoba", "Quebec", "Nova Scotia", "New Brunswick", "Saskatchewan"]
+# --- 4. TOP SELECTORS (PROVINCE & USE CASE) ---
+sel_col1, sel_col2 = st.columns(2)
+with sel_col1:
+    prov_options = ["BC", "Alberta", "Ontario", "Manitoba", "Quebec", "Saskatchewan", "Nova Scotia", "New Brunswick"]
     asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=prov_options.index(current_res_prov) if current_res_prov in prov_options else 0)
-with ts_col2:
+with sel_col2:
     use_case = st.selectbox("Primary Use Case:", ["Rental Property", "Family Vacation Home"])
     is_rental = True if use_case == "Rental Property" else False
 
@@ -81,7 +81,7 @@ if "aff_second_store" not in st.session_state:
     }
 store = st.session_state.aff_second_store
 
-# Defensive Math Engine - Uses .get() with 0.0 default for all profile keys
+# DEFENSIVE MATH ENGINE (ZERO ERROR RISK)
 p1_annual = float(prof.get('p1_t4', 0) + prof.get('p1_bonus', 0) + prof.get('p1_commission', 0))
 p2_annual = float(prof.get('p2_t4', 0) + prof.get('p2_bonus', 0) + prof.get('p2_commission', 0))
 m_inc = (p1_annual + p2_annual + (float(prof.get('inv_rental_income', 0)) * 0.80)) / 12
@@ -92,7 +92,7 @@ primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 
 primary_carrying = (float(prof.get('prop_taxes', 4200)) / 12) + float(prof.get('heat_pmt', 125))
 p_debts = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0) + (float(prof.get('loc_balance', 0)) * 0.03))
 
-# Maximum Buying Power Logic
+# Max Buying Power Logic
 stress_rate = max(5.25, store.get('contract_rate', 4.26) + 2.0)
 r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
@@ -144,14 +144,13 @@ with c_right:
     st.markdown(f"""<div style="background-color: {SLATE_ACCENT}; color: white; padding: 5px 15px; border-radius: 5px; text-align: center; margin-top: 10px;">
         Total Monthly OpEx: <b>${total_opex_mo:,.0f}</b></div>""", unsafe_allow_html=True)
 
-# --- 7. ANALYSIS & TABLES ---
+# --- 7. CASH FLOW BREAKDOWN ---
 target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 realized_rent = (store.get('manual_rent', 0) * (12 - store.get('vacancy_months', 1))) / 12 if is_rental else 0
 asset_net = realized_rent - total_opex_mo - new_p_i
 
-# Household Surplus
 net_h_inc = (p1_annual + p2_annual + float(prof.get('inv_rental_income', 0))) * 0.75 / 12
 overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carrying + p_debts + new_p_i + total_opex_mo)
 
