@@ -147,6 +147,7 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
+    # Fix 1: Rounding up the default down payment so error doesn't show on load
     return custom_round_up(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
@@ -215,54 +216,55 @@ if max_pi_stress > 0:
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
-    # FIX: Show error if downpayment is too low, but do not force change the value
+    # Fix 2 & 3: Better formatting and hiding info if down payment is too low
     if store['down_payment'] < min_required:
-        st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of ${max_purchase:,.0f} should be ${min_required:,.0f}.")
-
-    total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
-    
-    legal_fees, title_ins, appraisal = 1500, 500, 350
-    total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
-    total_cash_required = store['down_payment'] + total_closing_costs
-
-    st.divider()
-    # Updated Metric Line (4 items)
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
-    m2.metric("Max Loan Amount", f"${loan_amt:,.0f}")
-    m3.metric("Actual P&I", f"${actual_pi:,.0f}")
-    m4.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
-    
-    r_c1, r_c2 = st.columns([2, 1.2])
-    with r_c1:
-        fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
-        fig.update_layout(height=350, margin=dict(t=50, b=20))
-        st.plotly_chart(fig, use_container_width=True)
-    with r_c2:
-        st.subheader("⚖️ Cash-to-Close")
-        breakdown = [
-            {"Item": "Down Payment", "Cost": store['down_payment']},
-            {"Item": "Land Transfer Tax", "Cost": total_tax},
-            {"Item": "FTHB Rebate", "Cost": -total_rebate},
-            {"Item": "Legal / Title / Appraisal", "Cost": (legal_fees + title_ins + appraisal)}
-        ]
-        st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
+        st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of **${max_purchase:,.0f}** should be **${min_required:,.0f}**.")
+    else:
+        # All metrics and visualizations wrapped in the else block
+        total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
         
-        # Reworded Total Cash Box
-        st.markdown(f"""
-        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
-            <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required at Closing</p>
-            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_cash_required:,.0f}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        legal_fees, title_ins, appraisal = 1500, 500, 350
+        total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
+        total_cash_required = store['down_payment'] + total_closing_costs
 
-        # New Ownership Expense Box
-        st.markdown(f"""
-        <div style="background-color: {SLATE_ACCENT}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #33363F;">
-            <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Estimated Monthly Ownership Expense</p>
-            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_monthly_expense:,.0f}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.divider()
+        # Updated Metric Line (4 items)
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
+        m2.metric("Max Loan Amount", f"${loan_amt:,.0f}")
+        m3.metric("Actual P&I", f"${actual_pi:,.0f}")
+        m4.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
+        
+        r_c1, r_c2 = st.columns([2, 1.2])
+        with r_c1:
+            fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
+            fig.update_layout(height=350, margin=dict(t=50, b=20))
+            st.plotly_chart(fig, use_container_width=True)
+        with r_c2:
+            st.subheader("⚖️ Cash-to-Close")
+            breakdown = [
+                {"Item": "Down Payment", "Cost": store['down_payment']},
+                {"Item": "Land Transfer Tax", "Cost": total_tax},
+                {"Item": "FTHB Rebate", "Cost": -total_rebate},
+                {"Item": "Legal / Title / Appraisal", "Cost": (legal_fees + title_ins + appraisal)}
+            ]
+            st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
+            
+            # Reworded Total Cash Box
+            st.markdown(f"""
+            <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
+                <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required at Closing</p>
+                <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_cash_required:,.0f}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # New Ownership Expense Box
+            st.markdown(f"""
+            <div style="background-color: {SLATE_ACCENT}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #33363F;">
+                <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Estimated Monthly Ownership Expense</p>
+                <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_monthly_expense:,.0f}</p>
+            </div>
+            """, unsafe_allow_html=True)
 
 else: st.error("Approval amount is $0.")
 
