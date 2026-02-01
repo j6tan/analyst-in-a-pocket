@@ -5,7 +5,7 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from openai import OpenAI
 
-# Initialize OpenAI Client (Ensure OPENAI_API_KEY is in your repository secrets)
+# Initialize OpenAI Client (Ensure OPENAI_API_KEY is in your environment)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --- 1. MARKET DATA SCRAPER (Bank of Canada) ---
@@ -23,27 +23,41 @@ def fetch_boc_observation(series_id):
         print(f"⚠️ Warning: Could not fetch {series_id}. Error: {e}")
         return None
 
-# --- 2. AI VARIABLE RATE ANALYST ---
-def get_ai_estimated_variable_rate(prime_rate):
+# --- 2. NEW: BIG BANK SEMANTIC SCRAPER ---
+def get_big_bank_variable_rates():
     """
-    Uses AI to estimate a retail 5-year variable rate based on 
-    current bank spreads relative to Prime.
+    Scrapes public data from Big 3 Banks.
+    Uses AI semantics to find rates instead of fragile HTML tags.
     """
-    try:
-        print("🧠 Analyzing Market Spreads for Variable Rates...")
-        market_context = f"Current Bank Prime is {prime_rate}%. Major banks are offering discounts between 0.25% and 0.75% for 5-year variable uninsured mortgages."
-        
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": "You are a Canadian mortgage market analyst. Estimate a retail 5-year variable mortgage rate. Return ONLY a JSON object with the key 'five_year_variable' as a float."},
-                {"role": "user", "content": market_context}
-            ],
-            response_format={"type": "json_object"}
-        )
-        return json.loads(response.choices[0].message.content).get('five_year_variable', 5.50)
-    except:
-        return 5.50 # Baseline Fallback
+    banks = {
+        "RBC": "https://www.rbcroyalbank.com/mortgages/mortgage-rates.html",
+        "TD": "https://www.td.com/ca/en/personal-banking/products/mortgages/mortgage-rates",
+        "BMO": "https://www.bmo.com/main/personal/mortgages/mortgage-rates/"
+    }
+    
+    results = {}
+    print("📡 Monitoring Big Bank public announcements...")
+    
+    for bank, url in banks.items():
+        try:
+            res = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            soup = BeautifulSoup(res.text, 'html.parser')
+            raw_text = soup.get_text(separator=' ', strip=True)[:5000] 
+
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": f"Extract the current 5-year closed VARIABLE mortgage rate for {bank}. Return ONLY the number as a float. If not found, return 0.0."},
+                    {"role": "user", "content": f"TEXT: {raw_text}"}
+                ]
+            )
+            rate = float(response.choices[0].message.content.strip())
+            if rate > 0:
+                results[bank] = rate
+        except:
+            continue
+            
+    return results
 
 # --- 3. AI LEGISLATIVE INTERPRETER (BC PTT Rules) ---
 def get_ai_interpreted_bc_rules():
@@ -67,8 +81,12 @@ def get_ai_interpreted_bc_rules():
         print(f"AI Scrape Failed: {e}. Using 2026 Fallbacks.")
         return {"fthb_full_limit": 835000, "fthb_partial_limit": 860000}
 
-# --- 4. PROVINCIAL YIELD ANALYST ---
+# --- 4. PROVINCIAL YIELD ANALYST (New Monthly Feature) ---
 def get_monthly_provincial_yields():
+    """
+    Uses AI to estimate current average gross rental yields per province 
+    based on the latest 2026 market trends.
+    """
     try:
         print("📈 Analyzing Provincial Rental Yields...")
         market_context = "Current 2026 Canadian Real Estate Report: Yields are stabilizing. BC/ON averages 3.8-4.2%, AB/SK averages 5.5-6.5%, Atlantic Canada 5.0-6.0%."
@@ -103,8 +121,9 @@ def update_market_intel():
     overnight = fetch_boc_observation("V39079") or 2.25
     fixed_5 = fetch_boc_observation("V122667786") or 4.26
     
-    # NEW: Get AI-interpreted Variable Rate
-    variable_5 = get_ai_estimated_variable_rate(prime)
+    # NEW: Fetch Big Bank Variable Rates
+    bank_rates = get_big_bank_variable_rates()
+    variable_5 = bank_rates.get("RBC", 3.95) # Use RBC as primary benchmark, fallback to 3.95
     
     # AI Scrape BC Rules
     print("🧠 Consulting AI for BC Legislative Updates...")
@@ -117,9 +136,10 @@ def update_market_intel():
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "rates": {
             "bank_prime": prime,
-            "boc_overnight": overnight,
             "five_year_fixed_uninsured": fixed_5,
-            "five_year_variable": variable_5 # Added to sync with renewal analysis
+            "five_year_variable": variable_5,
+            "boc_overnight": overnight,
+            "big_bank_monitor": bank_rates
         },
         "provincial_yields": yields,
         "tax_rules": {
