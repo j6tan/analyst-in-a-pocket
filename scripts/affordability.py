@@ -50,7 +50,7 @@ with st.sidebar:
     st.header("🛠️ Scenario Tuning")
     
     if 'aff_store' not in st.session_state:
-        # Initial default values (rounded for clean start)
+        # Initial defaults
         st.session_state.aff_store = {
             'down_payment': 200000.0,
             'contract_rate': float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
@@ -60,7 +60,7 @@ with st.sidebar:
     
     store = st.session_state.aff_store
 
-    # User inputs: No rounding is applied to these once modified
+    # PATCHED: User can update Down Payment and values stay per actual input
     store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=1000.0)
     store['contract_rate'] = st.number_input("Mortgage Rate (%)", value=float(store['contract_rate']), step=0.01)
     store['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(store['prop_taxes']), step=10.0)
@@ -94,7 +94,7 @@ qualifying_mortgage_pmt = available_for_housing - monthly_taxes_heat
 max_loan = qualifying_mortgage_pmt / k_stress if qualifying_mortgage_pmt > 0 else 0
 max_purchase = max_loan + store['down_payment']
 
-# Legal Minimum Down Payment Validation
+# PATCHED: Min Down Payment Calculation
 def calculate_min_down(price):
     if price <= 500000: return price * 0.05
     elif price <= 999999.99: return (500000 * 0.05) + ((price - 500000) * 0.10)
@@ -107,7 +107,7 @@ st.title("The Opportunity Map")
 st.markdown(f"### Analysis for {household}")
 
 if max_purchase > 0:
-    # Down payment warning
+    # PATCHED: Down Payment Check
     if store['down_payment'] < legal_min_down:
         st.error(f"🛑 **Down payment too low.** Based on a purchase price of ${max_purchase:,.0f}, the legal minimum requirement is **${legal_min_down:,.2f}**.")
 
@@ -116,7 +116,6 @@ if max_purchase > 0:
     col2.metric("Qualifying Mortgage", f"${max_loan:,.0f}")
     col3.metric("Stress Test Rate", f"{stress_rate:.2f}%")
 
-    # Store for next page
     st.session_state['max_purchase_power'] = max_purchase
     st.session_state['affordability_down_payment'] = store['down_payment']
 
@@ -145,6 +144,7 @@ if max_purchase > 0:
 
     with res_col2:
         st.subheader("💰 Cash & Carrying Costs")
+        
         st.markdown(f"""
         <div style="background-color: {OFF_WHITE}; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
             <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: {SLATE_ACCENT};">Total Cash Required at Closing</p>
