@@ -27,7 +27,7 @@ def custom_round_up(n):
         step = 50000 
     return float(math.ceil(n / step) * step)
 
-# FIX: Added specific rounding function to ensure default is always above minimum requirement
+# FIX: New rounding function to ensure default DP is always sufficient
 def round_to_next_thousand(n):
     return float(math.ceil(n / 1000.0) * 1000.0)
 
@@ -151,7 +151,7 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # FIX: Applying round_to_next_thousand to the default downpayment
+    # FIX: Using round_to_next_thousand for default DP
     return round_to_next_thousand(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
@@ -205,19 +205,22 @@ tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (str
 max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
+    # Stress Test Calculation
     r_mo_stress = (s_rate/100)/12
     raw_loan_amt = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress
     loan_amt = custom_round_up(raw_loan_amt)
     
+    # Actual P&I Calculation (using contract rate)
     r_mo_actual = (c_rate/100)/12
     actual_pi = (loan_amt * r_mo_actual) / (1 - (1 + r_mo_actual)**-300)
     
+    # Ownership Monthly Expense Calculation
     total_monthly_expense = actual_pi + (store['prop_taxes']/12) + store['heat'] + strata
 
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
-    # FIX: Correct message formatting and conditional results hiding
+    # FIX: Clean message formatting and conditional results hiding
     if store['down_payment'] < min_required:
         st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of **${max_purchase:,.0f}** should be **${min_required:,.0f}**.")
     else:
