@@ -49,7 +49,7 @@ def apply_style(fig, title):
     return fig
 
 # --- 3. STATE INITIALIZATION ---
-# UPDATED: Initial defaults now pull from affordability data
+# RESTORED: Default values now use affordability data as the starting point
 if 'mort_scen_store' not in st.session_state:
     st.session_state.mort_scen_store = {
         'price': float(raw_afford_max),
@@ -70,7 +70,7 @@ st.markdown(f"**Strategy Analysis for {household_names}**")
 with st.container():
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
-        # User can overwrite, and state management ensures it stays
+        # User input updates the store directly
         store['price'] = st.number_input("Property Price ($)", value=store['price'], step=10000.0)
     with col2:
         store['down'] = st.number_input("Down Payment ($)", value=store['down'], step=5000.0)
@@ -117,7 +117,6 @@ def calculate_mortgage(loan, rate, years, freq, extra):
     term_equity = 0
     month = 0
     
-    # Simple monthly approximation for logic consistency
     while balance > 0 and month < 360:
         month += 1
         int_pmt = balance * (rate/100/12)
@@ -168,7 +167,6 @@ with tabs[1]:
     st.plotly_chart(apply_style(fig2, "Projected Principal Reduction"), use_container_width=True)
 
 with tabs[2]:
-    # Logic for Equity vs Interest
     milestone_data = []
     for r in results:
         milestone_data.append({"Scenario": r['Name'], "Type": "Equity Built", "Value": r['Term_Prin']})
