@@ -51,6 +51,7 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
     if not tax_rules: return 0, 0
     rebates = tax_rules.get("rebates", {})
     
+    # 1. Provincial Tax
     prov_rules = tax_rules.get(province_val, [])
     total_prov_tax, prev_h = 0, 0
     for rule in prov_rules:
@@ -59,6 +60,7 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
             total_prov_tax += taxable * rule["rate"]
             prev_h = rule["threshold"]
     
+    # 2. Toronto Municipal Tax (Conditional)
     total_muni_tax = 0
     if is_toronto and province_val == "Ontario":
         muni_rules = tax_rules.get("Toronto_Municipal", [])
@@ -69,6 +71,7 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
                 total_muni_tax += taxable * rule["rate"]
                 prev_m = rule["threshold"]
 
+    # 3. Rebate Logic
     total_rebate = 0
     if is_fthb:
         if province_val == "Ontario":
@@ -147,8 +150,8 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # Applying requested custom rounding to initial values
-    return custom_round_up(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
+    # Applied $500 buffer to default DP + custom rounding rule
+    return custom_round_up(min_d + 500), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
@@ -204,7 +207,7 @@ if max_pi_stress > 0:
     # Stress Rate P&I
     r_mo_stress = (s_rate/100)/12
     raw_loan_amt = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress
-    # Applying rounding logic to Loan Size
+    # Applied rounding logic to loan size
     loan_amt = custom_round_up(raw_loan_amt)
     
     # Contract Rate P&I Calculation
