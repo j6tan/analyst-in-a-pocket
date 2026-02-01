@@ -23,8 +23,8 @@ def custom_round_up(n):
 # --- 2. DATA CROSS-REFERENCING ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
-p1_name = prof.get('p1_name', 'Client 1')
-p2_name = prof.get('p2_name', 'Client 2')
+p1_name = prof.get('p1_name', 'Dori')
+p2_name = prof.get('p2_name', 'Kevin')
 
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
@@ -35,12 +35,23 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. TITLE ---
+# --- 3. TITLE & STORYTELLING BOX (RESTORED) ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
 with header_col2:
     st.title("The Portfolio Expansion Map")
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🏢 Strategic Brief: Capital Deployment</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        <b>{p1_name} and {p2_name}</b> have successfully built a capital reserve and are now evaluating the next step. 
+        Whether deploying this cash into a <b>self-sustaining rental asset</b> to build long-term wealth, or securing a 
+        <b>vacation home</b> for family use, this map determines the viability of the move within your existing household ecosystem.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 4. TOP LEVEL SELECTORS ---
 ts_col1, ts_col2 = st.columns(2)
