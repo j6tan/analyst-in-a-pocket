@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import os
 import json
 import math
@@ -21,7 +20,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING (DEFENSIVE FETCH) ---
+# --- 2. DATA CROSS-REFERENCING ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Client 1')
@@ -36,7 +35,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. TITLE & STORYTELLING BOX ---
+# --- 3. TITLE & STORYTELLING BOX (RESTORED) ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
@@ -48,7 +47,7 @@ st.markdown(f"""
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🏢 Strategy: Deploying Capital for Growth</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
         {p1_name} and {p2_name} have successfully built a capital reserve and are now evaluating the next step. 
-        Whether deploying this cash into a <b>self-sustaining rental asset</b> or securing a 
+        Whether deploying this cash into a <b>self-sustaining rental asset</b> to build long-term wealth, or securing a 
         <b>vacation home</b> for family use, this map determines the viability of the move within your existing household ecosystem.
     </p>
 </div>
@@ -68,7 +67,7 @@ scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
 tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 default_tax_rate = tax_rate_lookup.get(asset_province, 0.0075)
 
-# --- 5. PERSISTENCE & INITIALIZATION (FIXES KEYERROR & STICKY INPUTS) ---
+# --- 5. PERSISTENCE & INITIALIZATION ---
 if "aff_second_store" not in st.session_state:
     init_price = 600000.0
     st.session_state.aff_second_store = {
@@ -85,10 +84,10 @@ if "aff_second_store" not in st.session_state:
     }
 store = st.session_state.aff_second_store
 
-# Helper to safely get floats from profile
+# Helper to safely get floats from profile (Defensive Coding)
 def get_float(k, d=0.0):
-    try: return float(prof.get(k, d))
-    except: return d
+    val = prof.get(k, d)
+    return float(val) if val is not None else d
 
 p1_annual = get_float('p1_t4') + get_float('p1_bonus') + get_float('p1_commission')
 p2_annual = get_float('p2_t4') + get_float('p2_bonus') + get_float('p2_commission')
@@ -115,12 +114,11 @@ with c_left:
     st.subheader("💰 Capital Requirement")
     store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=5000.0)
     
-    # Target Price handling
     new_price = st.number_input(f"Maximum Buying Power (Qualified: ${max_buying_power:,.0f})", 
                                 value=min(float(store['target_price']), max_buying_power), 
                                 max_value=max_buying_power, step=5000.0)
     
-    # Only reset taxes and rent if the price explicitly changed to avoid overwriting manual edits
+    # Only reset taxes and rent if the price explicitly changed
     if new_price != store['target_price']:
         store['target_price'] = new_price
         store['annual_prop_tax'] = new_price * default_tax_rate
@@ -134,7 +132,7 @@ with c_left:
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
         store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
-        st.info(f"ℹ️ Secondary Home: Household income must support costs in {asset_province}.")
+        st.info(f"ℹ️ Vacation Home: Household income must support costs in {asset_province}.")
 
 with c_right:
     st.subheader("🏙️ Carrying Costs")
@@ -159,7 +157,7 @@ with c_right:
     st.markdown(f"""<div style="background-color: {SLATE_ACCENT}; color: white; padding: 5px 15px; border-radius: 5px; text-align: center; margin-top: 10px;">
         Total Monthly OpEx: <b>${total_opex_mo:,.0f}</b></div>""", unsafe_allow_html=True)
 
-# --- 7. ANALYSIS & VISUALS ---
+# --- 7. ANALYSIS & TABLES (CHART REMOVED) ---
 target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
@@ -170,25 +168,20 @@ net_h_inc = (p1_annual + p2_annual + get_float('inv_rental_income')) * 0.75 / 12
 overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carrying + p_debts + new_p_i + total_opex_mo)
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
-
-
-
-c_ch, c_tb = st.columns([1.5, 2])
-with c_ch:
-    fig = go.Figure(data=[
-        go.Bar(name='Income', x=['Asset Flow'], y=[realized_rent], marker_color='#16a34a'),
-        go.Bar(name='Expenses', x=['Asset Flow'], y=[total_opex_mo + new_p_i], marker_color='#dc2626')
-    ])
-    fig.update_layout(barmode='group', height=300, margin=dict(t=20, b=20, l=0, r=0), 
-                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    st.plotly_chart(fig, use_container_width=True)
-
-with c_tb:
+c1, c2 = st.columns(2)
+with c1:
+    st.markdown("**Household Ecosystem**")
     st.table(pd.DataFrame([
         {"Item": "Net Household Income", "Amount": f"${net_h_inc:,.0f}"},
         {"Item": "Household Obligations", "Amount": f"-${primary_mtg + primary_carrying + p_debts:,.0f}"},
-        {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"},
-        {"Item": "Monthly Overall Surplus", "Amount": f"${overall_cash_flow:,.0f}"}
+        {"Item": "Monthly Surplus", "Amount": f"${net_h_inc - (primary_mtg + primary_carrying + p_debts):,.0f}"}
+    ]))
+with c2:
+    st.markdown("**Secondary Asset Impact**")
+    st.table(pd.DataFrame([
+        {"Item": "Realized Rent", "Amount": f"${realized_rent:,.0f}"},
+        {"Item": "OpEx & New Mortgage", "Amount": f"-${total_opex_mo + new_p_i:,.0f}"},
+        {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"}
     ]))
 
 # --- 8. METRICS BAR ---
