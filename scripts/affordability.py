@@ -12,14 +12,19 @@ SLATE_ACCENT = "#4A4E5A"
 
 # --- ROUNDING UTILITY ---
 def custom_round_up(n):
-    """Used for the Max Purchase Power display only."""
-    if n <= 0: return 0.0
+    if n <= 0:
+        return 0.0
     digits = int(math.log10(n)) + 1
-    if digits <= 3: step = 10
-    elif digits <= 5: step = 100
-    elif digits == 6: step = 1000
-    elif digits == 7: step = 10000
-    else: step = 50000 
+    if digits <= 3:
+        step = 10
+    elif digits <= 5:
+        step = 100
+    elif digits == 6:
+        step = 1000
+    elif digits == 7:
+        step = 10000
+    else:
+        step = 50000 
     return float(math.ceil(n / step) * step)
 
 # --- 2. DATA RETRIEVAL ---
@@ -44,19 +49,18 @@ intel = load_market_intel()
 with st.sidebar:
     st.header("🛠️ Scenario Tuning")
     
-    # Initialize store if not present
     if 'aff_store' not in st.session_state:
-        # We round only the INITIAL values for a clean starting state
+        # Initial default values (rounded for clean start)
         st.session_state.aff_store = {
             'down_payment': 200000.0,
             'contract_rate': float(intel['rates'].get('five_year_fixed_uninsured', 4.49)),
-            'prop_taxes': round(4200.0, -2), # Initial clean default
+            'prop_taxes': 4200.0,
             'heat_pmt': 125.0
         }
     
     store = st.session_state.aff_store
 
-    # User Overwrites: These will NOT be rounded by the code
+    # User inputs: No rounding is applied to these once modified
     store['down_payment'] = st.number_input("Down Payment Capital ($)", value=float(store['down_payment']), step=1000.0)
     store['contract_rate'] = st.number_input("Mortgage Rate (%)", value=float(store['contract_rate']), step=0.01)
     store['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(store['prop_taxes']), step=10.0)
@@ -90,34 +94,33 @@ qualifying_mortgage_pmt = available_for_housing - monthly_taxes_heat
 max_loan = qualifying_mortgage_pmt / k_stress if qualifying_mortgage_pmt > 0 else 0
 max_purchase = max_loan + store['down_payment']
 
-# --- 5. MINIMUM DOWN PAYMENT VALIDATION ---
+# Legal Minimum Down Payment Validation
 def calculate_min_down(price):
-    if price <= 500000:
-        return price * 0.05
-    elif price <= 999999.99:
-        return (500000 * 0.05) + ((price - 500000) * 0.10)
-    else:
-        return price * 0.20
+    if price <= 500000: return price * 0.05
+    elif price <= 999999.99: return (500000 * 0.05) + ((price - 500000) * 0.10)
+    else: return price * 0.20
 
 legal_min_down = calculate_min_down(max_purchase)
 
-# --- 6. DISPLAY ---
+# --- 5. DISPLAY ---
 st.title("The Opportunity Map")
 st.markdown(f"### Analysis for {household}")
 
 if max_purchase > 0:
+    # Down payment warning
     if store['down_payment'] < legal_min_down:
         st.error(f"🛑 **Down payment too low.** Based on a purchase price of ${max_purchase:,.0f}, the legal minimum requirement is **${legal_min_down:,.2f}**.")
-    
+
     col1, col2, col3 = st.columns(3)
     col1.metric("Max Purchase Power", f"${custom_round_up(max_purchase):,.0f}")
     col2.metric("Qualifying Mortgage", f"${max_loan:,.0f}")
     col3.metric("Stress Test Rate", f"{stress_rate:.2f}%")
 
+    # Store for next page
     st.session_state['max_purchase_power'] = max_purchase
     st.session_state['affordability_down_payment'] = store['down_payment']
 
-    # Carrying Costs (No rounding on user inputs)
+    # Closing & Carrying Costs
     land_transfer_tax = 12000 
     legal_fees = 1500.0
     total_cash_required = store['down_payment'] + land_transfer_tax + legal_fees
@@ -127,7 +130,6 @@ if max_purchase > 0:
     total_monthly_expense = actual_pmt + monthly_taxes_heat
 
     st.divider()
-    
     res_col1, res_col2 = st.columns(2)
     
     with res_col1:
@@ -143,8 +145,6 @@ if max_purchase > 0:
 
     with res_col2:
         st.subheader("💰 Cash & Carrying Costs")
-        
-        # Closing Cash Box (Exact values)
         st.markdown(f"""
         <div style="background-color: {OFF_WHITE}; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
             <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: {SLATE_ACCENT};">Total Cash Required at Closing</p>
@@ -152,7 +152,6 @@ if max_purchase > 0:
         </div>
         """, unsafe_allow_html=True)
 
-        # Monthly Ownership Box (Exact values)
         st.markdown(f"""
         <div style="background-color: {SLATE_ACCENT}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #33363F;">
             <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Estimated Monthly Ownership Expense</p>
@@ -160,10 +159,9 @@ if max_purchase > 0:
         </div>
         """, unsafe_allow_html=True)
 
-else:
-    st.error("Approval amount is $0. Please review income and debt inputs in your profile.")
+else: st.error("Approval amount is $0.")
 
-# --- 7. LEGAL DISCLAIMER ---
+# --- 6. LEGAL DISCLAIMER ---
 st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
