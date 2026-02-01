@@ -62,7 +62,7 @@ with ts_col1:
     asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=def_idx)
 
 with ts_col2:
-    use_case = st.selectbox("Primary Use Case:", ["Rental Property", "Family Vacation Home"])
+    use_case = st.selectbox("Use of the Secondary Home:", ["Rental Property", "Family Vacation Home"])
     is_rental = True if use_case == "Rental Property" else False
 
 scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
@@ -209,3 +209,4 @@ with m4:
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
 st.caption(f"Analyst in a Pocket | Asset Province: {asset_province}")
+
