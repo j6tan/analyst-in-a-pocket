@@ -49,7 +49,7 @@ def apply_style(fig, title):
     return fig
 
 # --- 3. STATE INITIALIZATION ---
-# RESTORED: Default values now use affordability data as the starting point
+# UPDATED ONLY: Initial values now come from Affordability Page data
 if 'mort_scen_store' not in st.session_state:
     st.session_state.mort_scen_store = {
         'price': float(raw_afford_max),
@@ -70,7 +70,7 @@ st.markdown(f"**Strategy Analysis for {household_names}**")
 with st.container():
     col1, col2, col3 = st.columns([2, 2, 2])
     with col1:
-        # User input updates the store directly
+        # User input updates the store
         store['price'] = st.number_input("Property Price ($)", value=store['price'], step=10000.0)
     with col2:
         store['down'] = st.number_input("Down Payment ($)", value=store['down'], step=5000.0)
