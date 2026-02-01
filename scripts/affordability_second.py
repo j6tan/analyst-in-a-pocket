@@ -10,7 +10,7 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
 # Color constants for metrics
-BURGUNDY = "#800020"
+CRIMSON_RED = "#A52A2A"  # Brighter than burgundy, but professional
 DARK_GREEN = "#1B4D3E"
 
 # --- ROUNDING UTILITY ---
@@ -24,7 +24,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Dori')
@@ -190,10 +190,10 @@ with c2:
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
 with m1:
-    # Color coding logic for self-sufficiency
-    metric_color = DARK_GREEN if asset_net >= 0 else BURGUNDY
+    # UPDATED: Color-coding for self-sufficiency
+    m_color = DARK_GREEN if asset_net >= 0 else CRIMSON_RED
     st.markdown(f"<b style='font-size: 0.85em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
-    st.markdown(f"<h3 style='color:{metric_color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:{m_color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
 with m2:
     coc = (asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0
     st.markdown(f"<b style='font-size: 0.85em;'>Cash-on-Cash Return</b>", unsafe_allow_html=True)
@@ -205,7 +205,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 9. STRATEGIC VERDICT (FIXED INDENTATION & BULLETS) ---
+# --- 9. STRATEGIC VERDICT (TOTAL REFACTOR) ---
 st.subheader("🎯 Strategic Verdict")
 
 is_neg_carry = is_rental and asset_net < 0
@@ -222,22 +222,24 @@ else:
     v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
-# Build HTML line by line for stability
-v_html = f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>"
-v_html += f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>"
-v_html += f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>"
-v_html += "<div style='font-size: 1em;'>"
-v_html += f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel.</p>"
+# Build HTML line-by-line to avoid indentation/Markdown formatting bugs
+verdict_parts = []
+verdict_parts.append(f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>")
+verdict_parts.append(f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>")
+verdict_parts.append(f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>")
+verdict_parts.append("<div style='font-size: 1em;'>")
+verdict_parts.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel.</p>")
 
 if is_neg_carry:
-    v_html += f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>"
+    verdict_parts.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
 
 if is_low_safety:
-    v_html += f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are high-leverage for secondary homes.</p>"
+    verdict_parts.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are high-leverage for secondary homes.</p>")
 
-v_html += "</div></div>"
+verdict_parts.append("</div></div>")
 
-st.markdown(v_html, unsafe_allow_html=True)
+# Join and render
+st.markdown("".join(verdict_parts), unsafe_allow_html=True)
 
 # --- 10. ERROR & OMISSION DISCLAIMER ---
 st.markdown("---")
