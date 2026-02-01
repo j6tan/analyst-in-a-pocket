@@ -21,7 +21,7 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING ---
+# --- 2. DATA CROSS-REFERENCING (ERROR-PROOF) ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Client 1')
@@ -194,19 +194,17 @@ st.subheader("🎯 Strategic Verdict")
 v_color = "#dc2626" if overall_cash_flow < 0 else "#16a34a"
 v_bg = "#FEF2F2" if overall_cash_flow < 0 else "#F0FDF4"
 
-
-
 st.markdown(f"""
 <div style="background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color};">
     <h4 style="color: {v_color}; margin-top: 0;">{"🚨 High Financial Risk" if overall_cash_flow < 0 else "✅ Viable Scenario"}</h4>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.5;">
+    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;">
         {"Your total monthly obligations currently exceed your net income. This scenario is unsustainable without significant adjustments." if overall_cash_flow < 0 else "Based on the provided figures, your household maintains a positive surplus after accounting for the new acquisition."}
     </p>
-    <ul style="color: {SLATE_ACCENT};">
-        {"<li><b>Rental Warning:</b> The property is currently in a <b>Negative Carry</b> position. You will need to out-of-pocket approximately <b>$" + str(abs(round(asset_net))) + "</b> per month to sustain this asset.</li>" if is_rental and asset_net < 0 else ""}
-        {"<li><b>Safety Warning:</b> Your Household Safety Margin is <b>" + str(round(safety_margin, 1)) + "%</b>. At thresholds below 45% (pre-lifestyle costs), your budget may be vulnerable to interest rate shocks or vacancy.</li>" if not is_rental and safety_margin < 45 else ""}
-        <li><b>Lifestyle Reminder:</b> Note that the 'Overall Cash Flow' of <b>${overall_cash_flow:,.0f}</b> represents funds remaining <b>before</b> non-housing expenses such as utilities, food, travel, and child education.</li>
-    </ul>
+    <div style="color: {SLATE_ACCENT}; font-size: 1em;">
+        <p style="margin: 5px 0;">• <b>Lifestyle Reminder:</b> Note that the 'Overall Cash Flow' of <b>${overall_cash_flow:,.0f}</b> represents funds remaining <b>before</b> non-housing expenses such as utilities, food, travel, and child education.</p>
+        {"<p style='margin: 5px 0;'>• <b>Rental Warning:</b> The property is currently in a <b>Negative Carry</b> position. You will need to out-of-pocket approximately <b>$" + f"{abs(round(asset_net)):,}" + "</b> per month to sustain this asset.</p>" if is_rental and asset_net < 0 else ""}
+        {"<p style='margin: 5px 0;'>• <b>Safety Warning:</b> Your Household Safety Margin is <b>" + f"{safety_margin:.1f}" + "%</b>. At thresholds below 45% (pre-lifestyle costs), your budget may be vulnerable to interest rate shocks or vacancy.</p>" if not is_rental and safety_margin < 45 else ""}
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
