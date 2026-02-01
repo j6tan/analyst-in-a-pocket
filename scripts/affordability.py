@@ -27,7 +27,7 @@ def custom_round_up(n):
         step = 50000 
     return float(math.ceil(n / step) * step)
 
-# FIX 2: Specific function to ensure default is always above minimum
+# FIX: Added specific thousand-round-up to ensure default is never short
 def round_to_next_thousand(n):
     return float(math.ceil(n / 1000.0) * 1000.0)
 
@@ -130,6 +130,13 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if not is_renter:
+    st.markdown(f"""
+        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px; margin-left: 25px;">
+            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>
+        </p>
+    """, unsafe_allow_html=True)
+
 # --- 6. PERSISTENCE ---
 t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
 bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
@@ -144,7 +151,7 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # Applying rounding to next thousand for the default DP
+    # FIX: Rounding default DP to next thousand to avoid "too low" error on load
     return round_to_next_thousand(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
@@ -204,17 +211,19 @@ if max_pi_stress > 0:
     
     r_mo_actual = (c_rate/100)/12
     actual_pi = (loan_amt * r_mo_actual) / (1 - (1 + r_mo_actual)**-300)
+    
     total_monthly_expense = actual_pi + (store['prop_taxes']/12) + store['heat'] + strata
 
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
-    # FIX 1: Cleaned and structured error message formatting
+    # FIX: Correct formatting for message and conditional hiding of results
     if store['down_payment'] < min_required:
         st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of **${max_purchase:,.0f}** should be **${min_required:,.0f}**.")
     else:
-        # FIX 3: Entire output section is hidden if down payment is too low
+        # Results only render if DP requirement is met
         total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
+        
         legal_fees, title_ins, appraisal = 1500, 500, 350
         total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
         total_cash_required = store['down_payment'] + total_closing_costs
