@@ -27,7 +27,7 @@ def custom_round_up(n):
         step = 50000 
     return float(math.ceil(n / step) * step)
 
-# FIX: Added specific thousand-round-up to ensure default is never short
+# FIX: Added specific rounding function to ensure default is always above minimum requirement
 def round_to_next_thousand(n):
     return float(math.ceil(n / 1000.0) * 1000.0)
 
@@ -151,7 +151,7 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # FIX: Rounding default DP to next thousand to avoid "too low" error on load
+    # FIX: Applying round_to_next_thousand to the default downpayment
     return round_to_next_thousand(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
@@ -217,11 +217,11 @@ if max_pi_stress > 0:
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
-    # FIX: Correct formatting for message and conditional hiding of results
+    # FIX: Correct message formatting and conditional results hiding
     if store['down_payment'] < min_required:
         st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of **${max_purchase:,.0f}** should be **${min_required:,.0f}**.")
     else:
-        # Results only render if DP requirement is met
+        # Results hidden if requirement not met
         total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
         
         legal_fees, title_ins, appraisal = 1500, 500, 350
