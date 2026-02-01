@@ -3,11 +3,29 @@ import pandas as pd
 import plotly.graph_objects as go
 import os
 import json
+import math
 
 # --- 1. THEME & STYLING ---
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
+
+# --- ROUNDING UTILITY ---
+def custom_round_up(n):
+    if n <= 0:
+        return 0.0
+    digits = int(math.log10(n)) + 1
+    if digits <= 3:
+        step = 10
+    elif digits <= 5:
+        step = 100
+    elif digits == 6:
+        step = 1000
+    elif digits == 7:
+        step = 10000
+    else:
+        step = 50000 
+    return float(math.ceil(n / step) * step)
 
 # --- 2. DATA RETRIEVAL ---
 prof = st.session_state.get('user_profile', {})
@@ -33,7 +51,6 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
     if not tax_rules: return 0, 0
     rebates = tax_rules.get("rebates", {})
     
-    # 1. Provincial Tax
     prov_rules = tax_rules.get(province_val, [])
     total_prov_tax, prev_h = 0, 0
     for rule in prov_rules:
@@ -42,7 +59,6 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
             total_prov_tax += taxable * rule["rate"]
             prev_h = rule["threshold"]
     
-    # 2. Toronto Municipal Tax (Conditional)
     total_muni_tax = 0
     if is_toronto and province_val == "Ontario":
         muni_rules = tax_rules.get("Toronto_Municipal", [])
@@ -53,7 +69,6 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
                 total_muni_tax += taxable * rule["rate"]
                 prev_m = rule["threshold"]
 
-    # 3. Rebate Logic
     total_rebate = 0
     if is_fthb:
         if province_val == "Ontario":
@@ -132,7 +147,8 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    return min_d, (max_p * tax_rate), (max_p * 0.0002)
+    # ROUNDING APPLIED TO INITIAL VALUES
+    return custom_round_up(min_d), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
@@ -186,7 +202,10 @@ max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
     r_mo = (s_rate/100)/12
-    loan_amt = max_pi_stress * (1 - (1+r_mo)**-300) / r_mo
+    # CALCULATE RAW LOAN THEN ROUND UP
+    raw_loan_amt = max_pi_stress * (1 - (1+r_mo)**-300) / r_mo
+    loan_amt = custom_round_up(raw_loan_amt)
+    
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
@@ -197,7 +216,6 @@ if max_pi_stress > 0:
         
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
-    # Itemized Closing Costs
     legal_fees, title_ins, appraisal = 1500, 500, 350
     total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
     total_cash_required = store['down_payment'] + total_closing_costs
@@ -223,7 +241,6 @@ if max_pi_stress > 0:
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
         
-        # SLIMMED DOWN TOTAL BOX
         st.markdown(f"""
         <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;">
             <p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required</p>
@@ -243,4 +260,3 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
-
