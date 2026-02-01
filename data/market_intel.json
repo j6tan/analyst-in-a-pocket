@@ -1,9 +1,10 @@
 {
-    "last_updated": "2026-02-01 05:17:52",
+    "last_updated": "2026-02-01 09:09:05",
     "rates": {
         "bank_prime": 4.45,
+        "boc_overnight": 2.25,
         "five_year_fixed_uninsured": 4.26,
-        "boc_overnight": 2.25
+        "five_year_variable": 5.5
     },
     "provincial_yields": {
         "Ontario": 4.1,
