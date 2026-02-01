@@ -216,8 +216,7 @@ if max_pi_stress > 0:
     min_required = calculate_min_downpayment(max_purchase)
     
     if store['down_payment'] < min_required:
-        store['down_payment'] = custom_round_up(min_required)
-        max_purchase = loan_amt + store['down_payment']
+        st.error(f"⚠️ **Down payment too low.** The minimum requirement for a price of ${max_purchase:,.0f} should be ${min_required:,.0f}.")
 
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
@@ -274,3 +273,4 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
+
