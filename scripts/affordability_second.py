@@ -159,7 +159,7 @@ r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 realized_rent = (store['manual_rent'] * (12 - store['vacancy_months'])) / 12 if is_rental else 0
 
-# FIXED: Replaced undefined 'total_opex' with 'total_opex_mo'
+# FIXED: Ensure total_opex_mo is used correctly
 asset_net = realized_rent - total_opex_mo - new_p_i
 
 net_h_inc = (p1_annual + p2_annual + get_float('inv_rental_income')) * 0.75 / 12
@@ -167,6 +167,7 @@ overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carryin
 safety_margin = (overall_cash_flow / (net_h_inc + realized_rent) * 100) if (net_h_inc + realized_rent) > 0 else 0
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
+
 c1, c2 = st.columns(2)
 with c1:
     st.markdown("**Household Ecosystem**")
@@ -191,13 +192,14 @@ m2.metric("Cash-on-Cash Return", f"{(asset_net * 12 / store['down_payment'] * 10
 m3.metric("Household Safety Margin", f"{safety_margin:.1f}%")
 m4.metric("Overall Cash Flow", f"${overall_cash_flow:,.0f}")
 
-# --- 9. STRATEGIC VERDICT ---
+# --- 9. STRATEGIC VERDICT (BUG FIXED) ---
 st.subheader("🎯 Strategic Verdict")
 
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
 is_unsustainable = overall_cash_flow < 0
 
+# 1. Determine Main Status
 if is_unsustainable:
     v_status, v_color, v_bg = "❌ Unsustainable Move", "#dc2626", "#FEF2F2"
     v_msg = "Total monthly obligations exceed your current net income inflow."
@@ -208,25 +210,26 @@ else:
     v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
-# Pre-calculate strings to avoid f-string nesting errors
-blind_spot = f"• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable."
+# 2. Build Warning Messages (Pure Python Strings - No HTML mixing inside f-string)
+blind_spot_html = f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable.</p>"
 
-neg_carry_warning = ""
+neg_carry_html = ""
 if is_neg_carry:
-    neg_carry_warning = f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>"
+    neg_carry_html = f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>"
 
-safety_warning = ""
+safety_html = ""
 if is_low_safety:
-    safety_warning = f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>"
+    safety_html = f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>"
 
+# 3. Render Final HTML with Pre-calculated Variables
 st.markdown(f"""
 <div style="background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};">
     <h4 style="color: {v_color}; margin-top: 0;">{v_status}</h4>
     <p style="font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;">{v_msg}</p>
     <div style="font-size: 1em;">
-        <p style="margin: 5px 0;">{blind_spot}</p>
-        {neg_carry_warning}
-        {safety_warning}
+        {blind_spot_html}
+        {neg_carry_html}
+        {safety_html}
     </div>
 </div>
 """, unsafe_allow_html=True)
