@@ -9,6 +9,10 @@ PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
+# Color constants for metrics
+BURGUNDY = "#800020"
+DARK_GREEN = "#1B4D3E"
+
 # --- ROUNDING UTILITY ---
 def custom_round_up(n):
     if n <= 0: return 0.0
@@ -185,12 +189,23 @@ with c2:
 # --- 8. METRICS BAR ---
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Asset Self-Sufficiency", f"${asset_net:,.0f}/mo")
-m2.metric("Cash-on-Cash Return", f"{(asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0:.1f}%")
-m3.metric("Household Safety Margin", f"{safety_margin:.1f}%")
-m4.metric("Overall Cash Flow", f"${overall_cash_flow:,.0f}")
+with m1:
+    # Color coding logic for self-sufficiency
+    metric_color = DARK_GREEN if asset_net >= 0 else BURGUNDY
+    st.markdown(f"<b style='font-size: 0.85em;'>Asset Self-Sufficiency</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:{metric_color}; margin-top: 0;'>${asset_net:,.0f}<small>/mo</small></h3>", unsafe_allow_html=True)
+with m2:
+    coc = (asset_net * 12 / store['down_payment'] * 100) if store['down_payment'] > 0 else 0
+    st.markdown(f"<b style='font-size: 0.85em;'>Cash-on-Cash Return</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin-top: 0;'>{coc:.1f}%</h3>", unsafe_allow_html=True)
+with m3:
+    st.markdown(f"<b style='font-size: 0.85em;'>Household Safety Margin</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='color:{'#16a34a' if safety_margin > 10 else '#ca8a04'}; margin-top: 0;'>{safety_margin:.1f}%</h3>", unsafe_allow_html=True)
+with m4:
+    st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 9. STRATEGIC VERDICT (NO INDENTATION METHOD) ---
+# --- 9. STRATEGIC VERDICT (FIXED INDENTATION & BULLETS) ---
 st.subheader("🎯 Strategic Verdict")
 
 is_neg_carry = is_rental and asset_net < 0
@@ -198,38 +213,31 @@ is_low_safety = not is_rental and safety_margin < 45
 is_unsustainable = overall_cash_flow < 0
 
 if is_unsustainable:
-    v_status = "❌ Unsustainable Move"
-    v_color = "#dc2626"
-    v_bg = "#FEF2F2"
+    v_status, v_color, v_bg = "❌ Unsustainable Move", "#dc2626", "#FEF2F2"
     v_msg = "Total monthly obligations exceed your current net income inflow."
 elif is_neg_carry or is_low_safety:
-    v_status = "⚠️ Speculative Move"
-    v_color = "#ca8a04"
-    v_bg = "#FFFBEB"
+    v_status, v_color, v_bg = "⚠️ Speculative Move", "#ca8a04", "#FFFBEB"
     v_msg = "This acquisition is viable on paper but carries significant lifestyle opportunity costs."
 else:
-    v_status = "✅ Strategically Sound"
-    v_color = "#16a34a"
-    v_bg = "#F0FDF4"
+    v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
-# STRICT STRING CONCATENATION (Prevents Markdown Indentation Errors)
-html_str = ""
-html_str += f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>"
-html_str += f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>"
-html_str += f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>"
-html_str += "<div style='font-size: 1em;'>"
-html_str += f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel. If those costs exceed this amount, the asset is unaffordable.</p>"
+# Build HTML line by line for stability
+v_html = f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>"
+v_html += f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>"
+v_html += f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>"
+v_html += "<div style='font-size: 1em;'>"
+v_html += f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> Your surplus of <b>${overall_cash_flow:,.0f}</b> must cover all food, utilities, child education, and travel.</p>"
 
 if is_neg_carry:
-    html_str += f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>"
+    v_html += f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>"
 
 if is_low_safety:
-    html_str += f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>"
+    v_html += f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are high-leverage for secondary homes.</p>"
 
-html_str += "</div></div>"
+v_html += "</div></div>"
 
-st.markdown(html_str, unsafe_allow_html=True)
+st.markdown(v_html, unsafe_allow_html=True)
 
 # --- 10. ERROR & OMISSION DISCLAIMER ---
 st.markdown("---")
