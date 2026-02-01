@@ -23,7 +23,29 @@ def fetch_boc_observation(series_id):
         print(f"⚠️ Warning: Could not fetch {series_id}. Error: {e}")
         return None
 
-# --- 2. AI LEGISLATIVE INTERPRETER (BC PTT Rules) ---
+# --- 2. AI VARIABLE RATE ANALYST ---
+def get_ai_estimated_variable_rate(prime_rate):
+    """
+    Uses AI to estimate a retail 5-year variable rate based on 
+    current bank spreads relative to Prime.
+    """
+    try:
+        print("🧠 Analyzing Market Spreads for Variable Rates...")
+        market_context = f"Current Bank Prime is {prime_rate}%. Major banks are offering discounts between 0.25% and 0.75% for 5-year variable uninsured mortgages."
+        
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a Canadian mortgage market analyst. Estimate a retail 5-year variable mortgage rate. Return ONLY a JSON object with the key 'five_year_variable' as a float."},
+                {"role": "user", "content": market_context}
+            ],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content).get('five_year_variable', 5.50)
+    except:
+        return 5.50 # Baseline Fallback
+
+# --- 3. AI LEGISLATIVE INTERPRETER (BC PTT Rules) ---
 def get_ai_interpreted_bc_rules():
     """Scrapes BC Gov text and uses AI to extract 2026 thresholds ($835k/$860k)."""
     url = "https://www2.gov.bc.ca/gov/content/taxes/property-taxes/property-transfer-tax/exemptions/first-time-home-buyers"
@@ -45,15 +67,10 @@ def get_ai_interpreted_bc_rules():
         print(f"AI Scrape Failed: {e}. Using 2026 Fallbacks.")
         return {"fthb_full_limit": 835000, "fthb_partial_limit": 860000}
 
-# --- 3. PROVINCIAL YIELD ANALYST (New Monthly Feature) ---
+# --- 4. PROVINCIAL YIELD ANALYST ---
 def get_monthly_provincial_yields():
-    """
-    Uses AI to estimate current average gross rental yields per province 
-    based on the latest 2026 market trends.
-    """
     try:
         print("📈 Analyzing Provincial Rental Yields...")
-        # Simulating a search/data feed for the AI to interpret
         market_context = "Current 2026 Canadian Real Estate Report: Yields are stabilizing. BC/ON averages 3.8-4.2%, AB/SK averages 5.5-6.5%, Atlantic Canada 5.0-6.0%."
         
         response = client.chat.completions.create(
@@ -66,14 +83,13 @@ def get_monthly_provincial_yields():
         )
         return json.loads(response.choices[0].message.content)
     except:
-        # Realistic Fallbacks if AI fails
         return {
             "Ontario": 4.1, "BC": 3.8, "Alberta": 6.2, 
             "Manitoba": 5.8, "Quebec": 4.5, "Nova Scotia": 5.2, 
             "New Brunswick": 5.5, "Saskatchewan": 6.4
         }
 
-# --- 4. MAIN SYNC ENGINE ---
+# --- 5. MAIN SYNC ENGINE ---
 def update_market_intel():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(script_dir, "..", "data")
@@ -87,6 +103,9 @@ def update_market_intel():
     overnight = fetch_boc_observation("V39079") or 2.25
     fixed_5 = fetch_boc_observation("V122667786") or 4.26
     
+    # NEW: Get AI-interpreted Variable Rate
+    variable_5 = get_ai_estimated_variable_rate(prime)
+    
     # AI Scrape BC Rules
     print("🧠 Consulting AI for BC Legislative Updates...")
     bc_rules = get_ai_interpreted_bc_rules()
@@ -98,8 +117,9 @@ def update_market_intel():
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "rates": {
             "bank_prime": prime,
+            "boc_overnight": overnight,
             "five_year_fixed_uninsured": fixed_5,
-            "boc_overnight": overnight
+            "five_year_variable": variable_5 # Added to sync with renewal analysis
         },
         "provincial_yields": yields,
         "tax_rules": {
@@ -122,11 +142,11 @@ def update_market_intel():
                 {"threshold": 400000, "rate": 0.015},
                 {"threshold": 2000000, "rate": 0.02},
                 {"threshold": 3000000, "rate": 0.025},
-                {"threshold": 4000000, "rate": 0.044},   # April 2026 Luxury
-                {"threshold": 5000000, "rate": 0.0545},  # April 2026 Luxury
-                {"threshold": 10000000, "rate": 0.065},  # April 2026 Luxury
-                {"threshold": 20000000, "rate": 0.0755}, # April 2026 Luxury
-                {"threshold": 999999999, "rate": 0.086}  # April 2026 Luxury
+                {"threshold": 4000000, "rate": 0.044},
+                {"threshold": 5000000, "rate": 0.0545},
+                {"threshold": 10000000, "rate": 0.065},
+                {"threshold": 20000000, "rate": 0.0755},
+                {"threshold": 999999999, "rate": 0.086}
             ],
             "Manitoba": [
                 {"threshold": 30000, "rate": 0.00},
@@ -144,7 +164,7 @@ def update_market_intel():
                 {"threshold": 999999999, "rate": 0.015}
             ],
             "Nova Scotia": [
-                {"threshold": 999999999, "rate": 0.015} # Using Halifax baseline
+                {"threshold": 999999999, "rate": 0.015}
             ],
             "rebates": {
                 "BC_FTHB_Threshold": bc_rules['fthb_full_limit'],
@@ -156,7 +176,7 @@ def update_market_intel():
 
     with open(file_path, "w") as f:
         json.dump(intel_data, f, indent=4)
-    print(f"✅ Clean Market Sync Complete. BC FTHB Limit: ${bc_rules['fthb_full_limit']:,.0f}")
+    print(f"✅ Market Sync Complete. Variable Rate: {variable_5}%")
 
 if __name__ == "__main__":
     update_market_intel()
