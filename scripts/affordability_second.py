@@ -117,7 +117,7 @@ with c_left:
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
         store['vacancy_months'] = st.number_input("Input Number of Months Vacancy (Max 12)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
-        st.info(f"ℹ️ Secondary Home: Household income must support costs in {asset_province}.")
+        st.info(f"ℹ️ Secondary Home: Income must support costs in {asset_province}.")
 
 with c_right:
     st.subheader("🏙️ Carrying Costs")
@@ -154,7 +154,6 @@ overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carryin
 safety_margin = (overall_cash_flow / (net_h_inc + realized_rent) * 100) if (net_h_inc + realized_rent) > 0 else 0
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
-
 c1, c2 = st.columns(2)
 with c1:
     st.markdown("**Household Ecosystem**")
@@ -208,7 +207,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 10. DISCLAIMER ---
+# --- 10. ERROR & OMISSION DISCLAIMER ---
 st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
