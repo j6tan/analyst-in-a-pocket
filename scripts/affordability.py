@@ -185,14 +185,8 @@ tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (str
 max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
-    # Stress Rate P&I
-    r_mo_stress = (s_rate/100)/12
-    loan_amt = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress
-    
-    # Contract Rate P&I Calculation
-    r_mo_contract = (c_rate/100)/12
-    contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300)
-    
+    r_mo = (s_rate/100)/12
+    loan_amt = max_pi_stress * (1 - (1+r_mo)**-300) / r_mo
     max_purchase = loan_amt + store['down_payment']
     min_required = calculate_min_downpayment(max_purchase)
     
@@ -207,16 +201,12 @@ if max_pi_stress > 0:
     legal_fees, title_ins, appraisal = 1500, 500, 350
     total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
     total_cash_required = store['down_payment'] + total_closing_costs
-    
-    # Monthly Home Cost calculation
-    monthly_home_cost = contract_pi + (store['prop_taxes']/12) + store['heat']
 
     st.divider()
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3 = st.columns(3)
     m1.metric("Max Purchase Power", f"${max_purchase:,.0f}")
     m2.metric("Max Loan Amount", f"${loan_amt:,.0f}")
-    m3.metric("Contracted P&I", f"${contract_pi:,.0f}")
-    m4.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
+    m3.metric("Stress Test P&I", f"${max_pi_stress:,.0f}")
     
     r_c1, r_c2 = st.columns([2, 1.2])
     with r_c1:
@@ -233,22 +223,13 @@ if max_pi_stress > 0:
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
         
-        # TOTAL CASH REQUIRED TO CLOSE
+        # SLIMMED DOWN TOTAL BOX
         st.markdown(f"""
-        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
-            <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">TOTAL CASH REQUIRED TO CLOSE</p>
+        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57;">
+            <p style="margin: 0; font-size: 0.9em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Total Cash Required</p>
             <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${total_cash_required:,.0f}</p>
         </div>
         """, unsafe_allow_html=True)
-        
-        # MONTHLY HOME COST
-        st.markdown(f"""
-        <div style="background-color: #C0C0C0; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #A9A9A9;">
-            <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">MONTHLY HOME COST</p>
-            <p style="margin: 0; font-size: 1.6em; font-weight: 800; line-height: 1.2;">${monthly_home_cost:,.0f}</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
 else: st.error("Approval amount is $0.")
 
 st.markdown("---")
@@ -262,3 +243,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
