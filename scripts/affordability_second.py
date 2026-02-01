@@ -20,12 +20,11 @@ def custom_round_up(n):
     else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA CROSS-REFERENCING (ERROR-PROOF) ---
+# --- 2. DATA CROSS-REFERENCING (SAFE FETCH) ---
 prof = st.session_state.get('user_profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Client 1')
 p2_name = prof.get('p2_name', 'Client 2')
-household = f"{p1_name} & {p2_name}".strip(" & ")
 
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
@@ -36,7 +35,7 @@ def load_market_intel():
 
 intel = load_market_intel()
 
-# --- 3. RESTORED TITLE & STORYTELLING BOX ---
+# --- 3. TITLE & STORYTELLING ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
@@ -54,12 +53,15 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. TOP LEVEL SELECTORS (NEW PLACEMENT) ---
-sel_col1, sel_col2 = st.columns(2)
-with sel_col1:
+# --- 4. TOP LEVEL SELECTORS ---
+ts_col1, ts_col2 = st.columns(2)
+with ts_col1:
     prov_options = ["BC", "Alberta", "Ontario", "Manitoba", "Quebec", "Saskatchewan", "Nova Scotia", "New Brunswick"]
-    asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=prov_options.index(current_res_prov) if current_res_prov in prov_options else 0)
-with sel_col2:
+    # Default to user's province if valid, else first option
+    def_idx = prov_options.index(current_res_prov) if current_res_prov in prov_options else 0
+    asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=def_idx)
+
+with ts_col2:
     use_case = st.selectbox("Primary Use Case:", ["Rental Property", "Family Vacation Home"])
     is_rental = True if use_case == "Rental Property" else False
 
@@ -67,37 +69,48 @@ scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
 tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 default_tax_rate = tax_rate_lookup.get(asset_province, 0.0075)
 
-# --- 5. PERSISTENCE ---
+# --- 5. SAFETY INITIALIZATION (FIXES KEYERROR) ---
+# We verify every single key exists in the dictionary. If not, we add it.
 if "aff_second_store" not in st.session_state:
-    st.session_state.aff_second_store = {
-        "down_payment": 200000.0,
-        "target_price": 600000.0,
-        "manual_rent": 0.0,
-        "contract_rate": float(intel.get('rates', {}).get('five_year_fixed_uninsured', 4.26)),
-        "strata_mo": 400.0,
-        "insurance_mo": 100.0,
-        "vacancy_months": 1.0,
-        "rm_mo": 150.0,
-        "mgmt_pct": 5.0
-    }
+    st.session_state.aff_second_store = {}
+
+defaults = {
+    "down_payment": 200000.0,
+    "target_price": 600000.0,
+    "manual_rent": 0.0,
+    "contract_rate": float(intel.get('rates', {}).get('five_year_fixed_uninsured', 4.26)),
+    "strata_mo": 400.0,
+    "insurance_mo": 100.0,
+    "vacancy_months": 1.0,
+    "rm_mo": 150.0,
+    "mgmt_pct": 5.0
+}
+
+for key, val in defaults.items():
+    if key not in st.session_state.aff_second_store:
+        st.session_state.aff_second_store[key] = val
+
 store = st.session_state.aff_second_store
 
-# DEFENSIVE DATA MAPPING (FIXES KEYERROR)
-def safe_float(key, default=0.0):
-    val = prof.get(key, default)
-    return float(val) if val is not None else default
+# --- 6. CALCULATIONS & LOGIC ---
+# Helper to safely get floats from profile
+def get_float(k, d=0.0):
+    try:
+        return float(prof.get(k, d))
+    except:
+        return d
 
-p1_annual = safe_float('p1_t4') + safe_float('p1_bonus') + safe_float('p1_commission')
-p2_annual = safe_float('p2_t4') + safe_float('p2_bonus') + safe_float('p2_commission')
-m_inc = (p1_annual + p2_annual + (safe_float('inv_rental_income') * 0.80)) / 12
+p1_annual = get_float('p1_t4') + get_float('p1_bonus') + get_float('p1_commission')
+p2_annual = get_float('p2_t4') + get_float('p2_bonus') + get_float('p2_commission')
+m_inc = (p1_annual + p2_annual + (get_float('inv_rental_income') * 0.80)) / 12
 
-m_bal = safe_float('m_bal')
-m_rate_p = (safe_float('m_rate', 4.0) / 100) / 12
+m_bal = get_float('m_bal')
+m_rate_p = (get_float('m_rate', 4.0) / 100) / 12
 primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 0
-primary_carrying = (safe_float('prop_taxes', 4200) / 12) + safe_float('heat_pmt', 125)
-p_debts = safe_float('car_loan') + safe_float('student_loan') + safe_float('cc_pmt') + (safe_float('loc_balance') * 0.03)
+primary_carrying = (get_float('prop_taxes', 4200) / 12) + get_float('heat_pmt', 125)
+p_debts = get_float('car_loan') + get_float('student_loan') + get_float('cc_pmt') + (get_float('loc_balance') * 0.03)
 
-# Buying Power Logic
+# Max Buying Power
 stress_rate = max(5.25, store.get('contract_rate', 4.26) + 2.0)
 r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
@@ -105,7 +118,7 @@ rent_offset = (store.get('manual_rent', 0) * 0.80) if is_rental else 0
 qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['target_price'] * default_tax_rate / 12)
 max_buying_power = custom_round_up((qual_room / stress_k) + store['down_payment']) if qual_room > 0 else store['down_payment']
 
-# --- 6. CORE INPUTS ---
+# --- 7. INPUTS UI ---
 st.divider()
 c_left, c_right = st.columns(2)
 
@@ -149,15 +162,14 @@ with c_right:
     st.markdown(f"""<div style="background-color: {SLATE_ACCENT}; color: white; padding: 5px 15px; border-radius: 5px; text-align: center; margin-top: 10px;">
         Total Monthly OpEx: <b>${total_opex_mo:,.0f}</b></div>""", unsafe_allow_html=True)
 
-# --- 7. CASH FLOW BREAKDOWN (RESTORED LAYOUT) ---
+# --- 8. BREAKDOWNS ---
 target_loan = max(0, store['target_price'] - store['down_payment'])
 r_contract = (store['contract_rate'] / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
 realized_rent = (store.get('manual_rent', 0) * (12 - store.get('vacancy_months', 1))) / 12 if is_rental else 0
 asset_net = realized_rent - total_opex_mo - new_p_i
 
-# Household Surplus (Net = 75% of Gross)
-net_h_inc = (p1_annual + p2_annual + safe_float('inv_rental_income')) * 0.75 / 12
+net_h_inc = (p1_annual + p2_annual + get_float('inv_rental_income')) * 0.75 / 12
 overall_cash_flow = (net_h_inc + realized_rent) - (primary_mtg + primary_carrying + p_debts + new_p_i + total_opex_mo)
 
 st.subheader("📝 Monthly Cash Flow Breakdown")
@@ -177,7 +189,7 @@ with c2:
         {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"}
     ]))
 
-# --- 8. STRATEGY METRICS ---
+# --- 9. METRICS ---
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
 with m1:
