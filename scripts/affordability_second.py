@@ -102,36 +102,37 @@ primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 
 primary_carrying = (get_float('prop_taxes', 4200) / 12) + get_float('heat_pmt', 125)
 p_debts = get_float('car_loan') + get_float('student_loan') + get_float('cc_pmt') + (get_float('loc_balance') * 0.03)
 
-stress_rate = max(5.25, store.get('contract_rate', 4.26) + 2.0)
-r_stress = (stress_rate / 100) / 12
-stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
-rent_offset = (store['manual_rent'] * 0.80) if is_rental else 0
-
-# --- UPDATED LOGIC FOR DYNAMIC MAX QUALIFYING PRICE ---
-qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['annual_prop_tax'] / 12)
-max_by_income = (qual_room / stress_k) + store['down_payment'] if qual_room > 0 else store['down_payment']
-max_by_dp = store['down_payment'] / 0.20
-
-if max_by_income < max_by_dp:
-    max_buying_power = custom_round_up(max_by_income)
-    limit_reason = "Income Test"
-else:
-    max_buying_power = custom_round_up(max_by_dp)
-    limit_reason = "20% Down Payment rule"
-
 # --- 6. CORE INPUTS ---
 st.divider()
 c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
-    store['down_payment'] = st.number_input("Available Down Payment ($)", value=float(store['down_payment']), step=5000.0)
     
-    new_price = st.number_input("Purchase Price ($)", 
-                                value=min(float(store['target_price']), max_buying_power), 
-                                max_value=max_buying_power, step=5000.0)
+    # MOVE: Getting input FIRST
+    dp_input = st.number_input("Available Down Payment ($)", value=float(store['down_payment']), step=5000.0)
+    if dp_input != store['down_payment']:
+        store['down_payment'] = dp_input
+        st.rerun() # Force calculation to refresh with new DP
 
-    # Darker Grey Max Buying Power Box with Dynamic Note
+    # RE-CALCULATE: Immediate logic update after input
+    stress_rate = max(5.25, store.get('contract_rate', 4.26) + 2.0)
+    r_stress = (stress_rate / 100) / 12
+    stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
+    rent_offset = (store['manual_rent'] * 0.80) if is_rental else 0
+    
+    qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['annual_prop_tax'] / 12)
+    max_by_income = (qual_room / stress_k) + store['down_payment'] if qual_room > 0 else store['down_payment']
+    max_by_dp = store['down_payment'] / 0.20
+    
+    if max_by_income < max_by_dp:
+        max_buying_power = custom_round_up(max_by_income)
+        limit_reason = "Income Test"
+    else:
+        max_buying_power = custom_round_up(max_by_dp)
+        limit_reason = "20% Down Payment rule"
+
+    # Subtle Darker Grey Max Buying Power Box with Proper Case
     st.markdown(f"""
         <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-bottom: 20px;">
             <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
@@ -139,6 +140,10 @@ with c_left:
             <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power is limited by the <b>{limit_reason}</b>.</p>
         </div>
     """, unsafe_allow_html=True)
+
+    new_price = st.number_input("Purchase Price ($)", 
+                                value=min(float(store['target_price']), max_buying_power), 
+                                max_value=max_buying_power, step=5000.0)
     
     if new_price != store['target_price']:
         store['target_price'] = new_price
