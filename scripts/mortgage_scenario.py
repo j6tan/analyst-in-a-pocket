@@ -12,15 +12,14 @@ client_name2 = prof.get('p2_name', 'Kevin')
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
 # --- UPDATED: DYNAMIC LINKING TO AFFORDABILITY PAGE ---
-# Retrieve the dictionary stored by affordability (18).py
+# We retrieve the dictionary stored by affordability (18).py
 aff_store = st.session_state.get('aff_final', {})
 
-# Use the calculated max purchase price and down payment from affordability page
-# Fallback to defaults only if the affordability page hasn't been run yet
+# Fallback values from your original script if Affordability page hasn't been run
 raw_afford_max = aff_store.get('max_purchase', 800000.0) 
 raw_afford_down = aff_store.get('down_payment', 160000.0)
 
-# Retrieve rate from Affordability Store
+# Retrieve rate from Affordability Store (or default)
 def get_default_rate():
     if 'aff_final' in st.session_state:
         return st.session_state.aff_final.get('contract_rate', 4.49)
@@ -34,17 +33,22 @@ def get_default_rate():
     return 4.49
 
 # --- 2. PERSISTENCE ---
-if "mort_scen_store" not in st.session_state:
-    st.session_state.mort_scen_store = {
-        "price": raw_afford_max,       # Linked to Affordability Page
-        "down_payment": raw_afford_down, # Linked to Affordability Page
+if "mort_scen_list" not in st.session_state:
+    # Initialize with ONE default scenario using the linked data
+    st.session_state.mort_scen_list = [{
+        "id": 1,
+        "name": "Base Scenario",
+        "price": raw_afford_max,       # Linked
+        "down_payment": raw_afford_down, # Linked
         "rate": get_default_rate(),
         "amort": 25,
-        "prepay_active": False,
-        "prepay_amount": 1000.0,
-        "freq": "Monthly"
-    }
-store = st.session_state.mort_scen_store
+        "freq": "Monthly",
+        "prepay_mode": "None", # None, Monthly, Annual, One-Time
+        "prepay_amt": 0.0,
+        "prepay_yr": 1
+    }]
+
+scenarios = st.session_state.mort_scen_list
 
 # --- 3. THEME ---
 PRIMARY_GOLD = "#CEB36F"
@@ -76,152 +80,215 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. SIDEBAR INPUTS ---
+# --- 5. SIDEBAR: SCENARIO MANAGEMENT ---
 with st.sidebar:
-    st.header("🏠 Property & Loan")
+    st.header("🛠️ Scenario Builder")
     
-    # Sync button to refresh from Affordability Page (Manual Trigger)
-    if st.button("🔄 Sync with Affordability Page"):
+    # NEW: Sync Button for Manual Refresh
+    if st.button("🔄 Reset to Affordability Defaults"):
+        # Reset to a single scenario using latest affordability data
         latest_aff = st.session_state.get('aff_final', {})
-        store['price'] = latest_aff.get('max_purchase', 800000.0)
-        store['down_payment'] = latest_aff.get('down_payment', 160000.0)
+        st.session_state.mort_scen_list = [{
+            "id": 1,
+            "name": "Affordability Base",
+            "price": latest_aff.get('max_purchase', 800000.0),
+            "down_payment": latest_aff.get('down_payment', 160000.0),
+            "rate": get_default_rate(),
+            "amort": 25,
+            "freq": "Monthly",
+            "prepay_mode": "None",
+            "prepay_amt": 0.0,
+            "prepay_yr": 1
+        }]
         st.rerun()
 
-    store['price'] = st.number_input("Purchase Price ($)", value=float(store['price']), step=10000.0)
-    store['down_payment'] = st.number_input("Down Payment ($)", value=float(store['down_payment']), step=5000.0)
-    
-    st.divider()
-    st.header("📈 Rates & Terms")
-    store['rate'] = st.number_input("Mortgage Rate (%)", value=float(store['rate']), step=0.1)
-    store['amort'] = st.selectbox("Amortization (Years)", [15, 20, 25, 30], index=2)
-    store['freq'] = st.selectbox("Payment Frequency", ["Monthly", "Bi-Weekly", "Accelerated Bi-Weekly"])
-    
-    st.divider()
-    st.header("⚡ Acceleration")
-    store['prepay_active'] = st.checkbox("Enable Annual Prepayment?", value=store['prepay_active'])
-    store['prepay_amount'] = st.number_input("Annual Lump Sum ($)", value=float(store['prepay_amount']), step=500.0)
+    # Add New Scenario Button
+    if st.button("➕ Add New Scenario"):
+        if len(scenarios) < 5:
+            last_s = scenarios[-1]
+            new_id = last_s["id"] + 1
+            # Copy previous settings as base
+            scenarios.append({
+                "id": new_id,
+                "name": f"Scenario {new_id}",
+                "price": last_s["price"],
+                "down_payment": last_s["down_payment"],
+                "rate": last_s["rate"],
+                "amort": last_s["amort"],
+                "freq": last_s["freq"],
+                "prepay_mode": "None",
+                "prepay_amt": 0.0,
+                "prepay_yr": 1
+            })
+            st.rerun()
+        else:
+            st.warning("Max 5 scenarios allowed.")
 
-# --- 6. CALCULATIONS ---
-loan_amt = store['price'] - store['down_payment']
+    st.markdown("---")
+    
+    # EDIT TABS FOR SCENARIOS
+    if len(scenarios) > 0:
+        tabs = st.tabs([f"#{s['id']}" for s in scenarios])
+        for i, tab in enumerate(tabs):
+            s = scenarios[i]
+            with tab:
+                s['name'] = st.text_input("Label", s['name'], key=f"n_{s['id']}")
+                s['price'] = st.number_input("Price", value=float(s['price']), step=5000.0, key=f"p_{s['id']}")
+                s['down_payment'] = st.number_input("Down Pmt", value=float(s['down_payment']), step=5000.0, key=f"d_{s['id']}")
+                s['rate'] = st.number_input("Rate %", value=float(s['rate']), step=0.1, key=f"r_{s['id']}")
+                s['amort'] = st.selectbox("Amort", [15, 20, 25, 30], index=[15, 20, 25, 30].index(s['amort']), key=f"a_{s['id']}")
+                s['freq'] = st.selectbox("Freq", ["Monthly", "Bi-Weekly", "Accelerated Bi-Weekly"], 
+                                       index=["Monthly", "Bi-Weekly", "Accelerated Bi-Weekly"].index(s['freq']), key=f"f_{s['id']}")
+                
+                st.markdown("**Prepayment**")
+                s['prepay_mode'] = st.selectbox("Type", ["None", "Monthly Top-up", "Annual Lump Sum", "One-Time Lump Sum"], 
+                                              index=["None", "Monthly Top-up", "Annual Lump Sum", "One-Time Lump Sum"].index(s['prepay_mode']), 
+                                              key=f"pm_{s['id']}")
+                
+                if s['prepay_mode'] != "None":
+                    s['prepay_amt'] = st.number_input("Amount ($)", value=float(s['prepay_amt']), step=100.0, key=f"pa_{s['id']}")
+                    if s['prepay_mode'] == "One-Time Lump Sum":
+                        s['prepay_yr'] = st.number_input("In Year", value=int(s['prepay_yr']), min_value=1, max_value=30, key=f"py_{s['id']}")
+
+                # Remove Button
+                if len(scenarios) > 1:
+                    if st.button("🗑️ Remove", key=f"rem_{s['id']}"):
+                        scenarios.pop(i)
+                        st.rerun()
+
+# --- 6. CALCULATION ENGINE ---
 freq_map = {"Monthly": 12, "Bi-Weekly": 26, "Accelerated Bi-Weekly": 26}
-n_periods = store['amort'] * freq_map[store['freq']]
-periodic_rate = (store['rate'] / 100) / freq_map[store['freq']]
 
-# Standard Payment
-if store['freq'] == "Accelerated Bi-Weekly":
-    # Monthly payment divided by 2
-    monthly_pi = (loan_amt * ((store['rate']/100)/12)) / (1 - (1 + ((store['rate']/100)/12))**-(store['amort']*12))
-    base_pmt = monthly_pi / 2
-else:
-    base_pmt = (loan_amt * periodic_rate) / (1 - (1 + periodic_rate)**-n_periods)
-
-# --- 7. AMORTIZATION ENGINE ---
-def run_scenario(name, p, r, n, freq, extra_pmt_active, extra_val):
-    balance = p
-    data = []
-    total_life_int = 0
+def run_simulation(s):
+    loan = s['price'] - s['down_payment']
+    rate_periodic = (s['rate']/100) / freq_map[s['freq']]
+    n_periods = s['amort'] * freq_map[s['freq']]
     
-    # 5-Year Term Metrics
+    # Base Payment Calc
+    if s['freq'] == "Accelerated Bi-Weekly":
+        monthly_pi = (loan * ((s['rate']/100)/12)) / (1 - (1 + ((s['rate']/100)/12))**-(s['amort']*12))
+        base_pmt = monthly_pi / 2
+    else:
+        base_pmt = (loan * rate_periodic) / (1 - (1 + rate_periodic)**-n_periods)
+        
+    # Amortization Loop
+    balance = loan
+    total_int = 0
+    data = []
+    
+    # Cap at 50 years to avoid infinite loops
+    max_iter = 50 * freq_map[s['freq']]
+    
     term_int = 0
     term_prin = 0
     
-    # Dynamic Limit to prevent infinite loops (max 50 years)
-    max_p = 50 * freq_map[freq]
-    
-    for i in range(1, max_p + 1):
-        interest = balance * r
-        # Prepayment logic: apply annual lump sum at the end of each year
-        lump_sum = extra_val if (extra_pmt_active and i % freq_map[freq] == 0) else 0
+    for i in range(1, max_iter + 1):
+        interest = balance * rate_periodic
         
-        principal = min(balance, base_pmt - interest + lump_sum)
+        # Prepayment Logic
+        extra = 0
+        if s['prepay_mode'] == "Monthly Top-up":
+            # Convert monthly top-up logic to match frequency roughly
+            if s['freq'] == "Monthly": extra = s['prepay_amt']
+            else: extra = (s['prepay_amt'] * 12) / 26
+            
+        elif s['prepay_mode'] == "Annual Lump Sum":
+            if i % freq_map[s['freq']] == 0: extra = s['prepay_amt']
+            
+        elif s['prepay_mode'] == "One-Time Lump Sum":
+            if i == (s['prepay_yr'] * freq_map[s['freq']]): extra = s['prepay_amt']
+
+        principal = min(balance, base_pmt - interest + extra)
         balance -= principal
-        total_life_int += interest
+        total_int += interest
         
-        # Track 5-year milestone
-        if i <= 5 * freq_map[freq]:
+        # 5-Year Term Stats
+        if i <= 5 * freq_map[s['freq']]:
             term_int += interest
             term_prin += principal
-        
-        if i % freq_map[freq] == 0 or balance <= 0:
+            
+        if i % freq_map[s['freq']] == 0 or balance <= 0:
             data.append({
                 "Year": len(data) + 1,
                 "Balance": max(0, balance),
-                "Interest_Paid": total_life_int,
-                "Principal_Paid": p - balance
+                "Interest_Paid": total_int,
+                "Principal_Paid": loan - balance
             })
+            
         if balance <= 0: break
-    
+        
     return {
-        "Name": name,
+        "id": s['id'],
+        "name": s['name'],
         "df": pd.DataFrame(data),
-        "Total_Life_Int": int(total_life_int),
-        "Payoff_Time": len(data),
-        "Term_Int": int(term_int),
-        "Term_Prin": int(term_prin),
-        "Rate": store['rate'],
-        "Freq": freq,
-        "Prepay_Active": extra_pmt_active,
-        "Monthly_Avg": int(base_pmt if freq=="Monthly" else base_pmt * freq/12)
+        "total_int": total_int,
+        "years": len(data),
+        "term_prin": term_prin,
+        "term_int": term_int,
+        "payment": base_pmt
     }
 
-# --- 8. RUN SCENARIOS ---
-results = []
-results.append(run_scenario("Standard", loan_amt, periodic_rate, n_periods, store['freq'], False, 0))
-results.append(run_scenario("Acceleration Strategy", loan_amt, periodic_rate, n_periods, store['freq'], store['prepay_active'], store['prepay_amount']))
+results = [run_simulation(s) for s in scenarios]
 
-# --- 9. SUMMARY BAR ---
+# --- 7. DASHBOARD & VISUALS ---
 st.divider()
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Periodic Payment", f"${base_pmt:,.2f}")
-c2.metric("Interest Saved", f"${(results[0]['Total_Life_Int'] - results[1]['Total_Life_Int']):,}")
-c3.metric("Time Saved", f"{results[0]['Payoff_Time'] - results[1]['Payoff_Time']} Years")
-c4.metric("5-Year Equity", f"${results[1]['Term_Prin']:,}")
 
-# --- 10. VISUAL ANALYTICS ---
-tabs = st.tabs(["📉 Balance Trajectory", "💰 Cost of Borrowing", "📊 5-Year Equity Pulse", "📋 Structural Comparison"])
+# Top Metrics Row (Comparing Scenario 1 vs Last Scenario added)
+s1 = results[0]
+s2 = results[-1] if len(results) > 1 else results[0]
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric(f"Pmt ({s1['name']})", f"${s1['payment']:,.2f}")
+if len(results) > 1:
+    c2.metric("Interest Delta", f"${s1['total_int'] - s2['total_int']:,.0f}", delta_color="normal")
+    c3.metric("Time Delta", f"{s1['years'] - s2['years']} Years")
+else:
+    c2.metric("Total Interest", f"${s1['total_int']:,.0f}")
+    c3.metric("Payoff Time", f"{s1['years']} Years")
+c4.metric(f"5yr Equity ({s1['name']})", f"${s1['term_prin']:,.0f}")
+
+# Charts
+tabs = st.tabs(["📉 Balance Curves", "💰 Interest Accumulation", "📊 5-Year Milestone", "📋 Summary Table"])
 
 with tabs[0]:
-    fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(x=results[0]['df']["Year"], y=results[0]['df']["Balance"], name="Standard", line=dict(color=SLATE_ACCENT, width=2, dash='dash')))
-    fig1.add_trace(go.Scatter(x=results[1]['df']["Year"], y=results[1]['df']["Balance"], name="With Strategy", line=dict(color=PRIMARY_GOLD, width=4)))
-    st.plotly_chart(apply_style(fig1, "Mortgage Paydown Forecast"), use_container_width=True)
+    fig = go.Figure()
+    for res in results:
+        width = 4 if res == s2 and len(results) > 1 else 2
+        dash = 'solid' if res == s2 else 'dash'
+        fig.add_trace(go.Scatter(x=res['df']["Year"], y=res['df']["Balance"], name=res['name'], line=dict(width=width)))
+    st.plotly_chart(apply_style(fig, "Mortgage Paydown Trajectories"), use_container_width=True)
 
 with tabs[1]:
     fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=results[0]['df']["Year"], y=results[0]['df']["Interest_Paid"], name="Standard Interest", fill='tozeroy', line=dict(color=SLATE_ACCENT)))
-    fig2.add_trace(go.Scatter(x=results[1]['df']["Year"], y=results[1]['df']["Interest_Paid"], name="Strategy Interest", fill='tonexty', line=dict(color=PRIMARY_GOLD)))
-    st.plotly_chart(apply_style(fig2, "Cumulative Interest Over Time"), use_container_width=True)
+    for res in results:
+        fig2.add_trace(go.Scatter(x=res['df']["Year"], y=res['df']["Interest_Paid"], name=res['name'], fill='tonexty'))
+    st.plotly_chart(apply_style(fig2, "Cumulative Interest Costs"), use_container_width=True)
 
 with tabs[2]:
-    # Milestone check at Year 5
-    fig3 = px.bar(
-        pd.DataFrame([
-            {"Type": "Principal", "Amount": results[0]['Term_Prin'], "Scen": "Standard"},
-            {"Type": "Interest", "Amount": results[0]['Term_Int'], "Scen": "Standard"},
-            {"Type": "Principal", "Amount": results[1]['Term_Prin'], "Scen": "Strategy"},
-            {"Type": "Interest", "Amount": results[1]['Term_Int'], "Scen": "Strategy"}
-        ]), 
-        x="Scen", y="Amount", color="Type", barmode="group",
-        color_discrete_map={"Principal": PRIMARY_GOLD, "Interest": SLATE_ACCENT}, text_auto='$,.0f'
-    )
-    fig3.update_traces(textfont_size=18, marker_line_width=0)
-    st.plotly_chart(apply_style(fig3, "5-Year Milestone: Equity vs. Interest"), use_container_width=True)
+    # Bar chart for 5-Year Equity vs Interest
+    data_milestone = []
+    for res in results:
+        data_milestone.append({"Scenario": res['name'], "Type": "Principal", "Amount": res['term_prin']})
+        data_milestone.append({"Scenario": res['name'], "Type": "Interest", "Amount": res['term_int']})
+    
+    df_m = pd.DataFrame(data_milestone)
+    fig3 = px.bar(df_m, x="Scenario", y="Amount", color="Type", barmode="group", 
+                  color_discrete_map={"Principal": PRIMARY_GOLD, "Interest": SLATE_ACCENT}, text_auto='$,.0f')
+    st.plotly_chart(apply_style(fig3, "5-Year Term: Where did your payments go?"), use_container_width=True)
 
 with tabs[3]:
-    table_df = pd.DataFrame([{
-        "Scenario": r['Name'],
-        "Rate": f"{r['Rate']:.2f}%",
-        "Frequency": r['Freq'],
-        "Extra Pay Activity": r['Prepay_Active'], 
-        "Monthly Out": f"${r['Monthly_Avg']:,}",
-        "Equity (5yr)": f"${r['Term_Prin']:,}",
-        "Total Interest": f"${r['Total_Life_Int']:,}",
-        "Savings vs A": f"${(results[0]['Total_Life_Int'] - r['Total_Life_Int']):,}",
-        "Payoff Time": f"{r['Payoff_Time']} yr"
-    } for r in results])
-    st.table(table_df)
+    summary_data = []
+    for res in results:
+        summary_data.append({
+            "Name": res['name'],
+            "Monthly Pmt": f"${res['payment']:,.2f}" if "Monthly" in [s['freq'] for s in scenarios if s['id'] == res['id']][0] else "Varies",
+            "Total Interest": f"${res['total_int']:,.0f}",
+            "Payoff Years": res['years'],
+            "5yr Equity": f"${res['term_prin']:,.0f}"
+        })
+    st.table(pd.DataFrame(summary_data))
 
-# --- 11. LEGAL DISCLAIMER ---
+# --- 8. FOOTER ---
 st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
