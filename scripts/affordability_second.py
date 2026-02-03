@@ -64,7 +64,6 @@ with ts_col1:
     def_idx = prov_options.index(current_res_prov) if current_res_prov in prov_options else 0
     asset_province = st.selectbox("Asset Location (Province):", options=prov_options, index=def_idx)
 with ts_col2:
-    # UPDATED LABEL 1
     use_case = st.selectbox("Use of the Second Home:", ["Rental Property", "Family Vacation Home"])
     is_rental = True if use_case == "Rental Property" else False
 
@@ -107,18 +106,50 @@ stress_rate = max(5.25, store.get('contract_rate', 4.26) + 2.0)
 r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
 rent_offset = (store['manual_rent'] * 0.80) if is_rental else 0
+
+# --- UPDATED LOGIC FOR MAX QUALIFYING PRICE ---
+# Pillar 1: Debt Service Coverage (Qualifying Room)
 qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['annual_prop_tax'] / 12)
-max_buying_power = custom_round_up((qual_room / stress_k) + store['down_payment']) if qual_room > 0 else store['down_payment']
+max_by_income = (qual_room / stress_k) + store['down_payment'] if qual_room > 0 else store['down_payment']
+
+# Pillar 2: 20% Down Payment Ceiling
+max_by_dp = store['down_payment'] / 0.20
+
+# Final result is the minimum of the two
+max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
+
+
+
+# --- PROMINENT MAX BUYING POWER DISPLAY ---
+st.markdown(f"""
+<div style="background-color: {SLATE_ACCENT}; color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 25px; border: 2px solid {PRIMARY_GOLD};">
+    <p style="margin: 0; font-size: 1.1em; text-transform: uppercase; letter-spacing: 2px;">Maximum Qualified Buying Power</p>
+    <h1 style="margin: 10px 0; font-size: 3.5em; color: {PRIMARY_GOLD};">${max_buying_power:,.0f}</h1>
+    <p style="margin: 0; font-size: 0.95em; opacity: 0.9;">
+        This limit is driven by the <b>Minimum</b> of two stress tests:
+    </p>
+    <div style="display: flex; justify-content: center; gap: 20px; margin-top: 15px;">
+        <div style="background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 8px;">
+            <span style="font-size: 0.8em; display: block;">DSCR/Income Test</span>
+            <b>${max_by_income:,.0f}</b>
+        </div>
+        <div style="background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 8px;">
+            <span style="font-size: 0.8em; display: block;">20% Down Payment Rule</span>
+            <b>${max_by_dp:,.0f}</b>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 6. CORE INPUTS ---
-st.divider()
 c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
-    # UPDATED LABEL 2
-    store['down_payment'] = st.number_input("Down Payment ($)", value=float(store['down_payment']), step=5000.0)
-    new_price = st.number_input(f"Maximum Buying Power (Qualified: ${max_buying_power:,.0f})", 
+    store['down_payment'] = st.number_input("Available Down Payment ($)", value=float(store['down_payment']), step=5000.0)
+    
+    # User inputs purchase price within qualified range
+    new_price = st.number_input("Purchase Price ($)", 
                                 value=min(float(store['target_price']), max_buying_power), 
                                 max_value=max_buying_power, step=5000.0)
     
@@ -132,7 +163,6 @@ with c_left:
     if is_rental:
         store['manual_rent'] = st.number_input("Monthly Projected Rent ($)", value=float(store['manual_rent']))
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
-        # UPDATED LABEL 3
         store['vacancy_months'] = st.number_input("Vacancy (no. of months. max 12 mo)", 0.0, 12.0, value=float(store['vacancy_months']))
     else:
         st.info(f"ℹ️ Secondary Home: Household income must support costs in {asset_province}.")
@@ -224,13 +254,11 @@ else:
     v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
     v_msg = "Your household ecosystem shows strong resilience for this acquisition."
 
-# Build HTML line-by-line for stability
 v_html = []
 v_html.append(f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>")
 v_html.append(f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>")
 v_html.append(f"<p style='font-size: 1.05em; line-height: 1.5; margin-bottom: 10px;'>{v_msg}</p>")
 v_html.append("<div style='font-size: 1em;'>")
-# UPDATED LABEL 4
 v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses such as food, utilities, shopping, childcare, etc.</p>")
 
 if is_neg_carry:
