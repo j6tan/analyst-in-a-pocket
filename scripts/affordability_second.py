@@ -108,50 +108,31 @@ stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
 rent_offset = (store['manual_rent'] * 0.80) if is_rental else 0
 
 # --- UPDATED LOGIC FOR MAX QUALIFYING PRICE ---
-# Pillar 1: Debt Service Coverage (Qualifying Room)
 qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['annual_prop_tax'] / 12)
 max_by_income = (qual_room / stress_k) + store['down_payment'] if qual_room > 0 else store['down_payment']
-
-# Pillar 2: 20% Down Payment Ceiling
 max_by_dp = store['down_payment'] / 0.20
-
-# Final result is the minimum of the two
 max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
 
-
-
-# --- PROMINENT MAX BUYING POWER DISPLAY ---
-st.markdown(f"""
-<div style="background-color: {SLATE_ACCENT}; color: white; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 25px; border: 2px solid {PRIMARY_GOLD};">
-    <p style="margin: 0; font-size: 1.1em; text-transform: uppercase; letter-spacing: 2px;">Maximum Qualified Buying Power</p>
-    <h1 style="margin: 10px 0; font-size: 3.5em; color: {PRIMARY_GOLD};">${max_buying_power:,.0f}</h1>
-    <p style="margin: 0; font-size: 0.95em; opacity: 0.9;">
-        This limit is driven by the <b>Minimum</b> of two stress tests:
-    </p>
-    <div style="display: flex; justify-content: center; gap: 20px; margin-top: 15px;">
-        <div style="background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 8px;">
-            <span style="font-size: 0.8em; display: block;">DSCR/Income Test</span>
-            <b>${max_by_income:,.0f}</b>
-        </div>
-        <div style="background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 8px;">
-            <span style="font-size: 0.8em; display: block;">20% Down Payment Rule</span>
-            <b>${max_by_dp:,.0f}</b>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
 # --- 6. CORE INPUTS ---
+st.divider()
 c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
     store['down_payment'] = st.number_input("Available Down Payment ($)", value=float(store['down_payment']), step=5000.0)
     
-    # User inputs purchase price within qualified range
     new_price = st.number_input("Purchase Price ($)", 
                                 value=min(float(store['target_price']), max_buying_power), 
                                 max_value=max_buying_power, step=5000.0)
+
+    # Subtle Greyed-out Max Buying Power Box
+    st.markdown(f"""
+        <div style="background-color: #F1F3F5; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; text-transform: uppercase; font-weight: bold;">Max Qualified Buying Power</p>
+            <p style="margin: 0; font-size: 1.4em; color: {SLATE_ACCENT}; font-weight: 800;">${max_buying_power:,.0f}</p>
+            <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power is determined by the lower of the Income Test or 20% Down Payment rule.</p>
+        </div>
+    """, unsafe_allow_html=True)
     
     if new_price != store['target_price']:
         store['target_price'] = new_price
