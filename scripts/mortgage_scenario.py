@@ -12,11 +12,15 @@ client_name2 = prof.get('p2_name', 'Kevin')
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
 # --- UPDATED: DYNAMIC LINKING TO AFFORDABILITY PAGE ---
-# We retrieve the dictionary stored by affordability (18).py
+# Retrieve the dictionary stored by affordability (18).py
 aff_store = st.session_state.get('aff_final', {})
 
 # Fallback values from your original script if Affordability page hasn't been run
-raw_afford_max = aff_store.get('max_purchase', 800000.0) 
+# Note: In affordability (17).py (which seems to be the base for 18), 
+# max_purchase is often calculated. We try to grab 'max_purchase' first, 
+# if not found, we look for 'target_price' (from the second script variant).
+# Prioritizing the variable names from your affordability script logic.
+raw_afford_max = aff_store.get('max_purchase', aff_store.get('target_price', 800000.0))
 raw_afford_down = aff_store.get('down_payment', 160000.0)
 
 # Retrieve rate from Affordability Store (or default)
@@ -88,11 +92,15 @@ with st.sidebar:
     if st.button("🔄 Reset to Affordability Defaults"):
         # Reset to a single scenario using latest affordability data
         latest_aff = st.session_state.get('aff_final', {})
+        # Logic to grab max purchase or target price depending on which script populated it
+        p_val = latest_aff.get('max_purchase', latest_aff.get('target_price', 800000.0))
+        d_val = latest_aff.get('down_payment', 160000.0)
+        
         st.session_state.mort_scen_list = [{
             "id": 1,
             "name": "Affordability Base",
-            "price": latest_aff.get('max_purchase', 800000.0),
-            "down_payment": latest_aff.get('down_payment', 160000.0),
+            "price": p_val,
+            "down_payment": d_val,
             "rate": get_default_rate(),
             "amort": 25,
             "freq": "Monthly",
