@@ -107,11 +107,17 @@ r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
 rent_offset = (store['manual_rent'] * 0.80) if is_rental else 0
 
-# --- UPDATED LOGIC FOR MAX QUALIFYING PRICE ---
+# --- UPDATED LOGIC FOR DYNAMIC MAX QUALIFYING PRICE ---
 qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (store['annual_prop_tax'] / 12)
 max_by_income = (qual_room / stress_k) + store['down_payment'] if qual_room > 0 else store['down_payment']
 max_by_dp = store['down_payment'] / 0.20
-max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
+
+if max_by_income < max_by_dp:
+    max_buying_power = custom_round_up(max_by_income)
+    limit_reason = "Income Test"
+else:
+    max_buying_power = custom_round_up(max_by_dp)
+    limit_reason = "20% Down Payment rule"
 
 # --- 6. CORE INPUTS ---
 st.divider()
@@ -125,12 +131,12 @@ with c_left:
                                 value=min(float(store['target_price']), max_buying_power), 
                                 max_value=max_buying_power, step=5000.0)
 
-    # Subtle Darker Grey Max Buying Power Box with Proper Case
+    # Darker Grey Max Buying Power Box with Dynamic Note
     st.markdown(f"""
         <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-bottom: 20px;">
-            <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; text-transform: none; font-weight: bold;">Max Qualified Buying Power</p>
+            <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
             <p style="margin: 0; font-size: 1.4em; color: {SLATE_ACCENT}; font-weight: 800;">${max_buying_power:,.0f}</p>
-            <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power is determined by the lower of the Income Test or 20% Down Payment rule.</p>
+            <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power is limited by the <b>{limit_reason}</b>.</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -169,7 +175,6 @@ with c_right:
     
     total_opex_mo = (store['annual_prop_tax'] / 12) + store['strata_mo'] + store['insurance_mo'] + store['rm_mo'] + bc_extra_mo + mgmt_fee
     
-    # OpEx Box matched to darker grey shade
     st.markdown(f"""<div style="background-color: #E9ECEF; color: {SLATE_ACCENT}; padding: 8px 15px; border-radius: 5px; border: 1px solid #DEE2E6; text-align: center; margin-top: 10px;">
         Total Monthly OpEx: <b>${total_opex_mo:,.0f}</b></div>""", unsafe_allow_html=True)
 
