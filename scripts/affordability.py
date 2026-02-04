@@ -5,6 +5,10 @@ import os
 import json
 import math
 
+if st.button("⬅️ Back to Home Dashboard"):
+    st.switch_page("main_dashboard.py")
+st.divider()
+
 # --- 1. THEME & STYLING ---
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
@@ -283,3 +287,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
