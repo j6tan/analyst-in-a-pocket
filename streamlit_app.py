@@ -1,11 +1,15 @@
 import streamlit as st
 
-# --- 1. INITIALIZE GLOBAL VAULT ---
+# --- 1. INITIALIZE GLOBAL VAULT (Session State) ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = {
         "p1_name": "Investor", "p1_t4": 95000.0, "province": "BC",
-        "is_pro": False 
+        "car_loan": 0.0, "student_loan": 0.0, "cc_pmt": 0.0, "loc_balance": 0.0
     }
+
+# Fix for the AttributeError: Initialize is_pro before the checkbox
+if 'is_pro' not in st.session_state:
+    st.session_state.is_pro = False
 
 # --- 2. DEV TOOLS (Sidebar Toggle) ---
 with st.sidebar:
