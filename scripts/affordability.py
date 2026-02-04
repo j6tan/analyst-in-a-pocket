@@ -165,7 +165,24 @@ if "aff_final" not in st.session_state:
     }
 store = st.session_state.aff_final
 
-# --- 7. INPUTS & UI ---
+# --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
+st.subheader("⚙️ Underwriting Assumptions")
+uw_col1, uw_col2, uw_col3 = st.columns(3)
+with uw_col1:
+    c_rate = st.number_input("Bank Contract Rate %", value=4.26, step=0.01, key="f_crate")
+    s_rate = max(5.25, c_rate + 2.0)
+    st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
+with uw_col2:
+    store['down_payment'] = st.number_input("Down Payment ($)", value=store['down_payment'], key="f_dp")
+    store['prop_taxes'] = st.number_input("Annual Property Taxes", value=store['prop_taxes'], key="f_ptax")
+with uw_col3:
+    store['heat'] = st.number_input("Monthly Heat", value=store['heat'], key="f_heat")
+    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
+    strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
+
+st.divider()
+
+# --- 8. INPUTS & UI ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
@@ -177,7 +194,6 @@ with col_1:
 
 with col_2:
     st.subheader("💳 Debt & Status")
-    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
     store['monthly_debt'] = st.number_input("Monthly Debts", value=store['monthly_debt'], key="f_debt")
     store['is_fthb'] = st.checkbox("First-Time Home Buyer?", value=store['is_fthb'], key="f_fthb")
     if province == "Ontario":
@@ -191,17 +207,7 @@ with col_3:
     * **Rental:** Typically 'haircut' to **80%**.
     """)
 
-with st.sidebar:
-    st.header("⚙️ Underwriting")
-    c_rate = st.number_input("Bank Contract Rate %", value=4.26, step=0.01, key="f_crate")
-    s_rate = max(5.25, c_rate + 2.0)
-    st.warning(f"**Qualifying Rate:** {s_rate:.2f}%")
-    store['down_payment'] = st.number_input("Down Payment ($)", value=store['down_payment'], key="f_dp")
-    store['prop_taxes'] = st.number_input("Annual Property Taxes", value=store['prop_taxes'], key="f_ptax")
-    store['heat'] = st.number_input("Monthly Heat", value=store['heat'], key="f_heat")
-    strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
-
-# --- 8. CALCULATION LOGIC ---
+# --- 9. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
 gds_max = (monthly_inc * 0.39) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5)
 tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5) - store['monthly_debt']
@@ -287,4 +293,3 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
-
