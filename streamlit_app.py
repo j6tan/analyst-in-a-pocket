@@ -9,9 +9,13 @@ st.markdown("""
     <style>
     /* 1. Expand the main container and reduce top padding */
     .block-container {
-        padding-top: 1.5rem;
+        padding-top: 3rem;
         padding-bottom: 2rem;
         max-width: 95%; /* Expands the page horizontally */
+    }    
+    /* Ensure the back button container doesn't overlap */
+    .stButton button {
+        margin-top: 0.5rem;
     }
     /* 2. Prevent headers from wrapping into two lines */
     h1, h2, h3 {
@@ -93,5 +97,6 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
