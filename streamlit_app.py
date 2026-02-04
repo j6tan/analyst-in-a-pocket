@@ -2,7 +2,35 @@ import streamlit as st
 import json
 import os
 
-# --- 1. DATA PERSISTENCE LOGIC ---
+# --- 1. GLOBAL CONFIG (Universal De-Squish) ---
+st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
+
+st.markdown("""
+    <style>
+    /* 1. Expand the main container and reduce top padding */
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 2rem;
+        max-width: 95%; /* Expands the page horizontally */
+    }
+    /* 2. Prevent headers from wrapping into two lines */
+    h1, h2, h3 {
+        white-space: nowrap !important;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* 3. Increase spacing between columns to reduce 'squished' feel */
+    [data-testid="column"] {
+        padding: 0 1.5rem !important;
+    }
+    /* 4. Fix sidebar width for cleaner navigation */
+    section[data-testid="stSidebar"] {
+        width: 320px !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 2. DATA PERSISTENCE & VAULT ---
 DB_FILE = "user_profile_db.json"
 
 def load_profile():
@@ -12,26 +40,19 @@ def load_profile():
                 return json.load(f)
         except Exception:
             pass
-    # Default values if no file exists
     return {
-        "p1_name": "", "p2_name": "",
-        "p1_t4": 0.0, "p1_bonus": 0.0, "p1_commission": 0.0, "p1_pension": 0.0,
-        "p2_t4": 0.0, "p2_bonus": 0.0, "p2_commission": 0.0, "p2_pension": 0.0,
-        "inv_rental_income": 0.0,
-        "car_loan": 0.0, "student_loan": 0.0, "cc_pmt": 0.0, "loc_pmt": 0.0, "loc_balance": 0.0,
-        "housing_status": "Renting", "province": "Ontario",
-        "m_bal": 0.0, "m_rate": 0.0, "m_amort": 25, "prop_taxes": 4200.0, "rent_pmt": 0.0,
-        "heat_pmt": 125.0, "is_pro": False
+        "p1_name": "Investor", "p1_t4": 0.0, "p1_bonus": 0.0, 
+        "p1_commission": 0.0, "p1_pension": 0.0, "p2_t4": 0.0,
+        "province": "Ontario", "is_pro": False
     }
 
-# --- 2. INITIALIZE SESSION ---
 if 'user_profile' not in st.session_state:
     st.session_state.user_profile = load_profile()
 
 if 'is_pro' not in st.session_state:
     st.session_state.is_pro = st.session_state.user_profile.get("is_pro", False)
 
-# --- 3. DEV TOOLS (Sidebar Toggle) ---
+# --- 3. DEV TOOLS ---
 with st.sidebar:
     st.title("🛠️ Dev Tools")
     st.session_state.is_pro = st.checkbox("Simulate Paid Account", value=st.session_state.is_pro)
@@ -72,4 +93,5 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
