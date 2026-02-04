@@ -1,151 +1,46 @@
 import streamlit as st
-import json
-import os
-import pandas as pd
-import plotly.express as px
 
-# --- 1. GLOBAL CONFIG ---
-st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
-
-# --- 2. INITIALIZE GLOBAL VAULT ---
-if 'user_profile' not in st.session_state:
-    st.session_state.user_profile = {
-        "p1_name": "", "p2_name": "",
-        "p1_t4": 0.0, "p1_bonus": 0.0, "p1_commission": 0.0, "p1_pension": 0.0,
-        "p2_t4": 0.0, "p2_bonus": 0.0, "p2_commission": 0.0, "p2_pension": 0.0,
-        "inv_rental_income": 0.0,
-        "car_loan": 0.0, "student_loan": 0.0, "cc_pmt": 0.0, "loc_pmt": 0.0, "loc_balance": 0.0,
-        "housing_status": "Renting", "province": "Ontario",
-        "m_bal": 0.0, "m_rate": 0.0, "m_amort": 25, "prop_taxes": 4200.0, "rent_pmt": 0.0,
-        "heat_pmt": 125.0
-    }
-
-# --- 3. NAVIGATION ---
-tools = {
-    "👤 Client Profile": "MAIN",
-    "📊 Affordability Primary": "affordability.py",
-    "🏢 Affordability Secondary": "affordability_second.py", 
-    "🛡️ Smith Maneuver": "smith_maneuver.py",
-    "📉 Mortgage Scenarios": "mortgage_scenario.py",
-    "🔄 Renewal Dilemma": "renewal_analysis.py",
-    "⚖️ Buy vs Rent": "buy_vs_rent.py",
-    "⚖️ Rental vs Stock": "rental_vs_stock.py",
-}
-
-# --- GLOBAL SIDEBAR SAVE ---
-with st.sidebar:
-    selection = st.radio("Go to", list(tools.keys()))
-    st.divider()
-    st.subheader("💾 Global Management")
-    profile_json = json.dumps(st.session_state.user_profile, indent=4)
-    st.download_button(
-        label="Download Client Profile",
-        data=profile_json,
-        file_name="client_profile.json",
-        mime="application/json",
-        use_container_width=True
-    )
-
-# --- 4. PROFILE PAGE ---
-if selection == "👤 Client Profile":
-    header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-    with header_col1:
-        if os.path.exists("logo.png"):
-            st.image("logo.png", width=140)
-    with header_col2:
-        st.title("General Client Information")
-
-    st.subheader("💾 Profile Management")
-    up_col1, up_col2 = st.columns(2)
-    with up_col1:
-        uploaded_file = st.file_uploader("Upload Existing Profile (JSON)", type=["json"])
-        if uploaded_file is not None:
-            st.session_state.user_profile.update(json.load(uploaded_file))
-            st.success("Profile Loaded!")
-
-    st.subheader("👥 Household Income Details")
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown("### Primary Client")
-        st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile['p1_name'])
-        st.session_state.user_profile['p1_t4'] = st.number_input("T4 (Employment Income)", value=float(st.session_state.user_profile['p1_t4']))
-        st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses / Performance Pay", value=float(st.session_state.user_profile['p1_bonus']))
-        st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile['p1_commission']))
-        st.session_state.user_profile['p1_pension'] = st.number_input("Pension / CPP / OAS", value=float(st.session_state.user_profile['p1_pension']))
+def show_main_dashboard():
+    st.title("🚀 Analyst in a Pocket: FIRE Dashboard")
     
-    with c2:
-        st.markdown("### Co-Owner / Partner")
-        st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile['p2_name'])
-        st.session_state.user_profile['p2_t4'] = st.number_input("T4 (Employment Income) ", value=float(st.session_state.user_profile['p2_t4']))
-        st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses / Performance Pay ", value=float(st.session_state.user_profile['p2_bonus']))
-        st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile['p2_commission']))
-        st.session_state.user_profile['p2_pension'] = st.number_input("Pension / CPP / OAS ", value=float(st.session_state.user_profile['p2_pension']))
+    # --- SECTION 1: FOUNDATIONS ---
+    st.header("🏠 Foundations & Budgeting")
+    f_col1, f_col2, f_col3 = st.columns(3)
+    
+    with f_col1:
+        with st.container(border=True):
+            st.subheader("Budget Tracker")
+            st.write("Manage monthly cashflow and savings rate.")
+            if st.button("Open Tracker", key="btn_budget"):
+                st.session_state.current_page = "budget" # Logic to switch pages
+                
+    with f_col2:
+        with st.container(border=True):
+            st.subheader("Simple Affordability")
+            st.write("Quick check on home purchase limits.")
+            st.button("Calculate", key="btn_afford")
 
-    st.session_state.user_profile['inv_rental_income'] = st.number_input("Joint Rental Income (Current Portfolio)", value=float(st.session_state.user_profile['inv_rental_income']))
-
+    # --- SECTION 2: BUYING/SELLING ---
     st.divider()
-    st.subheader("🏠 Housing & Property Details")
-    h_toggle, h_data = st.columns([1, 2])
-    with h_toggle:
-        st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile['housing_status'] == "Renting" else 1)
-    with h_data:
-        if st.session_state.user_profile['housing_status'] == "Renting":
-            st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)))
-        else:
-            sub_c1, sub_c2 = st.columns(2)
-            with sub_c1:
-                st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)))
-                st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)))
-            with sub_c2:
-                st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)))
-                st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)))
-                st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)))
+    st.header("💰 Buying & Selling Process")
+    b_col1, b_col2, b_col3 = st.columns(3)
+    
+    # ... Similar logic for Buying/Selling tools ...
 
+    # --- SECTION 3: ADVANCED (TIER 2) ---
     st.divider()
+    st.header("🚀 Advanced Wealth Strategy (Pro)")
+    a_col1, a_col2 = st.columns(2)
+    
+    with a_col1:
+        # Use a grayed-out style or "locked" visual for Pro tools
+        with st.container(border=True):
+            st.subheader("🇨🇦 Smith Maneuver 🔒")
+            st.caption("Strategic tax-deductible mortgage conversion.")
+            st.button("Upgrade to Unlock", key="btn_smith", type="primary")
 
-    def show_history():
-        history_path = 'data/market_history.json'
-        if os.path.exists(history_path):
-            with open(history_path, 'r') as f:
-                history_data = json.load(f)
-            
-            if len(history_data) > 1:
-                df = pd.DataFrame(history_data)
-                fig = px.line(df, x="date", y=["prime", "fixed_5"], 
-                              title="Interest Rate Trends (Historical)",
-                              labels={"value": "Rate (%)", "date": "Date"},
-                              template="plotly_white",
-                              markers=True)
-                newnames = {'prime': 'Bank Prime', 'fixed_5': '5yr Fixed'}
-                fig.for_each_trace(lambda t: t.update(name = newnames[t.name]))
-                fig.update_layout(legend_title_text='Rate Type')
-                st.plotly_chart(fig, use_container_width=True)
-            elif len(history_data) == 1:
-                st.info("📈 **First data point recorded!**")
-                df_single = pd.DataFrame(history_data)
-                st.table(df_single)
-            else:
-                st.info("📊 Historical data is currently being compiled.")
-        else:
-            st.warning("⚠️ Market history file not found.")
-
-    with st.expander("📈 View Historical Interest Rate Trends", expanded=False):
-        show_history()
-
-    st.divider()
-    st.subheader("💳 Monthly Liabilities")
-    l1, l2, l3 = st.columns(3)
-    with l1:
-        st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile['car_loan']))
-        st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments (Monthly)", value=float(st.session_state.user_profile['student_loan']))
-    with l2:
-        st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Monthly)", value=float(st.session_state.user_profile['cc_pmt']))
-        st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance ($)", value=float(st.session_state.user_profile['loc_balance']))
-    with l3:
-        prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
-        st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')))
-
-else:
-    file_path = os.path.join("scripts", tools[selection])
-    if os.path.exists(file_path):
-        exec(open(file_path, encoding="utf-8").read(), globals())
+    with a_col2:
+        with st.container(border=True):
+            st.subheader("🏘️ Rental Analyzer 🔒")
+            st.caption("Deep-dive into Cap Rates and ROI.")
+            st.button("Upgrade to Unlock", key="btn_rental", type="primary")
