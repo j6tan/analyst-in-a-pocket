@@ -3,77 +3,57 @@ import streamlit as st
 def inject_global_css():
     st.markdown("""
         <style>
-        /* 1. Typography & Global Reset */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        /* 1. IMPORT GOOGLE FONTS (Inter is the closest match to Wealthsimple) */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
         
-        html, body, [data-testid="stAppViewContainer"] {
-            font-family: 'Inter', -apple-system, sans-serif !important;
-            background-color: #FFFFFF !important;
+        /* 2. APPLY TO ALL ELEMENTS */
+        html, body, [data-testid="stAppViewContainer"], .stMarkdown, p, span {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
             color: #1a1a1a !important;
+            -webkit-font-smoothing: antialiased;
         }
 
-        /* 2. Expansive Layout (De-Squishing) */
-        .block-container {
-            padding-top: 5rem !important; 
-            padding-bottom: 5rem !important;
-            padding-left: 7% !important;
-            padding-right: 7% !important;
-            max-width: 1400px !important;
-        }
-
-        /* 3. Wealthsimple Ink Headers */
+        /* 3. WEALTHSIMPLE EDITORIAL TITLES */
         h1 {
             font-weight: 800 !important;
-            letter-spacing: -0.03em !important;
+            letter-spacing: -0.04em !important; /* This "tight" spacing is the WS secret */
+            line-height: 1.1 !important;
+            font-size: 3.2rem !important;
             color: #000000 !important;
-            font-size: 3rem !important;
-            margin-bottom: 2rem !important;
         }
 
         h2, h3 {
             font-weight: 700 !important;
             letter-spacing: -0.02em !important;
             color: #1a1a1a !important;
-            margin-top: 2rem !important;
         }
 
-        /* 4. The Wealthsimple "Gold" Button */
+        /* 4. BUTTON TEXT STYLE */
         div.stButton > button {
-            background-color: #FFD448 !important; /* WS Signature Gold */
-            color: #000000 !important;
-            border: none !important;
-            border-radius: 50px !important; /* Pills, not boxes */
-            padding: 0.75rem 2.5rem !important;
+            font-family: 'Inter', sans-serif !important;
             font-weight: 600 !important;
-            font-size: 1rem !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
-            transition: all 0.3s ease !important;
+            letter-spacing: -0.01em !important;
+            text-transform: none !important; /* WS avoids all-caps buttons */
+            background-color: #FFD448 !important;
+            border-radius: 50px !important;
+            border: none !important;
+            padding: 0.6rem 2rem !important;
         }
 
-        div.stButton > button:hover {
-            background-color: #f7c325 !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        /* 5. METRIC LABEL STYLE (The small text above numbers) */
+        [data-testid="stMetricLabel"] p {
+            font-weight: 500 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.05em !important;
+            font-size: 0.75rem !important;
+            color: #666666 !important;
         }
 
-        /* 5. Clean White Cards */
-        [data-testid="stVerticalBlock"] > div[style*="border: 1px solid"] {
-            background-color: #FFFFFF !important;
-            border: 1px solid #EDEDED !important;
-            border-radius: 16px !important;
-            padding: 2.5rem !important;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
+        /* 6. INPUT LABEL STYLE */
+        label[data-testid="stWidgetLabel"] p {
+            font-weight: 600 !important;
+            font-size: 0.95rem !important;
+            margin-bottom: 0.5rem !important;
         }
-
-        /* 6. Inputs - Minimalist Borders */
-        .stNumberInput input, .stTextInput input, .stSelectbox div[data-baseweb="select"] {
-            border-radius: 12px !important;
-            border: 1px solid #D1D1D1 !important;
-            background-color: #FAFAFA !important;
-        }
-
-        /* 7. Hide Streamlit Branding */
-        header {visibility: hidden;}
-        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
