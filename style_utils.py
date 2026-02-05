@@ -77,6 +77,15 @@ def inject_global_css():
             font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
             letter-spacing: -0.04em !important;
         }
+        /* Style for Sidebar Group Headers */
+        [data-testid="stSidebarNavItems"] div:has(span) {
+            font-weight: 700 !important;
+            text-transform: uppercase !important;
+            font-size: 0.75rem !important;
+            letter-spacing: 0.05em !important;
+            color: #666666 !important;
+            margin-top: 1rem !important;
+        }
         
         /* Hide Default Clutter */
         header, footer {visibility: hidden;}
