@@ -41,12 +41,8 @@ pages = {
     "Overview": [
         st.Page("home.py", title="Home Dashboard", icon="🏠", default=True),
         st.Page("scripts/profile.py", title="Client Profile", icon="👤"),
-    ],
-    "🏠 Foundations & Budgeting": [
         st.Page("scripts/affordability.py", title="Simple Affordability", icon="🤔"),
         st.Page("scripts/buy_vs_rent.py", title="Buy vs Rent", icon="⚖️"),
-    ],
-    "🚀 Advanced Wealth Strategy": [
         st.Page("scripts/mortgage_scenario.py", title="Mortgage Scenarios 🔒", icon="📈"),
         st.Page("scripts/smith_maneuver.py", title="Smith Maneuver 🔒", icon="🛡️"),
         st.Page("scripts/affordability_second.py", title="Secondary Property 🔒", icon="🏢"),
@@ -57,6 +53,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
 
