@@ -3,6 +3,8 @@ import streamlit as st
 def inject_global_css():
     st.markdown("""
         <style>
+        /* TEMPORARY TEST: If the sidebar doesn't turn pink, the file isn't loading */
+        [data-testid="stSidebar"] { background-color: pink !important; }
         /* 1. WEALTHSIMPLE TYPEFACE (Inter) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
