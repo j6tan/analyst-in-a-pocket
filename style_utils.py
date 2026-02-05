@@ -3,80 +3,77 @@ import streamlit as st
 def inject_global_css():
     st.markdown("""
         <style>
-        /* Wealthsimple-inspired Global Styles */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-
-        html, body, [data-testid="stapp"] {
-            font-family: 'Inter', sans-serif;
-            background-color: #FFFFFF;
-        }
-
-        /* 1. Universal "De-Squishing" */
-        .block-container {
-            padding-top: 4rem !important; /* Prevents button cutoff */
-            padding-bottom: 5rem;
-            padding-left: 6rem !important;
-            padding-right: 6rem !important;
-            max-width: 1200px; /* Standard readable width for fintech apps */
-        }
-
-        /* 2. Wealthsimple Header Style */
-        h1 {
-            font-weight: 700 !important;
+        /* 1. Typography & Global Reset */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        html, body, [data-testid="stAppViewContainer"] {
+            font-family: 'Inter', -apple-system, sans-serif !important;
+            background-color: #FFFFFF !important;
             color: #1a1a1a !important;
-            letter-spacing: -0.02em !important;
-            margin-bottom: 1.5rem !important;
-            white-space: nowrap !important;
+        }
+
+        /* 2. Expansive Layout (De-Squishing) */
+        .block-container {
+            padding-top: 5rem !important; 
+            padding-bottom: 5rem !important;
+            padding-left: 7% !important;
+            padding-right: 7% !important;
+            max-width: 1400px !important;
+        }
+
+        /* 3. Wealthsimple Ink Headers */
+        h1 {
+            font-weight: 800 !important;
+            letter-spacing: -0.03em !important;
+            color: #000000 !important;
+            font-size: 3rem !important;
+            margin-bottom: 2rem !important;
         }
 
         h2, h3 {
-            color: #2a2a2a !important;
-            font-weight: 600 !important;
+            font-weight: 700 !important;
+            letter-spacing: -0.02em !important;
+            color: #1a1a1a !important;
+            margin-top: 2rem !important;
         }
 
-        /* 3. Clean Buttons (Wealthsimple Gold/Yellow) */
+        /* 4. The Wealthsimple "Gold" Button */
         div.stButton > button {
-            background-color: #FFD448 !important; /* WS Yellow */
-            color: #1a1a1a !important;
+            background-color: #FFD448 !important; /* WS Signature Gold */
+            color: #000000 !important;
             border: none !important;
-            border-radius: 8px !important;
-            padding: 0.6rem 1.2rem !important;
+            border-radius: 50px !important; /* Pills, not boxes */
+            padding: 0.75rem 2.5rem !important;
             font-weight: 600 !important;
-            transition: all 0.2s ease;
+            font-size: 1rem !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+            transition: all 0.3s ease !important;
         }
 
         div.stButton > button:hover {
             background-color: #f7c325 !important;
-            transform: translateY(-1px);
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
         }
 
-        /* 4. Secondary/Back Buttons */
-        div.stButton > button[kind="secondary"] {
-            background-color: #f2f2f2 !important;
-            color: #4a4a4a !important;
+        /* 5. Clean White Cards */
+        [data-testid="stVerticalBlock"] > div[style*="border: 1px solid"] {
+            background-color: #FFFFFF !important;
+            border: 1px solid #EDEDED !important;
+            border-radius: 16px !important;
+            padding: 2.5rem !important;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.04) !important;
         }
 
-        /* 5. Inputs & Forms */
-        [data-testid="stNumberInput"], [data-testid="stTextInput"], [data-testid="stSelectbox"] {
-            border-radius: 8px !important;
-            margin-bottom: 1rem;
-        }
-
-        /* 6. Custom Cards (Passport/Tools) */
-        .stElementContainer div[data-testid="stVerticalBlock"] > div[style*="border: 1px solid"] {
-            border: 1px solid #e5e5e5 !important;
+        /* 6. Inputs - Minimalist Borders */
+        .stNumberInput input, .stTextInput input, .stSelectbox div[data-baseweb="select"] {
             border-radius: 12px !important;
-            padding: 2rem !important;
-            background-color: #ffffff !important;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02) !important;
+            border: 1px solid #D1D1D1 !important;
+            background-color: #FAFAFA !important;
         }
 
-        /* 7. The Paywall Blur (Option C) */
-        .blurred-content {
-            filter: blur(10px);
-            opacity: 0.6;
-            pointer-events: none;
-            user-select: none;
-        }
+        /* 7. Hide Streamlit Branding */
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
