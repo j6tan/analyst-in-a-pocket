@@ -2,6 +2,14 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import os
+from style_utils import inject_global_css
+
+# 1. Inject the Wealthsimple-inspired Editorial CSS
+inject_global_css()
+
+if st.button("⬅️ Back to Home Dashboard"):
+    st.switch_page("home.py")
+st.divider()
 
 # --- 1. THEME & BRANDING ---
 PRIMARY_GOLD = "#CEB36F"
@@ -186,5 +194,6 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
+
 
 st.caption("Analyst in a Pocket | Strategic Wealth Hub")
