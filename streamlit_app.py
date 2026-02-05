@@ -8,35 +8,6 @@ st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="ð
 
 inject_global_css() # Keep styles active on this page
 
-st.markdown("""
-    <style>
-    /* 1. Expand the main container and reduce top padding */
-    .block-container {
-        padding-top: 3rem;
-        padding-bottom: 2rem;
-        max-width: 95%; /* Expands the page horizontally */
-    }    
-    /* Ensure the back button container doesn't overlap */
-    .stButton button {
-        margin-top: 0.5rem;
-    }
-    /* 2. Prevent headers from wrapping into two lines */
-    h1, h2, h3 {
-        white-space: nowrap !important;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    /* 3. Increase spacing between columns to reduce 'squished' feel */
-    [data-testid="column"] {
-        padding: 0 1.5rem !important;
-    }
-    /* 4. Fix sidebar width for cleaner navigation */
-    section[data-testid="stSidebar"] {
-        width: 320px !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # --- 2. DATA PERSISTENCE & VAULT ---
 DB_FILE = "user_profile_db.json"
 
@@ -100,6 +71,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
 
