@@ -3,8 +3,6 @@ import streamlit as st
 def inject_global_css():
     st.markdown("""
         <style>
-        /* TEMPORARY TEST: If the sidebar doesn't turn pink, the file isn't loading */
-        [data-testid="stSidebar"] { background-color: pink !important; }
         /* 1. WEALTHSIMPLE TYPEFACE (Inter) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
@@ -80,27 +78,20 @@ def inject_global_css():
             letter-spacing: -0.04em !important;
         }
 
-        /* --- 8. SIDEBAR GROUP TITLES FIX (The Critical Update) --- */
-        
-        /* Reset padding to prevent overlap */
-        [data-testid="stSidebarNavItems"] ul {
-            padding-top: 0.5rem !important;
-            padding-bottom: 0.5rem !important;
-        }
-
-        /* Target strictly the header text in the sidebar */
-        div[data-testid="stSidebarNavItems"] > div > div > span,
-        div[data-testid="stSidebarNavItems"] > div > small {
-            visibility: visible !important;
-            display: block !important;
-            font-family: 'Inter', sans-serif !important;
-            font-weight: 800 !important;
-            text-transform: uppercase !important;
-            font-size: 0.75rem !important;
-            letter-spacing: 0.08em !important;
-            color: #7F7F7F !important; /* 50% Grey */
-            margin-top: 2rem !important;
-            margin-bottom: 0.5rem !important;
+        /* --- UNIVERSAL SIDEBAR HEADER FIX --- */
+        [data-testid="stSidebarNavSeparator"] + div span,
+        [data-testid="stSidebarNavSeparator"] + div div,
+        [data-testid="stSidebarNavItems"] > div > div > span {
+        visibility: visible !important;
+        display: block !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 800 !important;
+        text-transform: uppercase !important;
+        font-size: 0.75rem !important;
+        letter-spacing: 0.08em !important;
+        color: #7F7F7F !important;
+        margin-top: 2rem !important;
+        margin-bottom: 0.5rem !important;
         }
         
         /* HIDE DEFAULT STREAMLIT CLUTTER */
