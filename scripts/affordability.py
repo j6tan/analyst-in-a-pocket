@@ -10,7 +10,7 @@ from style_utils import inject_global_css
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
-    st.switch_page("main_dashboard.py")
+    st.switch_page("home.py")
 st.divider()
 
 # --- 1. THEME & STYLING ---
@@ -297,4 +297,5 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
