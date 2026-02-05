@@ -2,6 +2,14 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import os
+from style_utils import inject_global_css
+
+# 1. Inject the Wealthsimple-inspired Editorial CSS
+inject_global_css()
+
+if st.button("⬅️ Back to Home Dashboard"):
+    st.switch_page("home.py")
+st.divider()
 
 # --- 1. THEME & BRANDING ---
 SCENARIO_COLORS = ["#CEB36F", "#706262", "#2E2B28", "#C0A385", "#E7E7E7"]
@@ -147,4 +155,5 @@ st.markdown("""
         <strong>⚠️ Disclaimer:</strong> The Smith Maneuver involves investment risk and leverage. If your portfolio return is lower than your HELOC interest rate, you may lose money. This tool is for educational purposes only.
     </p>
 </div>
+
 """, unsafe_allow_html=True)
