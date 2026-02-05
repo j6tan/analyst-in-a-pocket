@@ -3,6 +3,14 @@ import pandas as pd
 import os
 import json
 import math
+from style_utils import inject_global_css
+
+# 1. Inject the Wealthsimple-inspired Editorial CSS
+inject_global_css()
+
+if st.button("⬅️ Back to Home Dashboard"):
+    st.switch_page("home.py")
+st.divider()
 
 # --- 1. THEME & STYLING ---
 PRIMARY_GOLD = "#CEB36F"
@@ -276,3 +284,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption(f"Analyst in a Pocket | Portfolio Strategy | Asset Province: {asset_province}")
+
