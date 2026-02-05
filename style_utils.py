@@ -11,9 +11,9 @@ def inject_global_css():
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 2. DYNAMIC LAYOUT (De-Squishing) */
+        /* 2. DYNAMIC LAYOUT (Expansive & Responsive) */
         .block-container {
-            padding-top: clamp(2rem, 5vh, 5rem) !important;
+            padding-top: clamp(3rem, 7vh, 5rem) !important;
             padding-bottom: 5rem !important;
             padding-left: clamp(1rem, 6vw, 10rem) !important;
             padding-right: clamp(1rem, 6vw, 10rem) !important;
@@ -23,25 +23,25 @@ def inject_global_css():
         /* 3. DYNAMIC EDITORIAL TITLES (800 Weight) */
         h1 {
             font-weight: 800 !important;
-            letter-spacing: -0.045em !important; /* Tight letter spacing */
+            letter-spacing: -0.045em !important; 
             line-height: 1.05 !important;
             font-size: clamp(2.2rem, 4.8vw, 3.8rem) !important; 
             color: #1a1a1a !important;
             margin-bottom: 1.2rem !important;
         }
 
-        h2 {
-            font-size: clamp(1.5rem, 2.8vw, 2.4rem) !important;
+        h2, h3 {
             font-weight: 700 !important;
             letter-spacing: -0.025em !important;
+            color: #1a1a1a !important;
         }
 
-        /* 4. 50% GREY PILL BUTTONS */
+        /* 4. DEEP CHARCOAL GREY BUTTONS (#4D4D4D) */
         div.stButton > button {
-            background-color: #7F7F7F !important; /* 50% Grey */
+            background-color: #4D4D4D !important;
             color: #ffffff !important;
             border: none !important;
-            border-radius: 50px !important; /* Pill Shape */
+            border-radius: 50px !important; 
             padding: 0.7rem clamp(1.5rem, 3vw, 3rem) !important;
             font-weight: 600 !important;
             font-size: clamp(0.9rem, 1vw, 1.1rem) !important;
@@ -51,7 +51,7 @@ def inject_global_css():
         }
 
         div.stButton > button:hover {
-            background-color: #666666 !important; /* Slightly darker grey on hover */
+            background-color: #333333 !important;
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
         }
@@ -77,27 +77,33 @@ def inject_global_css():
             font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
             letter-spacing: -0.04em !important;
         }
-        /* --- SIDEBAR GROUP TITLES FIX --- */
-        /* Target the Group Name container in the Sidebar */
-        [data-testid="stSidebarNavItems"] div:has(span) p {
+
+        /* --- 8. SIDEBAR GROUP TITLES FIX (The Critical Update) --- */
+        
+        /* Reset padding to prevent overlap */
+        [data-testid="stSidebarNavItems"] ul {
+            padding-top: 0.5rem !important;
+            padding-bottom: 0.5rem !important;
+        }
+
+        /* Target strictly the header text in the sidebar */
+        div[data-testid="stSidebarNavItems"] > div > div > span,
+        div[data-testid="stSidebarNavItems"] > div > small {
+            visibility: visible !important;
+            display: block !important;
+            font-family: 'Inter', sans-serif !important;
             font-weight: 800 !important;
             text-transform: uppercase !important;
-            font-size: 0.7rem !important;
+            font-size: 0.75rem !important;
             letter-spacing: 0.08em !important;
-            color: #7F7F7F !important; /* 50% Grey for headers */
-            margin-top: 1.8rem !important;
-            margin-bottom: 0.4rem !important;
-            padding-left: 1rem !important;
-            display: block !important;
-            visibility: visible !important;
+            color: #7F7F7F !important; /* 50% Grey */
+            margin-top: 2rem !important;
+            margin-bottom: 0.5rem !important;
         }
-
-        /* Adjust the spacing of the list items under the header */
-        [data-testid="stSidebarNavItems"] ul {
-            padding-top: 0px !important;
-        }
-
-        /* Hide Default Streamlit Clutter */
-        header, footer {visibility: hidden;}
+        
+        /* HIDE DEFAULT STREAMLIT CLUTTER */
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stDeployButton {display:none;}
         </style>
     """, unsafe_allow_html=True)
