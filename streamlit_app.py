@@ -3,6 +3,7 @@ import json
 import os
 from style_utils import inject_global_css
 
+
 # --- 1. GLOBAL CONFIG (Universal De-Squish) ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
 
@@ -57,6 +58,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
 
