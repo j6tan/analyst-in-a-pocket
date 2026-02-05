@@ -1,13 +1,18 @@
 import streamlit as st
 import json
+from style_utils import inject_global_css
+
+# 1. Inject the Wealthsimple-inspired Editorial CSS
+inject_global_css()
+
+if st.button("⬅️ Back to Home Dashboard"):
+    st.switch_page("home.py")
+st.divider()
 
 # Internal function to save to the local JSON file
 def sync_data():
     with open("user_profile_db.json", "w") as f:
         json.dump(st.session_state.user_profile, f, indent=4)
-
-if st.button("⬅️ Back to Dashboard"):
-    st.switch_page("home.py")
 
 st.title("👤 General Client Information")
 st.info("Your information is saved automatically to your local session.")
