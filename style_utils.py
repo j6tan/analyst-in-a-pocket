@@ -77,17 +77,27 @@ def inject_global_css():
             font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
             letter-spacing: -0.04em !important;
         }
-        /* Style for Sidebar Group Headers */
-        [data-testid="stSidebarNavItems"] div:has(span) {
-            font-weight: 700 !important;
+        /* --- SIDEBAR GROUP TITLES FIX --- */
+        /* Target the Group Name container in the Sidebar */
+        [data-testid="stSidebarNavItems"] div:has(span) p {
+            font-weight: 800 !important;
             text-transform: uppercase !important;
-            font-size: 0.75rem !important;
-            letter-spacing: 0.05em !important;
-            color: #666666 !important;
-            margin-top: 1rem !important;
+            font-size: 0.7rem !important;
+            letter-spacing: 0.08em !important;
+            color: #7F7F7F !important; /* 50% Grey for headers */
+            margin-top: 1.8rem !important;
+            margin-bottom: 0.4rem !important;
+            padding-left: 1rem !important;
+            display: block !important;
+            visibility: visible !important;
         }
-        
-        /* Hide Default Clutter */
+
+        /* Adjust the spacing of the list items under the header */
+        [data-testid="stSidebarNavItems"] ul {
+            padding-top: 0px !important;
+        }
+
+        /* Hide Default Streamlit Clutter */
         header, footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
