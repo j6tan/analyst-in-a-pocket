@@ -1,4 +1,8 @@
 import streamlit as st
+from style_utils import inject_global_css
+
+# Ensure style is injected
+inject_global_css()
 
 # --- 1. SESSION CHECK (Defensive Coding) ---
 if 'user_profile' not in st.session_state:
