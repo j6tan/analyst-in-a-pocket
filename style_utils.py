@@ -6,76 +6,77 @@ def inject_global_css():
         /* 1. WEALTHSIMPLE TYPEFACE (Inter) */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         
-        html, body, [data-testid="stAppViewContainer"] {
+        html, body, [data-testid="stAppViewContainer"], .stMarkdown, p, span {
             font-family: 'Inter', sans-serif !important;
+            color: #1a1a1a !important;
             -webkit-font-smoothing: antialiased;
         }
 
-        /* 2. DYNAMIC LAYOUT (De-Squishing) */
+        /* 2. DYNAMIC LAYOUT (Expansive & Responsive) */
         .block-container {
-            padding-top: clamp(2rem, 5vh, 5rem) !important;
+            padding-top: clamp(2.5rem, 6vh, 6rem) !important;
             padding-bottom: 5rem !important;
-            padding-left: clamp(1rem, 6vw, 10rem) !important;
-            padding-right: clamp(1rem, 6vw, 10rem) !important;
-            max-width: 1400px !important;
+            padding-left: clamp(1rem, 7vw, 12rem) !important;
+            padding-right: clamp(1rem, 7vw, 12rem) !important;
+            max-width: 1450px !important;
         }
 
         /* 3. DYNAMIC EDITORIAL TITLES (800 Weight) */
         h1 {
             font-weight: 800 !important;
-            letter-spacing: -0.045em !important; /* Tight letter spacing */
+            letter-spacing: -0.05em !important; /* Extra tight for editorial feel */
             line-height: 1.05 !important;
-            font-size: clamp(2.2rem, 4.8vw, 3.8rem) !important; 
-            color: #1a1a1a !important;
-            margin-bottom: 1.2rem !important;
+            font-size: clamp(2.4rem, 5vw, 4rem) !important; 
+            color: #000000 !important;
+            margin-bottom: 1.5rem !important;
         }
 
         h2 {
-            font-size: clamp(1.5rem, 2.8vw, 2.4rem) !important;
+            font-size: clamp(1.6rem, 3vw, 2.5rem) !important;
             font-weight: 700 !important;
-            letter-spacing: -0.025em !important;
+            letter-spacing: -0.03em !important;
         }
 
-        /* 4. 50% GREY PILL BUTTONS */
+        /* 4. DEEP CHARCOAL GREY BUTTONS (25% Darker) */
         div.stButton > button {
-            background-color: #7F7F7F !important; /* 50% Grey */
+            background-color: #4D4D4D !important; /* Deep Charcoal Grey */
             color: #ffffff !important;
             border: none !important;
             border-radius: 50px !important; /* Pill Shape */
-            padding: 0.7rem clamp(1.5rem, 3vw, 3rem) !important;
+            padding: 0.75rem clamp(2rem, 4vw, 3.5rem) !important;
             font-weight: 600 !important;
-            font-size: clamp(0.9rem, 1vw, 1.1rem) !important;
+            font-size: clamp(0.9rem, 1.1vw, 1.15rem) !important;
             letter-spacing: -0.01em !important;
-            transition: all 0.25s ease-in-out !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
         }
 
         div.stButton > button:hover {
-            background-color: #666666 !important; /* Slightly darker grey on hover */
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
+            background-color: #333333 !important; /* Darkens on hover */
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.15) !important;
         }
 
-        /* 5. SECONDARY / BACK BUTTONS */
+        /* 5. SECONDARY BUTTONS (Muted) */
         div.stButton > button[kind="secondary"] {
-            background-color: #EDEDED !important;
-            color: #444444 !important;
+            background-color: #F2F2F2 !important;
+            color: #4D4D4D !important;
         }
 
-        /* 6. DYNAMIC CARDS */
+        /* 6. DYNAMIC CARDS (The Paper Look) */
         [data-testid="stVerticalBlock"] > div[style*="border: 1px solid"] {
-            border-radius: 24px !important;
-            padding: clamp(1.5rem, 4vw, 3rem) !important;
+            border-radius: 28px !important;
+            padding: clamp(1.5rem, 5vw, 3.5rem) !important;
             background-color: #ffffff !important;
-            border: 1px solid #f0f0f0 !important;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.04) !important;
+            border: 1px solid #EDEDED !important;
+            box-shadow: 0 15px 45px rgba(0,0,0,0.03) !important;
         }
 
         /* 7. DYNAMIC METRICS */
         [data-testid="stMetricValue"] {
             font-weight: 800 !important;
-            font-size: clamp(1.8rem, 4vw, 2.8rem) !important;
-            letter-spacing: -0.04em !important;
+            font-size: clamp(2rem, 4.5vw, 3.2rem) !important;
+            letter-spacing: -0.05em !important;
         }
         
         /* Hide Default Clutter */
