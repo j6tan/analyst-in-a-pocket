@@ -3,10 +3,10 @@ import json
 import os
 from style_utils import inject_global_css
 
-inject_global_css() # Keep styles active on this page
-
 # --- 1. GLOBAL CONFIG (Universal De-Squish) ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
+
+inject_global_css() # Keep styles active on this page
 
 st.markdown("""
     <style>
@@ -100,6 +100,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
 
