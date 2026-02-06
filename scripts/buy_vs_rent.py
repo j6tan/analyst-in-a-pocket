@@ -121,31 +121,47 @@ st.session_state.aff_rent_store.update({
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
 # --- 7. VISUALS ---
-owner_unrec, renter_unrec = df['Owner Unrecoverable'].iloc[-1], df['Renter Unrecoverable'].iloc[-1]
-owner_wealth, renter_wealth = df['Owner Net Wealth'].iloc[-1], df['Renter Wealth'].iloc[-1]
+st.write("")
+st.subheader("1. Cumulative Wealth Trajectory")
+st.write("Comparing the Net Worth of the Homeowner (Home Equity) vs. the Renter (Investment Portfolio) over time.")
 
-st.subheader("📊 Performance Comparison")
-v_col1, v_col2 = st.columns(2)
+fig1 = go.Figure()
+fig1.add_trace(go.Scatter(x=df['Year'], y=df['Owner Net Wealth'], name='Homeowner Net Worth', 
+                         line=dict(color=CHARCOAL, width=4)))
+fig1.add_trace(go.Scatter(x=df['Year'], y=df['Renter Wealth'], name='Renter Net Worth', 
+                         line=dict(color=PRIMARY_GOLD, width=4, dash='dash')))
 
-with v_col1:
-    st.markdown("<h4 style='text-align: center; margin-bottom: -35px;'>Total Sunk Costs</h4>", unsafe_allow_html=True)
-    fig_unrec = go.Figure(data=[
-        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
-        go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
-    ])
-    fig_unrec.update_layout(yaxis=dict(tickformat="$,.0f"), height=300, margin=dict(t=10, b=0, l=40, r=40), showlegend=False)
-    st.plotly_chart(fig_unrec, use_container_width=True, config={'displayModeBar': False})
-    st.markdown("<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -20px;'>Lower is better. Interest/Tax vs. Total Rent.</p>", unsafe_allow_html=True)
+fig1.update_layout(
+    height=500,
+    plot_bgcolor="white",
+    xaxis=dict(showgrid=False),
+    yaxis=dict(showgrid=True, gridcolor='#F0F0F0', tickprefix="$"),
+    margin=dict(t=50, l=50, r=20, b=50), # Increased Top Margin to fix cut-off
+    legend=dict(orientation="h", y=1.1, x=0),
+    title="Cumulative Wealth Over Time"
+)
+st.plotly_chart(fig1, use_container_width=True)
 
-with v_col2:
-    st.markdown("<h4 style='text-align: center; margin-bottom: -35px;'>Final Net Worth</h4>", unsafe_allow_html=True)
-    fig_wealth = go.Figure(data=[
-        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
-        go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
-    ])
-    fig_wealth.update_layout(yaxis=dict(tickformat="$,.0f"), height=300, margin=dict(t=10, b=0, l=40, r=40), showlegend=False)
-    st.plotly_chart(fig_wealth, use_container_width=True, config={'displayModeBar': False})
-    st.markdown(f"<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -20px;'>Total wealth after {years} years.</p>", unsafe_allow_html=True)
+st.write("")
+st.subheader("2. Cumulative Sunk Costs (The 'Unrecoverable' Money)")
+st.write("Total money 'thrown away' over time. For Owners: Interest + Tax + Maint. For Renters: 100% of Rent.")
+
+fig2 = go.Figure()
+fig2.add_trace(go.Scatter(x=df['Year'], y=df['Cum Owner Sunk'], name='Owner Cumulative Sunk Costs',
+                         fill='tozeroy', line=dict(color=SLATE_ACCENT, width=2)))
+fig2.add_trace(go.Scatter(x=df['Year'], y=df['Cum Renter Sunk'], name='Renter Cumulative Sunk Costs',
+                         fill='tozeroy', line=dict(color="#A52A2A", width=2))) # Red for high rent burn
+
+fig2.update_layout(
+    height=500,
+    plot_bgcolor="white",
+    xaxis=dict(showgrid=False),
+    yaxis=dict(showgrid=True, gridcolor='#F0F0F0', tickprefix="$"),
+    margin=dict(t=60, l=50, r=20, b=50), # Extra margin for title safety
+    legend=dict(orientation="h", y=1.1, x=0),
+    title="Cumulative Sunk Costs (Running Total)"
+)
+st.plotly_chart(fig2, use_container_width=True)
 
 # --- 8. STRATEGIC ANALYST VERDICT ---
 st.divider()
@@ -197,3 +213,4 @@ st.markdown("""
 
 
 st.caption("Analyst in a Pocket | Strategic Wealth Hub")
+
