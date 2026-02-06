@@ -7,7 +7,7 @@ from style_utils import inject_global_css
 # 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
-if st.button("⬅️ Back to Home Dashboard"):
+if st.button("⬅️ Back to Home Dashboard", kind="secondary"):
     st.switch_page("home.py")
 st.divider()
 
@@ -28,99 +28,117 @@ household = f"{name1} and {name2}" if name2 else name1
 if "aff_rent_store" not in st.session_state:
     st.session_state.aff_rent_store = {
         "price": 800000, "dp": 200000, "rate": 4.0, "ann_tax": 2000,
-        "mo_maint": 500, "apprec": 1.5, "rent": 3000, "rent_inc": 2.5,
-        "stock_ret": 8.0, "years": 15
+        "mo_maint": 500, "apprec": 3.0, "rent": 3000, "rent_inc": 2.0,
+        "inv_return": 6.0, "years": 25
     }
 
-store = st.session_state.aff_rent_store
+def sync_rent():
+    # Helper to sync inputs to session state
+    pass # State is auto-updated by key binding
 
-# --- 4. CALCULATION ENGINE ---
-def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
-    loan = price - dp
-    m_rate = (rate/100)/12
-    n_months = 25 * 12
-    monthly_pi = loan * (m_rate * (1+m_rate)**n_months) / ((1+m_rate)**n_months - 1)
+st.markdown(f"<h1>⚖️ Buy vs. Rent Analysis</h1>", unsafe_allow_html=True)
+st.caption(f"Comparing wealth trajectories for **{household}**.")
+
+# --- 4. INPUTS SECTION ---
+with st.container(border=True):
+    c1, c2, c3 = st.columns(3)
     
-    data = []
-    total_owner_unrecoverable = 0
-    total_renter_unrecoverable = 0
-    curr_loan = loan
-    curr_val = price
-    curr_rent = rent
-    renter_portfolio = dp 
+    with c1:
+        st.markdown("### 🏠 Purchase Scenario")
+        st.session_state.aff_rent_store['price'] = st.number_input("Purchase Price ($)", value=st.session_state.aff_rent_store['price'], step=10000)
+        st.session_state.aff_rent_store['dp'] = st.number_input("Down Payment ($)", value=st.session_state.aff_rent_store['dp'], step=5000)
+        st.session_state.aff_rent_store['rate'] = st.number_input("Mortgage Rate (%)", value=st.session_state.aff_rent_store['rate'], step=0.1)
+        st.session_state.aff_rent_store['years'] = st.slider("Time Horizon (Years)", 5, 30, st.session_state.aff_rent_store['years'])
+
+    with c2:
+        st.markdown("### 💸 Ownership Costs")
+        st.session_state.aff_rent_store['ann_tax'] = st.number_input("Annual Property Tax ($)", value=st.session_state.aff_rent_store['ann_tax'], step=100)
+        st.session_state.aff_rent_store['mo_maint'] = st.number_input("Monthly Maintenance ($)", value=st.session_state.aff_rent_store['mo_maint'], step=50)
+        st.session_state.aff_rent_store['apprec'] = st.number_input("Home Appreciation (%)", value=st.session_state.aff_rent_store['apprec'], step=0.1)
+
+    with c3:
+        st.markdown("### 🔑 Rental Alternative")
+        st.session_state.aff_rent_store['rent'] = st.number_input("Monthly Rent ($)", value=st.session_state.aff_rent_store['rent'], step=50)
+        st.session_state.aff_rent_store['rent_inc'] = st.number_input("Rent Increase (%)", value=st.session_state.aff_rent_store['rent_inc'], step=0.1)
+        st.session_state.aff_rent_store['inv_return'] = st.number_input("Inv. Return Rate (%)", value=st.session_state.aff_rent_store['inv_return'], help="Return on the difference invested", step=0.1)
+
+# --- 5. CALCULATION ENGINE ---
+P = st.session_state.aff_rent_store['price']
+DP = st.session_state.aff_rent_store['dp']
+r_mort = st.session_state.aff_rent_store['rate'] / 100 / 12
+n_months = 300 # 25 years amortization fixed
+Loan = P - DP
+Monthly_PI = Loan * (r_mort * (1 + r_mort)**n_months) / ((1 + r_mort)**n_months - 1)
+
+data = []
+cum_own_sunk = 0
+cum_rent_sunk = 0
+home_val = P
+rem_loan = Loan
+rent_val = st.session_state.aff_rent_store['rent']
+portfolio = DP # Renter starts with DP invested
+
+for year in range(1, st.session_state.aff_rent_store['years'] + 1):
+    # OWNER COSTS
+    yr_tax = st.session_state.aff_rent_store['ann_tax'] * (1.02**(year-1)) # Assume 2% tax inflation
+    yr_maint = st.session_state.aff_rent_store['mo_maint'] * 12 * (1.02**(year-1))
     
-    for y in range(1, years + 1):
-        annual_int = 0
-        for _ in range(12):
-            mo_interest = curr_loan * m_rate
-            mo_principal = monthly_pi - mo_interest
-            annual_int += mo_interest
-            curr_loan -= mo_principal
+    # Mortgage Split
+    yr_interest = 0
+    yr_principal = 0
+    for m in range(12):
+        if rem_loan > 0:
+            inte = rem_loan * r_mort
+            prin = Monthly_PI - inte
+            yr_interest += inte
+            yr_principal += prin
+            rem_loan -= prin
+    
+    # Total Owner Cash Outflow this year
+    total_own_outflow = (Monthly_PI * 12) + yr_tax + yr_maint
+    
+    # Owner Sunk Cost (Money gone forever: Interest + Tax + Maint)
+    # Principal payment is NOT a sunk cost (it's forced savings)
+    annual_own_sunk = yr_interest + yr_tax + yr_maint
+    cum_own_sunk += annual_own_sunk
+    
+    # RENTER COSTS
+    yr_rent = rent_val * 12
+    # Renter Sunk Cost (Rent is 100% sunk)
+    cum_rent_sunk += yr_rent
+    
+    # OPPORTUNITY COST / INVESTMENT
+    # Did the owner spend more cash than the renter?
+    diff = total_own_outflow - yr_rent
+    
+    if diff > 0:
+        # Owner spent more. Renter invests the difference.
+        portfolio = (portfolio * (1 + st.session_state.aff_rent_store['inv_return']/100)) + diff
+    else:
+        # Renter spent more (Rent > Mortgage+Costs). Owner invests the savings?
+        # For simplicity in this model, we usually just reduce the renter's portfolio growth 
+        # or assume renter withdraws from portfolio to pay rent.
+        # Here we assume Renter Portfolio grows, but reduced by the shortfall if any.
+        portfolio = (portfolio * (1 + st.session_state.aff_rent_store['inv_return']/100)) + diff
 
-        owner_lost_this_year = annual_int + ann_tax + (mo_maint * 12)
-        total_owner_unrecoverable += owner_lost_this_year
-        curr_val *= (1 + apprec/100)
-        selling_costs = (curr_val * 0.03) + 1500
-        owner_wealth_net = curr_val - max(0, curr_loan) - selling_costs
-        total_renter_unrecoverable += curr_rent * 12
-        owner_mo_outlay = monthly_pi + (ann_tax/12) + mo_maint
-        mo_savings_gap = owner_mo_outlay - curr_rent
-        
-        for _ in range(12):
-            renter_portfolio = (renter_portfolio + mo_savings_gap) * (1 + (stock_ret/100)/12)
+    # Asset Growth
+    home_val = home_val * (1 + st.session_state.aff_rent_store['apprec']/100)
+    owner_equity = home_val - rem_loan
+    
+    # Rent increase for next year
+    rent_val = rent_val * (1 + st.session_state.aff_rent_store['rent_inc']/100)
 
-        data.append({
-            "Year": y, "Owner Net Wealth": owner_wealth_net, "Renter Wealth": renter_portfolio,
-            "Owner Unrecoverable": total_owner_unrecoverable, "Renter Unrecoverable": total_renter_unrecoverable
-        })
-        curr_rent *= (1 + rent_inc/100)
-    return pd.DataFrame(data)
+    data.append({
+        "Year": year,
+        "Owner Net Wealth": owner_equity,
+        "Renter Wealth": portfolio,
+        "Cum Owner Sunk": cum_own_sunk,
+        "Cum Renter Sunk": cum_rent_sunk
+    })
 
-# --- 5. HEADER & STORY ---
-st.markdown("<style>div.block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col1:
-    if os.path.exists("logo.png"): st.image("logo.png", width=140)
-with header_col2:
-    st.title("Buy vs. Rent Analysis")
+df = pd.DataFrame(data)
 
-st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
-    <h3 style="color: {SLATE_ACCENT}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.4; margin: 0;">
-        {name1} values the <b>equity growth</b> of ownership, while {name2 if name2 else 'the household'} is focused on the <b>opportunity cost</b> of the stock market. 
-        We have analyzed your break-even horizon and wealth trajectory below.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-# --- 6. INPUTS ---
-col_left, col_right = st.columns(2)
-with col_left:
-    st.subheader("🏠 Homeownership Path")
-    price = st.number_input("Purchase Price ($)", value=store['price'], step=50000, key="br_price")
-    dp = st.number_input("Down Payment ($)", value=store['dp'], step=10000, key="br_dp")
-    rate = st.number_input("Mortgage Rate (%)", value=store['rate'], step=0.1, key="br_rate")
-    ann_tax = st.number_input("Annual Property Tax ($)", value=store['ann_tax'], step=100, key="br_tax")
-    mo_maint = st.number_input("Monthly Maintenance ($)", value=store['mo_maint'], step=50, key="br_maint")
-    apprec = st.number_input("Annual Appreciation (%)", value=store['apprec'], step=0.5, key="br_apprec")
-
-with col_right:
-    st.subheader("🏢 Rental Path")
-    rent = st.number_input("Current Monthly Rent ($)", value=store['rent'], step=100, key="br_rent")
-    rent_inc = st.number_input("Annual Rent Increase (%)", value=store['rent_inc'], step=0.5, key="br_rent_inc")
-    stock_ret = st.number_input("Target Stock Return (%)", value=store['stock_ret'], step=0.5, key="br_stock")
-    years = st.number_input("Analysis Horizon (Years)", value=store['years'], step=5, key="br_years")
-
-st.session_state.aff_rent_store.update({
-    "price": price, "dp": dp, "rate": rate, "ann_tax": ann_tax, 
-    "mo_maint": mo_maint, "apprec": apprec, "rent": rent, 
-    "rent_inc": rent_inc, "stock_ret": stock_ret, "years": years
-})
-
-df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
-
-# --- 7. VISUALS ---
+# --- 6. VISUALIZATION ---
 st.write("")
 st.subheader("1. Cumulative Wealth Trajectory")
 st.write("Comparing the Net Worth of the Homeowner (Home Equity) vs. the Renter (Investment Portfolio) over time.")
@@ -163,54 +181,20 @@ fig2.update_layout(
 )
 st.plotly_chart(fig2, use_container_width=True)
 
-# --- 8. STRATEGIC ANALYST VERDICT ---
-st.divider()
-st.subheader("🎯 Strategic Wealth Verdict")
-ins_col1, ins_col2 = st.columns(2)
+# --- 7. ANALYSIS SUMMARY ---
+final_yr = df.iloc[-1]
+net_diff = final_yr['Owner Net Wealth'] - final_yr['Renter Wealth']
+winner = "Homeowner" if net_diff > 0 else "Renter"
 
-with ins_col1:
-    if owner_wealth > renter_wealth:
-        st.success(f"🏆 **Wealth Champion: Homeowner**\n\nOwnership builds **${(owner_wealth - renter_wealth):,.0f} more** in assets over {years} years.")
+st.markdown("### 💡 Analyst Verdict")
+with st.container(border=True):
+    if winner == "Homeowner":
+        st.success(f"**The Homeowner Wins by ${net_diff:,.0f}** after {st.session_state.aff_rent_store['years']} years.")
+        st.write("The forced savings of mortgage principal and tax-free capital gains outweighed the flexibility of renting.")
     else:
-        st.warning(f"🏆 **Wealth Champion: Renter**\n\nStock returns currently outperform equity. The Renter is **${(renter_wealth - owner_wealth):,.0f} ahead**.")
+        st.warning(f"**The Renter Wins by ${abs(net_diff):,.0f}** after {st.session_state.aff_rent_store['years']} years.")
+        st.write("The opportunity cost of the down payment (invested in the market) outperformed the real estate appreciation.")
 
-    sunk_diff = abs(owner_unrec - renter_unrec)
-    if owner_unrec < renter_unrec:
-        st.info(f"✨ **Efficiency Champion: Homeowner**\n\nOwnership is **${sunk_diff:,.0f} cheaper** in 'dead money' lost than renting equivalent housing.")
-    else:
-        st.info(f"✨ **Efficiency Champion: Renter**\n\nRenting is **${sunk_diff:,.0f} cheaper** in pure cash-out costs than home maintenance/interest.")
-
-with ins_col2:
-    if (renter_wealth > owner_wealth) and (owner_unrec < renter_unrec):
-        st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; border: 1px solid #d1d5db;">
-        <b>🔍 The Investor's Paradox:</b><br>
-        Even though the Homeowner lives more 'efficiently' (lower sunk costs), the Renter is wealthier. 
-        <br><br>
-        This happens because your <b>{stock_ret}% Stock Return</b> is working harder on your initial capital than your <b>{apprec}% Home Appreciation</b>. You are paying for the luxury of capital growth with higher monthly rent.
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        ahead_mask = df['Owner Net Wealth'] > df['Renter Wealth']
-        be_year = int(df[ahead_mask].iloc[0]['Year']) if ahead_mask.any() else None
-        if be_year:
-            st.write(f"**Break-Even Horizon:** Year {be_year}. This is when equity build-up finally overcomes the high friction costs of interest and taxes.")
-        else:
-            st.write("**Growth Outlook:** Under current market settings, the 'Opportunity Cost' of the down payment prevents the home from catching up in net worth.")
-
-# --- 9. IDENTICAL ERRORS AND OMISSIONS DISCLAIMER ---
+# --- 8. DISCLAIMER ---
 st.markdown("---")
-st.markdown("""
-<div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
-    <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
-        <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
-        This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
-        This does not constitute financial, legal, or tax advice. Mortgage approval and final figures are subject to lender policy, 
-        creditworthiness, and current market conditions. Consult with a professional before making significant financial decisions.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-
-st.caption("Analyst in a Pocket | Strategic Wealth Hub")
-
+st.caption("Figures are estimates based on constant rates of return. Inflation and variable rates are not modeled.")
