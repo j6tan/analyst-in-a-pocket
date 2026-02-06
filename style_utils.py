@@ -18,11 +18,11 @@ def inject_global_css():
             max-width: 1400px !important;
         }
 
-        /* 3. MAIN PAGE HEADERS */
+        /* 3. HEADERS */
         h1 { font-weight: 800 !important; letter-spacing: -0.04em !important; font-size: 3rem !important; }
         h2, h3 { font-weight: 700 !important; }
 
-        /* 4. BUTTONS */
+        /* 4. BUTTONS (Charcoal) */
         div.stButton > button {
             background-color: #4D4D4D !important;
             color: white !important;
@@ -42,35 +42,39 @@ def inject_global_css():
             box-shadow: 0 10px 30px rgba(0,0,0,0.03) !important;
         }
 
-        /* --- 6. SIDEBAR REFINEMENT (The Fix) --- */
+        /* --- 6. SIDEBAR FIX (UPDATED FOR TEXT-ONLY HEADERS) --- */
 
-        /* A. The Container Spacing */
+        /* A. Container Spacing */
         [data-testid="stSidebarNavItems"] {
             padding-top: 1rem !important;
         }
 
         /* B. GROUP HEADERS (The Labels) */
-        /* We force these to be Light Grey, All Caps, and Small */
-        div[data-testid="stSidebarNavItems"] > div > div > span,
-        div[data-testid="stSidebarNavItems"] > div > small {
+        /* Target 'strong', 'span', and 'divs' that are NOT links */
+        
+        div[data-testid="stSidebarNavItems"] strong,
+        div[data-testid="stSidebarNavItems"] span,
+        div[data-testid="stSidebarNavItems"] div:not(:has(a)) {
             visibility: visible !important;
             display: block !important;
-            color: #999999 !important; /* Light Grey to push them to background */
-            font-size: 0.75rem !important; /* Smaller than tools */
+            color: #999999 !important; /* Light Grey Label */
+            font-size: 0.75rem !important; 
             font-weight: 700 !important;
-            text-transform: uppercase !important; /* Force capitalization */
+            text-transform: uppercase !important; 
             letter-spacing: 0.1em !important;
             margin-top: 2rem !important;
             margin-bottom: 0.5rem !important;
         }
 
         /* C. THE TOOLS (The Links) */
-        /* We force these to be Dark Charcoal and Normal Case */
-        [data-testid="stSidebarNavItems"] ul li a {
-            color: #4D4D4D !important; /* Dark Grey */
+        /* Explicitly style the clickable links to look different */
+        [data-testid="stSidebarNavItems"] ul li a,
+        [data-testid="stSidebarNavItems"] a {
+            color: #4D4D4D !important; /* Dark Grey Link */
             font-size: 0.95rem !important;
             font-weight: 500 !important;
-            text-transform: none !important; /* Ensure they don't get capitalized */
+            text-transform: none !important; /* Normal Case */
+            letter-spacing: normal !important;
         }
         
         /* Active/Selected Tool */
