@@ -149,6 +149,44 @@ def simulate_mortgage(principal, annual_rate, amort_years, freq_label, extra_per
         "Name": "" 
     }
 
+# --- 6. MAIN PAGE INPUTS (Replaces Sidebar) ---
+with st.container(border=True):
+    st.markdown("### 🏠 Property & Mortgage Details")
+    
+    # Create 3 columns for a clean layout
+    col_input1, col_input2, col_input3 = st.columns(3)
+    
+    with col_input1:
+        price = st.number_input("Property Price ($)", value=float(raw_afford_max), step=5000.0)
+    
+    with col_input2:
+        down_payment = st.number_input("Down Payment ($)", value=float(raw_afford_down), step=5000.0)
+        
+    with col_input3:
+        amortization = st.selectbox("Amortization (Years)", options=[15, 20, 25, 30], index=2)
+
+    # Logic for metrics (Calculated immediately after inputs)
+    mortgage_principal = price - down_payment
+    ltv = (mortgage_principal / price) * 100 if price > 0 else 0
+    
+    st.divider()
+    
+    # Row for the calculated metrics
+    col_metric1, col_metric2, col_metric3 = st.columns(3)
+    
+    with col_metric1:
+        st.metric(label="Total Mortgage", value=f"${mortgage_principal:,.0f}")
+        
+    with col_metric2:
+        st.metric(label="Loan-to-Value (LTV)", value=f"{ltv:.1f}%", 
+                 delta="< 80% is ideal" if ltv < 80 else "High Ratio", 
+                 delta_color="inverse")
+        
+    with col_metric3:
+        # Empty column to keep alignment or add extra info later
+        st.write("")
+
+
 # --- 6. SIDEBAR INPUTS ---
 with st.sidebar:
     st.header("🏠 Global Settings")
@@ -316,4 +354,5 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
