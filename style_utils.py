@@ -22,7 +22,7 @@ def inject_global_css():
         h1 { font-weight: 800 !important; letter-spacing: -0.04em !important; font-size: 3rem !important; }
         h2, h3 { font-weight: 700 !important; }
 
-        /* 4. BUTTONS (Charcoal) */
+        /* 4. BUTTONS */
         div.stButton > button {
             background-color: #4D4D4D !important;
             color: white !important;
@@ -42,43 +42,40 @@ def inject_global_css():
             box-shadow: 0 10px 30px rgba(0,0,0,0.03) !important;
         }
 
-        /* --- 6. SIDEBAR FIX (UPDATED FOR TEXT-ONLY HEADERS) --- */
-
+        /* --- 6. THE "UNBREAKABLE" SIDEBAR FIX --- */
+        
         /* A. Container Spacing */
         [data-testid="stSidebarNavItems"] {
             padding-top: 1rem !important;
         }
 
-        /* B. GROUP HEADERS (The Labels) */
-        /* Target 'strong', 'span', and 'divs' that are NOT links */
-        
-        div[data-testid="stSidebarNavItems"] strong,
-        div[data-testid="stSidebarNavItems"] span,
-        div[data-testid="stSidebarNavItems"] div:not(:has(a)) {
+        /* B. THE GROUP TITLES (Targeting Structure, Not Tags) */
+        /* We select the FIRST child element of every group container. */
+        /* It doesn't matter if Streamlit makes it a div, span, strong, or p. */
+        [data-testid="stSidebarNavItems"] > div > :first-child {
             visibility: visible !important;
             display: block !important;
-            color: #999999 !important; /* Light Grey Label */
-            font-size: 0.75rem !important; 
-            font-weight: 700 !important;
-            text-transform: uppercase !important; 
+            color: #999999 !important;      /* Light Grey Label */
+            font-size: 0.75rem !important;  /* Small */
+            font-weight: 700 !important;    /* Bold */
+            text-transform: uppercase !important; /* All Caps */
             letter-spacing: 0.1em !important;
-            margin-top: 2rem !important;
+            margin-top: 1.5rem !important;
             margin-bottom: 0.5rem !important;
+            background-color: transparent !important;
         }
 
         /* C. THE TOOLS (The Links) */
-        /* Explicitly style the clickable links to look different */
-        [data-testid="stSidebarNavItems"] ul li a,
+        /* We target the 'a' tag (Anchor). This is standard HTML and will never change. */
         [data-testid="stSidebarNavItems"] a {
-            color: #4D4D4D !important; /* Dark Grey Link */
-            font-size: 0.95rem !important;
-            font-weight: 500 !important;
+            color: #4D4D4D !important;      /* Dark Charcoal */
+            font-size: 0.95rem !important;  /* Normal Size */
+            font-weight: 500 !important;    /* Normal Weight */
             text-transform: none !important; /* Normal Case */
-            letter-spacing: normal !important;
         }
         
-        /* Active/Selected Tool */
-        [data-testid="stSidebarNavItems"] ul li a[aria-current="page"] {
+        /* Active Tool Highlight */
+        [data-testid="stSidebarNavItems"] a[aria-current="page"] {
             background-color: #EDEDED !important;
             font-weight: 600 !important;
             border-radius: 8px !important;
