@@ -167,6 +167,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+if not is_valid:
+    st.error(f"### 🛑 Legal Minimum Not Met")
+    st.info(f"👉 Minimum Required: **${min_down_req:,.0f}**")
+    st.stop()
+
 # --- 6. MAIN PAGE INPUTS (Replaces Sidebar) ---
 with st.container(border=True):
     st.markdown("### 🏠 Property & Mortgage Details")
@@ -204,10 +209,6 @@ with st.container(border=True):
         # Empty column to keep alignment or add extra info later
         st.write("")
 
-if not is_valid:
-    st.error(f"### 🛑 Legal Minimum Not Met")
-    st.info(f"👉 Minimum Required: **${min_down_req:,.0f}**")
-    st.stop()
        
 # --- 8. SCENARIO GRID ---
 total_cols = st.session_state.num_options
@@ -334,6 +335,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
