@@ -149,6 +149,24 @@ def simulate_mortgage(principal, annual_rate, amort_years, freq_label, extra_per
         "Name": "" 
     }
 
+# --- 7. INTERFACE ---
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col1:
+    if os.path.exists("logo.png"): st.image("logo.png", width=140)
+with header_col2:
+    st.title("Mortgage Scenario Analysis") 
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🏛️ {household_names}: Outsmarting the Bank</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        {household_names}, you've calculated your affordability. Now, let's see how different interest rates and 
+        <b>prepayment strategies</b> can shave years off your debt. Every dollar saved in interest is a dollar 
+        kept in your pocket.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
 # --- 6. MAIN PAGE INPUTS (Replaces Sidebar) ---
 with st.container(border=True):
     st.markdown("### 🏠 Property & Mortgage Details")
@@ -185,44 +203,6 @@ with st.container(border=True):
     with col_metric3:
         # Empty column to keep alignment or add extra info later
         st.write("")
-
-
-# --- 6. SIDEBAR INPUTS ---
-with st.sidebar:
-    st.header("🏠 Global Settings")
-    price = st.number_input("Property Price ($)", value=store['price'], step=5000.0, key="w_price")
-    store['price'] = price 
-    down = st.number_input("Down Payment ($)", value=store['down'], step=5000.0, key="w_down")
-    store['down'] = down 
-    min_down_req = calculate_min_downpayment(price)
-    is_valid = down >= min_down_req
-    base_loan = price - down
-    ltv = (base_loan / price) * 100
-    cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
-    final_loan = base_loan + cmhc_p
-    st.metric("LTV Ratio", f"{ltv:.1f}%")
-    if is_valid and cmhc_p > 0: st.warning(f"CMHC Premium: ${cmhc_p:,.0f}")
-    st.metric("Total Mortgage", f"${final_loan:,.0f}")
-    amort = st.slider("Amortization (Years)", 5, 30, value=store['amort'], key="w_amort")
-    store['amort'] = amort
-
-# --- 7. INTERFACE ---
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col1:
-    if os.path.exists("logo.png"): st.image("logo.png", width=140)
-with header_col2:
-    st.title("Mortgage Scenario Analysis") 
-
-st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🏛️ {household_names}: Outsmarting the Bank</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        {household_names}, you've calculated your affordability. Now, let's see how different interest rates and 
-        <b>prepayment strategies</b> can shave years off your debt. Every dollar saved in interest is a dollar 
-        kept in your pocket.
-    </p>
-</div>
-""", unsafe_allow_html=True)
 
 if not is_valid:
     st.error(f"### 🛑 Legal Minimum Not Met")
@@ -354,5 +334,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
