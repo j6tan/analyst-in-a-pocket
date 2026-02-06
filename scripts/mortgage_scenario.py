@@ -156,12 +156,15 @@ with st.container(border=True):
     # Create 3 columns for a clean layout
     col_input1, col_input2, col_input3 = st.columns(3)
     
-    with col_input1:
-        price = st.number_input("Property Price ($)", value=store['price'], step=5000.0, key="w_price")
-        store['price'] = price 
-    with col_input2:
-        down = st.number_input("Down Payment ($)", value=store['down'], step=5000.0, key="w_down")
-        store['down'] = down
+with col_i1:
+    # Force float(store['price']) to ensure type consistency
+    price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="w_price")
+    store['price'] = price 
+
+with col_i2:
+    # Force float(store['down'])
+    down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="w_down")
+    store['down'] = down
     with col_input3:
         amort = st.slider("Amortization (Years)", 5, 30, value=store['amort'], key="w_amort")
         store['amort'] = amort
@@ -357,4 +360,5 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
