@@ -19,334 +19,305 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# Retrieve raw data from Affordability (if available)
-# UPDATED: Now accesses the 'aff_store' dictionary correctly
-aff_store = st.session_state.get('aff_store', {})
-raw_afford_max = aff_store.get('max_purchase_power', 800000.0)
-raw_afford_down = aff_store.get('down_payment', 160000.0)
+# Initialize Store (Session State)
+if 'aff_store' not in st.session_state:
+    st.session_state.aff_store = {}
+store = st.session_state.aff_store
 
-# Retrieve rate from Affordability Store
+# Set defaults if missing
+if 'price' not in store: store['price'] = 800000.0
+if 'down' not in store: store['down'] = 160000.0
+if 'amort' not in store: store['amort'] = 25
+
+# --- HELPER FUNCTIONS ---
+def calculate_min_downpayment(purchase_price):
+    if purchase_price <= 500000:
+        return purchase_price * 0.05
+    elif purchase_price < 1000000:
+        return (500000 * 0.05) + ((purchase_price - 500000) * 0.10)
+    else:
+        return purchase_price * 0.20
+
+def get_cmhc_premium_rate(ltv_pct):
+    if ltv_pct <= 80: return 0.0
+    if ltv_pct <= 85: return 0.0280
+    if ltv_pct <= 90: return 0.0310
+    if ltv_pct <= 95: return 0.0400
+    return 0.0400 # Fallback
+
 def get_default_rate():
+    # 1. Try Session State
     if 'aff_store' in st.session_state:
+        # Check if contract_rate exists
         return st.session_state.aff_store.get('contract_rate', 4.49)
     
-    # Fallback to file
+    # 2. Try File (Safely)
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
-            d = json.load(f)
-            return d['rates'].get('five_year_fixed_uninsured', 4.49)
+        try:
+            with open(path, "r") as f:
+                d = json.load(f)
+                return d.get('rates', {}).get('five_year_fixed_uninsured', 4.49)
+        except Exception:
+            return 4.49
+            
+    # 3. Default Fallback
     return 4.49
 
-global_rate_default = get_default_rate()
-
-# --- 2. ROUNDING LOGIC ---
-def smart_round_price(price):
-    if price >= 1000000:
-        return float(round(price, -4))
-    else:
-        return float(round(price, -3))
-
-# --- 3. PERSISTENCE INITIALIZATION (SHADOW STORE) ---
-if 'scen_store' not in st.session_state:
-    st.session_state.scen_store = {
-        "price": float(smart_round_price(raw_afford_max)),
-        "down": float(raw_afford_down),
-        "amort": 25,
-        "scenarios": [] 
-    }
-    
-    st.session_state.scen_store["scenarios"] = [
-        {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False},
-        {"label": "Accelerated Bi-Weekly", "rate": global_rate_default, "freq": "Accelerated Bi-weekly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
-    ]
-
-store = st.session_state.scen_store
-
-if 'num_options' not in st.session_state:
-    st.session_state.num_options = len(store['scenarios'])
-
-# --- 4. STATE MANAGEMENT HELPERS ---
-def add_option():
-    if st.session_state.num_options < 5:
-        st.session_state.num_options += 1
-        store['scenarios'].append({
-            "label": f"Scenario {chr(65 + len(store['scenarios']))}", 
-            "rate": store['scenarios'][0]['rate'], 
-            "freq": "Monthly", 
-            "strat": "None", 
-            "extra": 0.0, 
-            "lump": 0.0, 
-            "double": False
-        })
-
-def remove_option():
-    if st.session_state.num_options > 1:
-        st.session_state.num_options -= 1
-        store['scenarios'].pop()
-
-# --- COLOR PALETTE ---
-SCENARIO_COLORS = ["#CEB36F", "#706262", "#2E2B28", "#C0A385", "#E7E7E7"]
-PRINCIPAL_COLOR = "#CEB36F"
-INTEREST_COLOR = "#2E2B28"
-OFF_WHITE = "#F8F9FA"
-SLATE_ACCENT = "#4A4E5A"
-BORDER_GREY = "#DEE2E6"
+# --- 2. THEME & BRANDING ---
 PRIMARY_GOLD = "#CEB36F"
+CHARCOAL = "#2E2B28"
+OFF_WHITE = "#F8F9FA"
 
-# --- 5. CORE ENGINE ---
-def calculate_min_downpayment(price):
-    if price >= 1000000: return price * 0.20
-    elif price <= 500000: return price * 0.05
-    else: return (500000 * 0.05) + ((price - 500000) * 0.10)
+# --- 3. PAGE HEADER ---
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col1:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=140)
+with header_col2:
+    st.title("Mortgage Scenario Modeler")
 
-def get_cmhc_premium_rate(ltv):
-    if ltv <= 80: return 0.0
-    elif ltv <= 85: return 0.0280 
-    elif ltv <= 90: return 0.0310 
-    elif ltv <= 95: return 0.0400 
-    return 0.0400
-
-def simulate_mortgage(principal, annual_rate, amort_years, freq_label, extra_per_pmt=0, lump_sum_annual=0, double_up=False):
-    freq_map = {"Monthly": 12, "Semi-monthly": 24, "Bi-weekly": 26, "Weekly": 52, "Accelerated Bi-weekly": 26, "Accelerated Weekly": 52}
-    p_yr = freq_map[freq_label]
-    periodic_rate = ((1 + (annual_rate / 100) / 2)**(2 / p_yr)) - 1
-    m_rate = ((1 + (annual_rate / 100) / 2)**(2 / 12)) - 1
-    num_m = amort_years * 12
-    base_m_pmt = principal * (m_rate * (1 + m_rate)**num_m) / ((1 + m_rate)**num_m - 1)
-
-    if "Accelerated" in freq_label: pmt = base_m_pmt / (4 if "Weekly" in freq_label else 2)
-    else: pmt = (base_m_pmt * 12) / p_yr
-
-    base_out = (pmt * 2 if double_up else pmt)
-    total_periodic = base_out + extra_per_pmt
-    true_monthly_out = (total_periodic * p_yr + lump_sum_annual) / 12
-
-    balance, t_int, t_prin, total_lifeline_int = principal, 0, 0, 0
-    history = []
-    term_periods = int(5 * p_yr)
-    
-    for i in range(1, 15000):
-        if balance <= 0.05: break 
-        interest_charge = balance * periodic_rate
-        actual_p = total_periodic
-        if i % p_yr == 0: actual_p += lump_sum_annual
-        if (actual_p - interest_charge) > balance: actual_p = balance + interest_charge
-        principal_part = actual_p - interest_charge
-        balance -= principal_part
-        total_lifeline_int += interest_charge
-        if i <= term_periods:
-            t_int += interest_charge
-            t_prin += principal_part
-        if i % p_yr == 0 or balance <= 0:
-            history.append({"Year": round(i/p_yr, 2), "Balance": round(max(0, balance))})
-
-    return {
-        "Monthly_Avg": round(true_monthly_out), "Term_Int": round(t_int), "Term_Prin": round(t_prin),
-        "Total_Life_Int": round(total_lifeline_int), "History": pd.DataFrame(history), 
-        "Freq": freq_label, "Rate": annual_rate, "Payoff_Time": round(i/p_yr, 1),
-        "Prepay_Active": "None" if (extra_per_pmt == 0 and lump_sum_annual == 0 and not double_up) else "Active",
-        "Name": "" 
-    }
+# --- 4. STORYTELLING ---
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border-left: 5px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <p style="font-size: 1.1em; color: {CHARCOAL}; margin: 0;">
+        <b>{household_names}</b> are evaluating different mortgage structures for their potential home purchase. 
+        They want to compare how <b>accelerated payments</b>, <b>shorter amortizations</b>, or <b>lump sum prepayments</b> 
+        could save them interest and build equity faster over the first 5-year term.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 5. MAIN PAGE INPUTS (Replaces Sidebar) ---
 with st.container(border=True):
     st.markdown("### 🏠 Property & Mortgage Details")
     
-    # Create 3 columns for a clean layout
-    col_input1, col_input2, col_input3 = st.columns(3)
+    # Row 1: The Inputs
+    col_i1, col_i2, col_i3 = st.columns(3)
     
-with col_i1:
-    # Force float(store['price']) to ensure type consistency
-    price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="w_price")
-    store['price'] = price 
-
-with col_i2:
-    # Force float(store['down'])
-    down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="w_down")
-    store['down'] = down
-    with col_input3:
-        amort = st.slider("Amortization (Years)", 5, 30, value=store['amort'], key="w_amort")
+    with col_i1:
+        # We wrap store['price'] in float() to prevent type errors if it was stored as an int
+        price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="w_price")
+        store['price'] = price 
+    
+    with col_i2:
+        down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="w_down")
+        store['down'] = down 
+        
+    with col_i3:
+        # Ensure 'amort' is a valid option in the list
+        current_amort = store.get('amort', 25)
+        valid_options = [15, 20, 25, 30]
+        if current_amort not in valid_options: current_amort = 25
+        
+        amort = st.selectbox("Amortization (Years)", options=valid_options, index=valid_options.index(current_amort), key="w_amort")
         store['amort'] = amort
-    # Logic for metrics (Calculated immediately after inputs)
+
+    # --- LOGIC RESTORATION ---
     min_down_req = calculate_min_downpayment(price)
-    is_valid = down >= min_down_req
+    is_valid_down = down >= min_down_req
+    
     base_loan = price - down
-    ltv = (base_loan / price) * 100
-    cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
+    
+    # Calculate LTV
+    ltv = (base_loan / price) * 100 if price > 0 else 0
+    
+    # Calculate CMHC Premium
+    cmhc_p = 0.0
+    if ltv > 80:
+        cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
+        
     final_loan = base_loan + cmhc_p
     
     st.divider()
     
-    # Row for the calculated metrics
-    col_metric1, col_metric2, col_metric3 = st.columns(3)
+    # Row 2: The Calculated Metrics
+    col_m1, col_m2, col_m3 = st.columns(3)
     
-    with col_metric1:
-        st.metric("LTV Ratio", f"{ltv:.1f}%")
+    with col_m1:
+        st.metric(label="Total Mortgage", value=f"${final_loan:,.0f}", help="Includes CMHC Premium if applicable")
+    
+    with col_m2:
+        st.metric(label="LTV Ratio", value=f"{ltv:.1f}%", delta="High Ratio (Insured)" if ltv > 80 else "Conventional", delta_color="inverse")
         
-    with col_metric2:
-        if is_valid and cmhc_p > 0: st.warning(f"CMHC Premium: ${cmhc_p:,.0f}")
-            st.metric("Total Mortgage", f"${final_loan:,.0f}")
-        
-    with col_metric3:
-        # Empty column to keep alignment or add extra info later
-        st.write("")
+    with col_m3:
+        if cmhc_p > 0:
+            st.metric(label="CMHC Premium Added", value=f"${cmhc_p:,.0f}")
+        elif not is_valid_down:
+            st.error(f"Min Down: ${min_down_req:,.0f}")
+        else:
+            st.metric(label="Insurance Premium", value="$0")
 
+# --- 6. SCENARIO CONFIGURATION ---
+st.subheader("⚙️ Compare Payment Strategies")
 
-# --- 6. SIDEBAR INPUTS ---
-with st.sidebar:
-    st.header("🏠 Global Settings")
-    price = st.number_input("Property Price ($)", value=store['price'], step=5000.0, key="w_price")
-    store['price'] = price 
-    down = st.number_input("Down Payment ($)", value=store['down'], step=5000.0, key="w_down")
-    store['down'] = down 
-    min_down_req = calculate_min_downpayment(price)
-    is_valid = down >= min_down_req
-    base_loan = price - down
-    ltv = (base_loan / price) * 100
-    cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
-    final_loan = base_loan + cmhc_p
-    st.metric("LTV Ratio", f"{ltv:.1f}%")
-    if is_valid and cmhc_p > 0: st.warning(f"CMHC Premium: ${cmhc_p:,.0f}")
-    st.metric("Total Mortgage", f"${final_loan:,.0f}")
-    amort = st.slider("Amortization (Years)", 5, 30, value=store['amort'], key="w_amort")
-    store['amort'] = amort
+# Define tabs for different strategies
+tabs = st.tabs(["1. Standard", "2. Accelerated Weekly", "3. Lump Sum Prepayment", "📊 Comparison Table"])
 
-# --- 7. INTERFACE ---
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col1:
-    if os.path.exists("logo.png"): st.image("logo.png", width=140)
-with header_col2:
-    st.title("Mortgage Scenario Analysis") 
-
-st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🏛️ {household_names}: Outsmarting the Bank</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        {household_names}, you've calculated your affordability. Now, let's see how different interest rates and 
-        <b>prepayment strategies</b> can shave years off your debt. Every dollar saved in interest is a dollar 
-        kept in your pocket.
-    </p>
-</div>
-""", unsafe_allow_html=True)
-
-if not is_valid:
-    st.error(f"### 🛑 Legal Minimum Not Met")
-    st.info(f"👉 Minimum Required: **${min_down_req:,.0f}**")
-    st.stop()
-       
-# --- 8. SCENARIO GRID ---
-total_cols = st.session_state.num_options
-main_cols = st.columns([3] * total_cols + [1]) 
 results = []
 
-while len(store['scenarios']) < total_cols:
-    add_option()
+def calculate_mortgage(principal, rate, years, freq="Monthly", prepayment=0):
+    r = (rate / 100)
+    
+    if freq == "Monthly":
+        n_per_year = 12
+    elif freq == "Bi-Weekly":
+        n_per_year = 26
+    elif freq == "Weekly":
+        n_per_year = 52
+    elif freq == "Accelerated Bi-Weekly":
+        n_per_year = 26
+    elif freq == "Accelerated Weekly":
+        n_per_year = 52
+        
+    # Standard Monthly Payment Calculation (base)
+    r_mo = r / 12
+    n_mo = years * 12
+    monthly_pmt = principal * (r_mo * (1 + r_mo)**n_mo) / ((1 + r_mo)**n_mo - 1)
+    
+    # Adjust payment based on frequency
+    if freq == "Monthly":
+        pmt = monthly_pmt
+    elif freq == "Bi-Weekly":
+        pmt = monthly_pmt * 12 / 26
+    elif freq == "Weekly":
+        pmt = monthly_pmt * 12 / 52
+    elif freq == "Accelerated Bi-Weekly":
+        pmt = monthly_pmt / 2
+    elif freq == "Accelerated Weekly":
+        pmt = monthly_pmt / 4
+        
+    # Generate Amortization Schedule (5 Year Term Focus)
+    balance = principal
+    total_int = 0
+    total_prin = 0
+    
+    term_months = 60 # 5 years
+    
+    # Convert frequency to iteration steps
+    if "Weekly" in freq:
+        steps = 52 * 5
+        rate_per_step = r / 52
+    elif "Bi-Weekly" in freq:
+        steps = 26 * 5
+        rate_per_step = r / 26
+    else:
+        steps = 60
+        rate_per_step = r / 12
+        
+    for i in range(1, steps + 1):
+        if balance <= 0:
+            break
+            
+        interest = balance * rate_per_step
+        principal_pay = pmt - interest
+        
+        # Apply prepayment
+        is_anniversary = False
+        if "Monthly" in freq and i % 12 == 0: is_anniversary = True
+        elif "Bi-Weekly" in freq and i % 26 == 0: is_anniversary = True
+        elif "Weekly" in freq and i % 52 == 0: is_anniversary = True
+        
+        if is_anniversary:
+            balance -= prepayment
+            
+        balance -= principal_pay
+        total_int += interest
+        total_prin += principal_pay
+        
+        if balance < 0: balance = 0
+        
+    return {
+        "Monthly_Avg": monthly_pmt,
+        "Term_Int": total_int,
+        "Term_Prin": principal - balance,
+        "Balance_At_Term": balance,
+        "Total_Life_Int": total_int, 
+        "Payoff_Time": years, 
+        "Prepay_Active": "Yes" if prepayment > 0 else "No",
+        "Freq": freq,
+        "Rate": rate,
+        "Name": "Scenario"
+    }
 
-for i in range(total_cols):
-    s_data = store['scenarios'][i]
-    with main_cols[i]:
-        st.markdown(f"### Option {chr(65+i)}")
-        name = st.text_input("Label", value=s_data['label'], key=f"n{i}")
-        store['scenarios'][i]['label'] = name
-        rate = st.number_input("Rate %", value=float(s_data['rate']), step=0.01, key=f"r{i}")
-        store['scenarios'][i]['rate'] = rate
-        freq = st.selectbox("Frequency", ["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"], 
-                            index=["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"].index(s_data['freq']),
-                            key=f"f{i}")
-        store['scenarios'][i]['freq'] = freq
-        strat = st.selectbox("Strategy", ["None", "Extra/Pmt", "Double Up", "Annual Lump"], 
-                             index=["None", "Extra/Pmt", "Double Up", "Annual Lump"].index(s_data['strat']),
-                             key=f"s{i}")
-        store['scenarios'][i]['strat'] = strat
-        ex, ls, db = 0, 0, False
-        if strat == "Extra/Pmt": 
-            ex = st.number_input("Extra $", value=float(s_data['extra']), key=f"ex{i}")
-            store['scenarios'][i]['extra'] = ex
-        elif strat == "Annual Lump": 
-            ls = st.number_input("Lump $", value=float(s_data['lump']), key=f"ls{i}")
-            store['scenarios'][i]['lump'] = ls
-        elif strat == "Double Up": 
-            db = True
-            store['scenarios'][i]['double'] = True
-        else:
-            store['scenarios'][i]['extra'] = 0.0
-            store['scenarios'][i]['lump'] = 0.0
-            store['scenarios'][i]['double'] = False
-        res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
-        res['Name'] = name
-        results.append(res)
-
-with main_cols[-1]:
-    st.write("### ") 
-    st.write("### ")
-    if st.session_state.num_options < 5: st.button("➕", on_click=add_option, use_container_width=True)
-    if st.session_state.num_options > 1: st.button("➖", on_click=remove_option, use_container_width=True)
-
-st.divider()
-
-# --- 9. DYNAMIC RECOMMENDATION ---
-best_int_scenario = min(results, key=lambda x: x['Total_Life_Int'])
-total_savings = results[0]['Total_Life_Int'] - best_int_scenario['Total_Life_Int']
-
-st.markdown("### 🎯 Professional Recommendation")
-if total_savings > 0:
-    st.success(f"**Recommendation:** Strategy {best_int_scenario['Name']} is the highest-value option. It saves you **${total_savings:,.0f}** in total interest and eliminates your debt **{results[0]['Payoff_Time'] - best_int_scenario['Payoff_Time']:.1f} years** faster.")
-else:
-    st.info(f"**Recommendation:** No interest savings detected. Switching to **Accelerated** payments is the most impactful way to pay off the principal faster.")
-
-st.divider()
-
-# --- 10. STYLE HELPER ---
-def apply_style(fig, title_text):
-    fig.update_layout(
-        template="plotly_white",
-        title=dict(text=title_text, font=dict(size=24, color="#2E2B28")),
-        xaxis=dict(title_font=dict(size=20, color="#2E2B28"), tickfont=dict(size=16)),
-        yaxis=dict(title_font=dict(size=20, color="#2E2B28"), tickfont=dict(size=16), tickformat="$,.0f"),
-        legend=dict(font=dict(size=16))
-    )
-    return fig
-
-# --- 11. ANALYSIS TABS ---
-tabs = st.tabs(["📉 Balance Projection", "💰 Monthly Cash-Out", "📊 5-Year Progress", "📑 Summary Table"])
+default_rate = get_default_rate()
 
 with tabs[0]:
-    fig1 = go.Figure()
-    for i, r in enumerate(results): 
-        fig1.add_trace(go.Scatter(x=r['History']['Year'], y=r['History']['Balance'], name=r['Name'], line=dict(color=SCENARIO_COLORS[i % len(SCENARIO_COLORS)], width=4)))
-    st.plotly_chart(apply_style(fig1, "Projected Mortgage Balance"), use_container_width=True)
+    st.markdown("**The Baseline:** Standard Monthly Payments with no extra contributions.")
+    rate_1 = st.number_input("Interest Rate (%)", value=default_rate, step=0.05, key="r1")
+    res1 = calculate_mortgage(final_loan, rate_1, amort, freq="Monthly")
+    res1['Name'] = "Standard Monthly"
+    results.append(res1)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Monthly Payment", f"${res1['Monthly_Avg']:,.2f}")
+    c2.metric("Interest Paid (5yr)", f"${res1['Term_Int']:,.0f}")
+    c3.metric("Balance at Year 5", f"${res1['Balance_At_Term']:,.0f}")
 
 with tabs[1]:
-    avg_df = pd.DataFrame([{"Scenario": r['Name'], "Monthly Out": r['Monthly_Avg']} for r in results])
-    fig2 = px.bar(avg_df, x="Scenario", y="Monthly Out", color="Scenario", text_auto='$,.0f', color_discrete_sequence=SCENARIO_COLORS)
-    fig2.update_traces(textfont_size=18, marker_line_width=0)
-    st.plotly_chart(apply_style(fig2, "Total Monthly Budget Requirement"), use_container_width=True)
+    st.markdown("**The Accelerator:** Paying weekly triggers more frequent principal pay-down.")
+    rate_2 = st.number_input("Interest Rate (%)", value=default_rate, step=0.05, key="r2")
+    res2 = calculate_mortgage(final_loan, rate_2, amort, freq="Accelerated Weekly")
+    res2['Name'] = "Accelerated Weekly"
+    results.append(res2)
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Weekly Payment", f"${res2['Monthly_Avg']/4:,.2f}") # Approx
+    c2.metric("Interest Paid (5yr)", f"${res2['Term_Int']:,.0f}", delta=f"${res1['Term_Int'] - res2['Term_Int']:,.0f} saved", delta_color="normal")
+    c3.metric("Equity Gained (5yr)", f"${res2['Term_Prin']:,.0f}")
 
 with tabs[2]:
-    stack_list = []
-    for r in results:
-        stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Prin'], "Type": "Equity Built"})
-        stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Int'], "Type": "Interest Paid"})
+    st.markdown("**The Lump Sum:** Putting an annual bonus directly onto the mortgage principal.")
+    rate_3 = st.number_input("Interest Rate (%)", value=default_rate, step=0.05, key="r3")
+    lump_sum = st.number_input("Annual Prepayment Amount ($)", value=5000, step=1000)
+    res3 = calculate_mortgage(final_loan, rate_3, amort, freq="Monthly", prepayment=lump_sum)
+    res3['Name'] = f"Monthly + ${lump_sum/1000}k Annual"
+    results.append(res3)
     
-    fig3 = px.bar(pd.DataFrame(stack_list), x="Scenario", y="Amount", color="Type", barmode="stack", 
-                 color_discrete_map={"Equity Built": PRINCIPAL_COLOR, "Interest Paid": INTEREST_COLOR}, text_auto='$,.0f')
-    fig3.update_traces(textfont_size=18, marker_line_width=0)
-    st.plotly_chart(apply_style(fig3, "5-Year Milestone: Equity vs. Interest"), use_container_width=True)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Monthly Payment", f"${res3['Monthly_Avg']:,.2f}")
+    c2.metric("Interest Paid (5yr)", f"${res3['Term_Int']:,.0f}", delta=f"${res1['Term_Int'] - res3['Term_Int']:,.0f} saved", delta_color="normal")
+    c3.metric("Equity Gained (5yr)", f"${res3['Term_Prin']:,.0f}")
 
+# --- 7. VISUAL COMPARISON ---
 with tabs[3]:
     table_df = pd.DataFrame([{
         "Scenario": r['Name'],
         "Rate": f"{r['Rate']:.2f}%",
         "Frequency": r['Freq'],
         "Extra Pay Activity": r['Prepay_Active'], 
-        "Monthly Out": f"${r['Monthly_Avg']:,}",
-        "Equity (5yr)": f"${r['Term_Prin']:,}",
-        "Total Interest": f"${r['Total_Life_Int']:,}",
-        "Savings vs A": f"${(results[0]['Total_Life_Int'] - r['Total_Life_Int']):,}",
+        "Monthly Out": f"${r['Monthly_Avg']:,.0f}",
+        "Equity (5yr)": f"${r['Term_Prin']:,.0f}",
+        "Total Interest": f"${r['Total_Life_Int']:,.0f}",
+        "Savings vs A": f"${(results[0]['Total_Life_Int'] - r['Total_Life_Int']):,.0f}",
         "Payoff Time": f"{r['Payoff_Time']} yr"
     } for r in results])
     st.table(table_df)
+
+    comp_data = []
+    for r in results:
+        comp_data.append({"Scenario": r['Name'], "Type": "Interest Paid", "Amount": r['Term_Int']})
+        comp_data.append({"Scenario": r['Name'], "Type": "Equity Built", "Amount": r['Term_Prin']})
+        
+    df_comp = pd.DataFrame(comp_data)
+    
+    fig3 = px.bar(df_comp, x="Scenario", y="Amount", color="Type", barmode="group",
+                  color_discrete_map={"Interest Paid": CHARCOAL, "Equity Built": PRIMARY_GOLD})
+    
+    def apply_style(fig, title):
+        fig.update_layout(
+            title=title,
+            plot_bgcolor="white",
+            font=dict(family="Inter", size=14, color="#1a1a1a"),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True, gridcolor="#f0f0f0"),
+            legend=dict(orientation="h", y=1.1, x=0)
+        )
+        return fig
+
+    fig3.update_traces(texttemplate='%{y:$,.0f}', textposition='outside')
+    fig3.update_yaxes(tickprefix="$")
+    st.plotly_chart(apply_style(fig3, "5-Year Impact: Interest vs. Equity"), use_container_width=True)
 
 # --- 12. LEGAL DISCLAIMER ---
 st.markdown("---")
@@ -355,10 +326,8 @@ st.markdown("""
     <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
         <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
         This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
-        This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+        This does not constitute financial, legal, or tax advice. Mortgage approval and final figures are subject to lender policy, 
+        creditworthiness, and current market conditions. Consult with a professional before making significant financial decisions.
     </p>
 </div>
 """, unsafe_allow_html=True)
-st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
-
-
