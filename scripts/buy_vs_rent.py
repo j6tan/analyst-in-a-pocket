@@ -128,32 +128,32 @@ st.subheader("📊 Performance Comparison")
 v_col1, v_col2 = st.columns(2)
 
 with v_col1:
-    # 1. Removed the separate HTML header
     fig_unrec = go.Figure(data=[
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
     ])
     fig_unrec.update_layout(
-        title=dict(text="Total Sunk Costs", x=0.5, font=dict(size=18)), # 2. Added Native Title (Centered)
+        # FIX: Added xanchor='center' to ensure it sits exactly in the middle
+        title=dict(text="Total Sunk Costs", x=0.5, xanchor='center', font=dict(size=18)),
         yaxis=dict(tickformat="$,.0f"),
         height=300,
-        margin=dict(t=40, b=0, l=40, r=40), # 3. Increased Top Margin (t=40) to fit title
+        margin=dict(t=40, b=0, l=40, r=40),
         showlegend=False
     )
     st.plotly_chart(fig_unrec, use_container_width=True, config={'displayModeBar': False})
     st.markdown("<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -10px;'>Lower is better. Interest/Tax vs. Total Rent.</p>", unsafe_allow_html=True)
 
 with v_col2:
-    # 1. Removed the separate HTML header
     fig_wealth = go.Figure(data=[
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
     ])
     fig_wealth.update_layout(
-        title=dict(text="Final Net Worth", x=0.5, font=dict(size=18)), # 2. Added Native Title (Centered)
+        # FIX: Added xanchor='center' here as well
+        title=dict(text="Final Net Worth", x=0.5, xanchor='center', font=dict(size=18)),
         yaxis=dict(tickformat="$,.0f"),
         height=300,
-        margin=dict(t=40, b=0, l=40, r=40), # 3. Increased Top Margin (t=40) to fit title
+        margin=dict(t=40, b=0, l=40, r=40),
         showlegend=False
     )
     st.plotly_chart(fig_wealth, use_container_width=True, config={'displayModeBar': False})
@@ -209,4 +209,5 @@ st.markdown("""
 
 
 st.caption("Analyst in a Pocket | Strategic Wealth Hub")
+
 
