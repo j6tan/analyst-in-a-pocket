@@ -149,42 +149,24 @@ def simulate_mortgage(principal, annual_rate, amort_years, freq_label, extra_per
         "Name": "" 
     }
 
-# --- 6. MAIN PAGE INPUTS (Replaces Sidebar) ---
-with st.container(border=True):
-    st.markdown("### 🏠 Property & Mortgage Details")
-    
-    # Create 3 columns for a clean layout
-    col_input1, col_input2, col_input3 = st.columns(3)
-    
-    with col_input1:
-        price = st.number_input("Property Price ($)", value=float(raw_afford_max), step=5000.0)
-    
-    with col_input2:
-        down_payment = st.number_input("Down Payment ($)", value=float(raw_afford_down), step=5000.0)
-        
-    with col_input3:
-        amortization = st.selectbox("Amortization (Years)", options=[15, 20, 25, 30], index=2)
-
-    # Logic for metrics (Calculated immediately after inputs)
-    mortgage_principal = price - down_payment
-    ltv = (mortgage_principal / price) * 100 if price > 0 else 0
-    
-    st.divider()
-    
-    # Row for the calculated metrics
-    col_metric1, col_metric2, col_metric3 = st.columns(3)
-    
-    with col_metric1:
-        st.metric(label="Total Mortgage", value=f"${mortgage_principal:,.0f}")
-        
-    with col_metric2:
-        st.metric(label="Loan-to-Value (LTV)", value=f"{ltv:.1f}%", 
-                 delta="< 80% is ideal" if ltv < 80 else "High Ratio", 
-                 delta_color="inverse")
-        
-    with col_metric3:
-        # Empty column to keep alignment or add extra info later
-        st.write("")
+# --- 6. SIDEBAR INPUTS ---
+with st.sidebar:
+    st.header("🏠 Global Settings")
+    price = st.number_input("Property Price ($)", value=store['price'], step=5000.0, key="w_price")
+    store['price'] = price 
+    down = st.number_input("Down Payment ($)", value=store['down'], step=5000.0, key="w_down")
+    store['down'] = down 
+    min_down_req = calculate_min_downpayment(price)
+    is_valid = down >= min_down_req
+    base_loan = price - down
+    ltv = (base_loan / price) * 100
+    cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
+    final_loan = base_loan + cmhc_p
+    st.metric("LTV Ratio", f"{ltv:.1f}%")
+    if is_valid and cmhc_p > 0: st.warning(f"CMHC Premium: ${cmhc_p:,.0f}")
+    st.metric("Total Mortgage", f"${final_loan:,.0f}")
+    amort = st.slider("Amortization (Years)", 5, 30, value=store['amort'], key="w_amort")
+    store['amort'] = amort
 
 # --- 7. INTERFACE ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -208,7 +190,7 @@ if not is_valid:
     st.error(f"### 🛑 Legal Minimum Not Met")
     st.info(f"👉 Minimum Required: **${min_down_req:,.0f}**")
     st.stop()
-      
+       
 # --- 8. SCENARIO GRID ---
 total_cols = st.session_state.num_options
 main_cols = st.columns([3] * total_cols + [1]) 
@@ -334,8 +316,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
-
-
-
-
 
