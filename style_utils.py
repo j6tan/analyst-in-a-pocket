@@ -60,4 +60,26 @@ def inject_global_css():
             text-transform: uppercase !important; 
             letter-spacing: 0.1em !important;
             margin-top: 1.5rem !important;
-            margin
+            margin-bottom: 0.5rem !important;
+            background-color: transparent !important;
+        }
+
+        /* C. THE TOOLS (The Links) */
+        [data-testid="stSidebarNavItems"] a {
+            color: #4D4D4D !important;      
+            font-size: 0.95rem !important;  
+            font-weight: 500 !important;    
+            text-transform: none !important; 
+        }
+        
+        /* Active Tool Highlight */
+        [data-testid="stSidebarNavItems"] a[aria-current="page"] {
+            background-color: #EDEDED !important;
+            font-weight: 600 !important;
+            border-radius: 8px !important;
+        }
+
+        /* HIDE CLUTTER */
+        header, footer {visibility: hidden;}
+        </style>
+    """, unsafe_allow_html=True)
