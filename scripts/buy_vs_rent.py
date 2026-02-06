@@ -128,24 +128,36 @@ st.subheader("📊 Performance Comparison")
 v_col1, v_col2 = st.columns(2)
 
 with v_col1:
-    st.markdown("<h4 style='text-align: center; margin-bottom: -35px;'>Total Sunk Costs</h4>", unsafe_allow_html=True)
+    # 1. Removed the separate HTML header
     fig_unrec = go.Figure(data=[
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
     ])
-    fig_unrec.update_layout(yaxis=dict(tickformat="$,.0f"), height=300, margin=dict(t=10, b=0, l=40, r=40), showlegend=False)
+    fig_unrec.update_layout(
+        title=dict(text="Total Sunk Costs", x=0.5, font=dict(size=18)), # 2. Added Native Title (Centered)
+        yaxis=dict(tickformat="$,.0f"),
+        height=300,
+        margin=dict(t=40, b=0, l=40, r=40), # 3. Increased Top Margin (t=40) to fit title
+        showlegend=False
+    )
     st.plotly_chart(fig_unrec, use_container_width=True, config={'displayModeBar': False})
-    st.markdown("<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -20px;'>Lower is better. Interest/Tax vs. Total Rent.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -10px;'>Lower is better. Interest/Tax vs. Total Rent.</p>", unsafe_allow_html=True)
 
 with v_col2:
-    st.markdown("<h4 style='text-align: center; margin-bottom: -35px;'>Final Net Worth</h4>", unsafe_allow_html=True)
+    # 1. Removed the separate HTML header
     fig_wealth = go.Figure(data=[
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
     ])
-    fig_wealth.update_layout(yaxis=dict(tickformat="$,.0f"), height=300, margin=dict(t=10, b=0, l=40, r=40), showlegend=False)
+    fig_wealth.update_layout(
+        title=dict(text="Final Net Worth", x=0.5, font=dict(size=18)), # 2. Added Native Title (Centered)
+        yaxis=dict(tickformat="$,.0f"),
+        height=300,
+        margin=dict(t=40, b=0, l=40, r=40), # 3. Increased Top Margin (t=40) to fit title
+        showlegend=False
+    )
     st.plotly_chart(fig_wealth, use_container_width=True, config={'displayModeBar': False})
-    st.markdown(f"<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -20px;'>Total wealth after {years} years.</p>", unsafe_allow_html=True)
+    st.markdown(f"<p style='text-align: center; color: #6c757d; font-size: 0.8em; margin-top: -10px;'>Total wealth after {years} years.</p>", unsafe_allow_html=True)
 
 # --- 8. STRATEGIC ANALYST VERDICT ---
 st.divider()
@@ -197,3 +209,4 @@ st.markdown("""
 
 
 st.caption("Analyst in a Pocket | Strategic Wealth Hub")
+
