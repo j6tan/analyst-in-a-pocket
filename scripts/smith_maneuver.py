@@ -289,10 +289,6 @@ with st.container(border=True):
         if net_position < 0:
             st.metric("Net Position (Underwater)", f"-${abs(net_position):,.0f}", delta="UNDERWATER", delta_color="inverse")
             st.error("🚨 DANGER ZONE: You owe more than your assets are worth. The bank could call the loan.")
-             
-
-[Image of stock market crash graph]
-
         else:
             st.metric("Net Position (Safe)", f"${net_position:,.0f}", delta="Solvent")
             st.success("✅ Buffer: You still have equity despite the crash.")
