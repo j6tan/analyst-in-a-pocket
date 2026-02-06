@@ -169,16 +169,14 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. GLOBAL SETTINGS (MOVED: NOW ON MAIN PAGE) ---
-# This block was formerly in the Sidebar. Now it sits right below the story.
+# --- 6. GLOBAL SETTINGS (MOVED TO MAIN PAGE) ---
 with st.container(border=True):
     st.markdown("### 🏠 Property & Mortgage Details")
     
-    # 3-Column Layout for better use of space
+    # 3-Column Inputs
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        # Added float() for type safety
         price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="w_price")
         store['price'] = price 
     
@@ -187,7 +185,6 @@ with st.container(border=True):
         store['down'] = down 
         
     with col_i3:
-        # Using slider logic from your original script
         amort = st.slider("Amortization (Years)", 5, 30, value=int(store['amort']), key="w_amort")
         store['amort'] = amort
 
@@ -199,7 +196,8 @@ with st.container(border=True):
     cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
     final_loan = base_loan + cmhc_p
     
-    st.divider()
+    # --- COMPACT SEPARATOR (Replaces st.divider for less whitespace) ---
+    st.markdown("<div style='margin: 10px 0; border-top: 1px solid #f0f0f0;'></div>", unsafe_allow_html=True)
     
     # Metrics Row
     col_m1, col_m2, col_m3 = st.columns(3)
