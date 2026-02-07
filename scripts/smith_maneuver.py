@@ -53,7 +53,21 @@ with header_col1:
 with header_col2:
     st.title("The Smith Maneuver Strategy")
 
-# --- 4. PREREQUISITES CHECKLIST ---
+# --- 4. STORYTELLING (RESTORED) ---
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🔄 {household_names}: Recycling Your Debt</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Think of this as <b>"Debt Recycling."</b> Every month, you pay down your mortgage (Bad Debt). 
+        The bank immediately lets you borrow that exact amount back (Good Debt) to invest. 
+        Because the new loan is for investment, the interest is tax-deductible. 
+        <br><br>
+        <b>The Goal:</b> Convert your non-deductible mortgage into a tax-deductible investment loan faster than paying it off normally.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 5. PREREQUISITES CHECKLIST ---
 with st.expander("✅ Strategy Prerequisites (Click to View)", expanded=False):
     st.markdown("""
     1. **Readvanceable Mortgage:** Automatic HELOC limit increase (e.g., RBC Homeline).
@@ -62,7 +76,7 @@ with st.expander("✅ Strategy Prerequisites (Click to View)", expanded=False):
     4. **Income-Generating Assets:** Must pay dividends/interest (no pure growth stocks).
     """)
 
-# --- 5. VISUAL EXPLAINER ---
+# --- 6. VISUAL EXPLAINER ---
 st.subheader("⚙️ The Mechanics (Monthly Cycle)")
 c1, c2, c3, c4, c5 = st.columns([1, 0.2, 1, 0.2, 1])
 
@@ -94,7 +108,7 @@ with c5:
 
 st.divider()
 
-# --- 6. INPUTS ---
+# --- 7. INPUTS ---
 with st.container(border=True):
     st.markdown("### 📝 Configure Your Scenario")
     
@@ -125,7 +139,7 @@ with st.container(border=True):
     with c9:
         strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25], value=10)
 
-# --- 7. CALCULATION ENGINE ---
+# --- 8. CALCULATION ENGINE ---
 r_m = mortgage_rate / 100 / 12
 n_m = amortization * 12
 monthly_payment = mortgage_amt * (r_m * (1 + r_m)**n_m) / ((1 + r_m)**n_m - 1)
@@ -203,8 +217,9 @@ for month in range(1, n_m + 1):
     if balance <= 0 and month >= n_m: break
 
 df_annual = pd.DataFrame(annual_data)
+ 
 
-# --- 8. CASH FLOW ANALYSIS (NEW SECTION) ---
+# --- 9. CASH FLOW ANALYSIS ---
 # Filter by Horizon
 df_view = df_annual[df_annual['Year'] <= strategy_horizon].copy()
 
@@ -232,7 +247,7 @@ with cf4:
 
 st.caption("**Note on Dividends:** This model assumes Dividends are used to help pay the HELOC interest. If Dividends > Interest, the excess is pocketed or reinvested.")
 
-# --- 9. TABLE ---
+# --- 10. TABLE ---
 st.divider()
 st.subheader(f"📅 {strategy_horizon}-Year Projection")
 
@@ -246,7 +261,7 @@ for col in display_df.columns:
 
 st.table(display_df)
 
-# --- 10. CHARTS (REDUCED HEIGHT) ---
+# --- 11. CHARTS (REDUCED HEIGHT) ---
 st.divider()
 st.subheader("📈 Visual Projection")
 col_res1, col_res2 = st.columns(2)
@@ -265,7 +280,7 @@ with col_res2:
     fig_wealth.update_layout(title="Net Wealth", hovermode="x unified", plot_bgcolor="white", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 11. RISK SIMULATOR ---
+# --- 12. RISK SIMULATOR ---
 st.markdown("---")
 st.subheader("⚠️ Stress Test")
 with st.container(border=True):
