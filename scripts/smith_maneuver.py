@@ -71,7 +71,7 @@ with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=Fal
     To execute this strategy legally and effectively, you must meet these criteria:
     
     1.  **A. Readvanceable Mortgage:**
-        *You need a HELOC that automatically increases limit as principal is paid (e.g., RBC Homeline, Scotia STEP).
+        You need a HELOC that automatically increases limit as principal is paid (e.g., RBC Homeline, Scotia STEP).
         
     2.  **Positive Principal Paydown:**
         * Your monthly mortgage payment must be reducing the principal balance (Interest-only mortgages do not work).
@@ -380,4 +380,5 @@ with st.container(border=True):
 
     except Exception as e:
         st.write(f"Simulation data unavailable for Year {crash_start}")
+
 
