@@ -261,16 +261,24 @@ st.subheader("📈 Strategy vs. Do Nothing")
 col_res1, col_res2 = st.columns(2)
 
 with col_res1:
+    # Chart 1: Debt Paydown Comparison
     fig_debt = go.Figure()
+    # Active Strategy
     fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Active Mortgage", line=dict(color=INTEREST_COLOR, width=2)))
+    # Baseline
     fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Mortgage"], name="Do Nothing Mortgage", line=dict(color=BASELINE_BLUE, dash='dot')))
+    
     fig_debt.update_layout(title="Mortgage Paydown Speed", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_debt, use_container_width=True)
 
 with col_res2:
+    # Chart 2: Net Worth Comparison
     fig_wealth = go.Figure()
+    # Active Strategy Net Worth (Home Equity + Portfolio - HELOC)
     fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Net Equity (Active)"], name="Active Net Worth", line=dict(color=PRINCIPAL_COLOR, width=3)))
+    # Baseline Net Worth (Home Equity Only)
     fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Net Worth"], name="Do Nothing Net Worth", line=dict(color=BASELINE_BLUE, dash='dot')))
+    
     fig_wealth.update_layout(title="Total Net Worth Comparison", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
@@ -307,10 +315,7 @@ with st.container(border=True):
             if net_position < 0:
                 st.metric("Net Equity Position", f"-${abs(net_position):,.0f}", delta="UNDERWATER", delta_color="inverse")
                 st.error("🚨 WARNING: You owe more than you own.")
-                
-
-[Image of stock market crash]
-
+                 
             else:
                 st.metric("Net Equity Position", f"${net_position:,.0f}", delta="Safe")
                 st.success("✅ SOLVENT: You have a safety buffer.")
