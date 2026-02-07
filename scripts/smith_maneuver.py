@@ -45,7 +45,7 @@ SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 PRIMARY_GOLD = "#CEB36F"
 RISK_RED = "#D9534F"
-BASELINE_BLUE = "#1f77b4" # Color for "Do Nothing" line
+BASELINE_BLUE = "#1f77b4"
 
 # --- 3. HEADER ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -91,7 +91,7 @@ with c5:
 
 st.divider()
 
-# --- 7. INPUTS & MARKET SIMULATION ---
+# --- 7. INPUTS ---
 with st.container(border=True):
     st.markdown("### 📝 Configure Your Scenario")
     
@@ -122,18 +122,6 @@ with st.container(border=True):
     with c9:
         strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=25)
 
-    # --- NEW: MARKET CYCLE SIMULATOR ---
-    st.markdown("### 📉 Market Cycle Simulation")
-    st.caption("Model a market downturn to see how the strategy holds up.")
-    
-    mc1, mc2, mc3 = st.columns(3)
-    with mc1:
-        crash_drop = st.slider("Market Drop (%)", 0, 50, 0, help="Total drop in portfolio value during the crash.")
-    with mc2:
-        crash_start = st.slider("Crash Starts in Year", 1, strategy_horizon, 5)
-    with mc3:
-        crash_duration = st.slider("Duration (Years)", 1, 5, 3, help="How long it takes to recover to baseline.")
-
 # --- 8. CALCULATION ENGINE ---
 sim_years = max(amortization, strategy_horizon)
 n_months = sim_years * 12
@@ -142,7 +130,7 @@ r_m = mortgage_rate / 100 / 12
 n_m_amort = amortization * 12 
 monthly_payment = mortgage_amt * (r_m * (1 + r_m)**n_m_amort) / ((1 + r_m)**n_m_amort - 1)
 
-# Initialize Variables for "Active Strategy"
+# Initialize Active Strategy
 balance = mortgage_amt
 heloc_balance = 0.0
 portfolio = 0.0
@@ -152,30 +140,26 @@ if initial_lump > 0:
     heloc_balance += initial_lump
     portfolio += initial_lump
 
-# Initialize Variables for "Do Nothing" (Baseline)
+# Initialize Baseline (Do Nothing)
 base_balance = mortgage_amt
-base_net_worth = 0.0 # Just Home Equity
 
 annual_data = []
 current_year_heloc_interest = 0.0
 year_refund = 0.0
+current_year_borrows = 0.0
 year_heloc_interest_cost = 0.0
 
 for month in range(1, n_months + 1):
-    current_year = (month - 1) // 12 + 1
-    
-    # --- A. BASELINE SCENARIO (Do Nothing) ---
+    # --- BASELINE CALC ---
     base_principal = 0.0
     if base_balance > 0:
         base_int = base_balance * r_m
         base_principal = monthly_payment - base_int
         if base_principal > base_balance: base_principal = base_balance
         base_balance -= base_principal
-    # Baseline Net Worth is just (Original Mortgage - Current Balance) aka Principal Paid
-    # Note: We assume home value stays flat for simplicity to isolate the "investment" delta
     base_net_worth = (mortgage_amt - base_balance)
 
-    # --- B. ACTIVE STRATEGY (Smith Maneuver) ---
+    # --- ACTIVE STRATEGY ---
     principal_m = 0.0
     if balance > 0:
         interest_m = balance * r_m
@@ -183,15 +167,15 @@ for month in range(1, n_months + 1):
         if principal_m > balance: principal_m = balance
         balance -= principal_m
     
-    # Reborrow Principal
+    # Reborrow
     new_borrowing = principal_m 
     
-    # Interest Tracking
+    # Interest
     interest_heloc = heloc_balance * (loc_rate / 100 / 12)
     current_year_heloc_interest += interest_heloc
     year_heloc_interest_cost += interest_heloc
     
-    # Tax Refund Event (Annual)
+    # Tax Refund (Annual)
     if month % 12 == 1 and month > 1:
         refund_amount = current_year_heloc_interest * (tax_rate / 100)
         
@@ -199,32 +183,17 @@ for month in range(1, n_months + 1):
             balance -= refund_amount
             new_borrowing += refund_amount 
         else:
-            portfolio += refund_amount # Post-payoff investing
+            portfolio += refund_amount # Invest directly
         
         current_year_heloc_interest = 0.0 
         year_refund = refund_amount
         cum_tax_refund += refund_amount
 
-    # Invest & Growth Logic (With Market Cycle)
+    # Invest (Standard Growth)
+    current_year_borrows += new_borrowing
     heloc_balance += new_borrowing
     portfolio += new_borrowing 
-    
-    # Determine Monthly Return Rate based on Cycle
-    monthly_return = inv_return / 100 / 12 # Default
-    
-    # Apply Crash Logic
-    if crash_drop > 0:
-        if current_year == crash_start:
-            # Drop happens in Year 1 of the crash
-            monthly_return = -1 * (crash_drop / 100) / 12 # Simplified linear drop
-        elif crash_start < current_year < (crash_start + crash_duration):
-            # Recovery/Stagnation Phase (Flat or slight recovery)
-            monthly_return = 0.0 
-        elif current_year >= (crash_start + crash_duration):
-            # Return to normal
-            monthly_return = inv_return / 100 / 12
-
-    portfolio = portfolio * (1 + monthly_return)
+    portfolio = portfolio * (1 + inv_return / 100 / 12)
 
     # Annual Snapshot
     if month % 12 == 0:
@@ -239,12 +208,13 @@ for month in range(1, n_months + 1):
             "Annual Tax Refund": year_refund,
             "Dividend Income": annual_div_income,
             "Annual Interest Cost": year_heloc_interest_cost,
-            "Net Equity (Active)": portfolio - heloc_balance + (mortgage_amt - balance), # Includes Home Equity
+            "Net Equity (Active)": portfolio - heloc_balance + (mortgage_amt - balance),
             "Baseline Net Worth": base_net_worth,
             "Baseline Mortgage": base_balance
         })
         
         year_refund = 0.0 
+        current_year_borrows = 0.0
         year_heloc_interest_cost = 0.0
 
 df_annual = pd.DataFrame(annual_data)
@@ -283,7 +253,6 @@ for col in display_df.columns:
         display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 
 st.table(display_df)
- 
 
 # --- 11. CHARTS ---
 st.divider()
@@ -292,30 +261,59 @@ st.subheader("📈 Strategy vs. Do Nothing")
 col_res1, col_res2 = st.columns(2)
 
 with col_res1:
-    # Chart 1: Debt Paydown Comparison
     fig_debt = go.Figure()
-    # Active Strategy
     fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Active Mortgage", line=dict(color=INTEREST_COLOR, width=2)))
-    # Baseline
     fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Mortgage"], name="Do Nothing Mortgage", line=dict(color=BASELINE_BLUE, dash='dot')))
-    
     fig_debt.update_layout(title="Mortgage Paydown Speed", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_debt, use_container_width=True)
 
 with col_res2:
-    # Chart 2: Net Worth Comparison
     fig_wealth = go.Figure()
-    # Active Strategy Net Worth (Home Equity + Portfolio - HELOC)
     fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Net Equity (Active)"], name="Active Net Worth", line=dict(color=PRINCIPAL_COLOR, width=3)))
-    # Baseline Net Worth (Home Equity Only)
     fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Net Worth"], name="Do Nothing Net Worth", line=dict(color=BASELINE_BLUE, dash='dot')))
-    
     fig_wealth.update_layout(title="Total Net Worth Comparison", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 12. RISK SUMMARY ---
+# --- 12. STRESS TEST (BOTTOM SECTION) ---
 st.markdown("---")
-if crash_drop > 0:
-    st.warning(f"⚠️ **Scenario Active:** Market Drop of **{crash_drop}%** starting in **Year {crash_start}** for **{crash_duration} years**.")
-else:
-    st.success("✅ **Scenario Active:** Smooth sailing (No market crash modeled). Use the sliders above to test risk.")
+st.subheader("⚠️ Stress Test Simulator")
+st.markdown("Use this section to check your safety margin. This does **not** affect the charts above.")
+
+with st.container(border=True):
+    c1, c2 = st.columns(2)
+    with c1:
+        crash_scenario = st.slider("📉 Potential Market Drop (%)", 0, 50, 30)
+    with c2:
+        crash_year = st.slider("📅 Crash Occurs in Year", 1, strategy_horizon, 5)
+    
+    try:
+        # Pull data from the 'Happy Path' table above
+        row = df_annual[df_annual['Year'] == crash_year].iloc[0]
+        loan = row["Investment Loan"]
+        port_value_before_crash = row["Portfolio Value"]
+        
+        # Apply local crash calculation
+        crashed_value = port_value_before_crash * (1 - crash_scenario / 100)
+        net_position = crashed_value - loan
+        
+        st.divider()
+        rc1, rc2, rc3 = st.columns(3)
+        
+        with rc1:
+            st.metric(f"Loan Balance (Year {crash_year})", f"${loan:,.0f}")
+        with rc2:
+            st.metric(f"Portfolio (After -{crash_scenario}%)", f"${crashed_value:,.0f}", delta=f"-${port_value_before_crash - crashed_value:,.0f}", delta_color="inverse")
+        with rc3:
+            if net_position < 0:
+                st.metric("Net Equity Position", f"-${abs(net_position):,.0f}", delta="UNDERWATER", delta_color="inverse")
+                st.error("🚨 WARNING: You owe more than you own.")
+                
+
+[Image of stock market crash]
+
+            else:
+                st.metric("Net Equity Position", f"${net_position:,.0f}", delta="Safe")
+                st.success("✅ SOLVENT: You have a safety buffer.")
+
+    except:
+        st.write("Year out of range.")
