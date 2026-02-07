@@ -79,7 +79,7 @@ def inject_global_css():
             border-radius: 8px !important;
         }
 
-        /* HIDE CLUTTER */
-        header, footer {visibility: hidden;}
+        /* FIX: Only hide footer. Hiding 'header' hides the sidebar toggle button! */
+        footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
