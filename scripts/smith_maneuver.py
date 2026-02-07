@@ -54,40 +54,85 @@ with header_col1:
 with header_col2:
     st.title("The Smith Maneuver Strategy")
 
-# --- 4. STORYTELLING ---
+# --- 4. RICH STORYTELLING ---
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🔄 {household_names}: Recycling Your Debt</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Think of this as <b>"Debt Recycling."</b> Every month, you pay down your mortgage (Bad Debt). 
-        The bank immediately lets you borrow that exact amount back (Good Debt) to invest. 
-        Because the new loan is for investment, the interest is tax-deductible. 
+<div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🔄 {household_names}: Turning Mortgage Interest into Tax Refunds</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.6; margin-bottom: 10px;">
+        Traditional mortgage payments are "dead money"—the interest is not tax-deductible, and the principal sits trapped in your home equity earning 0%.
+    </p>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.6; margin-bottom: 0;">
+        <b>The Smith Maneuver</b> changes this. It is a debt conversion strategy where we systematically re-borrow the principal you pay down on your mortgage to invest in income-generating assets. 
+        This converts your <b>Non-Deductible "Bad Debt"</b> (Mortgage) into <b>Tax-Deductible "Good Debt"</b> (Investment Loan). The resulting tax refunds are used to prepay the mortgage even faster, creating a virtuous cycle of wealth creation.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. PREREQUISITES ---
-with st.expander("✅ Strategy Prerequisites (Click to View)", expanded=False):
+# --- 5. DETAILED PREREQUISITES ---
+with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=True):
     st.markdown("""
-    1. **Readvanceable Mortgage:** Automatic HELOC limit increase.
-    2. **Principal Paydown:** Must be a standard amortizing mortgage.
-    3. **Non-Registered Account:** Funds must be invested in a taxable account.
-    4. **Income-Generating Assets:** Must pay dividends/interest.
+    To execute this strategy legally and effectively, you must meet these four criteria:
+    
+    1.  **A Readvanceable Mortgage (The Engine):**
+        * You need a mortgage product that combines a standard mortgage and a HELOC (e.g., RBC Homeline Plan, Scotia STEP, TD FlexLine).
+        * *Why?* As you pay down \$1 of principal, the HELOC limit must automatically increase by \$1 immediately, allowing you to re-borrow without a new application.
+        
+    2.  **Positive Principal Paydown:**
+        * Your monthly mortgage payment must be reducing the principal balance.
+        * *Why?* Interest-only mortgages do not create new HELOC room, so the strategy cannot function.
+        
+    3.  **Non-Registered Investment Account:**
+        * Funds must be invested in a taxable (Non-Registered) account.
+        * *Why?* You cannot deduct interest on loans used to contribute to RRSPs or TFSAs. The CRA only allows deductions for taxable investments.
+        
+    4.  **Income-Generating Assets (The CRA Rule):**
+        * You must invest in assets with a "reasonable expectation of income" (Dividends, Interest, or Rent).
+        * *Why?* If you buy stocks that *only* produce capital gains (no dividends), the CRA may deny your interest deduction.
     """)
 
-# --- 6. VISUAL EXPLAINER ---
-st.subheader("⚙️ The Mechanics (Monthly Cycle)")
+# --- 6. MECHANICS (THE CYCLE) ---
+st.divider()
+st.subheader("⚙️ The Mechanics: Follow the Dollar")
+st.markdown("Here is exactly what happens every single month:")
+
 c1, c2, c3, c4, c5 = st.columns([1, 0.2, 1, 0.2, 1])
 with c1:
-    st.markdown(f"<div style='text-align:center; border:1px solid #ddd; padding:10px; border-radius:5px;'><b>1. Pay Mortgage</b><br><span style='color:#666'>-$1,000</span></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='text-align:center; border:1px solid #ddd; padding:15px; border-radius:8px; height:100%;'>
+        <div style='font-size:2em;'>🏠</div>
+        <div style='font-weight:bold; margin-top:5px;'>1. Pay Mortgage</div>
+        <p style='font-size:0.9em; color:#666; margin:5px 0;'>You make your regular payment.</p>
+        <div style='background:#eee; padding:5px; border-radius:5px; font-weight:bold; color:#555;'>Principal: -$1,000</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with c2:
-    st.markdown("<h2 style='text-align: center; color: #ccc;'>➔</h2>", unsafe_allow_html=True)
+    st.markdown("<div style='display:flex; align-items:center; justify-content:center; height:100%; font-size:2em; color:#ccc;'>➔</div>", unsafe_allow_html=True)
+
 with c3:
-    st.markdown(f"<div style='text-align:center; border:1px solid {PRIMARY_GOLD}; background:#FFFDF5; padding:10px; border-radius:5px;'><b>2. Re-Borrow</b><br><span style='color:{PRIMARY_GOLD}'>+$1,000</span></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='text-align:center; border:1px solid {PRIMARY_GOLD}; background:#FFFDF5; padding:15px; border-radius:8px; height:100%;'>
+        <div style='font-size:2em;'>🏦</div>
+        <div style='font-weight:bold; margin-top:5px;'>2. Re-Borrow</div>
+        <p style='font-size:0.9em; color:#666; margin:5px 0;'>Bank opens up new HELOC room.</p>
+        <div style='background:#FFF8E1; padding:5px; border-radius:5px; font-weight:bold; color:{PRIMARY_GOLD};'>HELOC: +$1,000</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 with c4:
-    st.markdown("<h2 style='text-align: center; color: #ccc;'>➔</h2>", unsafe_allow_html=True)
+    st.markdown("<div style='display:flex; align-items:center; justify-content:center; height:100%; font-size:2em; color:#ccc;'>➔</div>", unsafe_allow_html=True)
+
 with c5:
-    st.markdown(f"<div style='text-align:center; border:1px solid #333; background:#f9f9f9; padding:10px; border-radius:5px;'><b>3. Invest</b><br><span style='color:#333'>+$1,000</span></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='text-align:center; border:1px solid #333; background:#F8F9FA; padding:15px; border-radius:8px; height:100%;'>
+        <div style='font-size:2em;'>📈</div>
+        <div style='font-weight:bold; margin-top:5px;'>3. Invest</div>
+        <p style='font-size:0.9em; color:#666; margin:5px 0;'>Buy Dividend Stocks/ETFs.</p>
+        <div style='background:#ddd; padding:5px; border-radius:5px; font-weight:bold; color:#333;'>Assets: +$1,000</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.info("💡 **The Accelerator:** At the end of the year, the interest you paid on Step 2 generates a tax refund. You take that refund and apply it to Step 1 (Prepayment), which speeds up the entire cycle.")
 
 st.divider()
 
@@ -122,7 +167,7 @@ with st.container(border=True):
     with c9:
         strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=25)
 
-# --- 8. CALCULATION ENGINE ---
+# --- 8. CALCULATION ENGINE (BASE CASE) ---
 sim_years = max(amortization, strategy_horizon)
 n_months = sim_years * 12
 
@@ -253,6 +298,7 @@ for col in display_df.columns:
         display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 
 st.table(display_df)
+ 
 
 # --- 11. CHARTS ---
 st.divider()
@@ -282,43 +328,73 @@ with col_res2:
     fig_wealth.update_layout(title="Total Net Worth Comparison", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 12. STRESS TEST (BOTTOM SECTION) ---
+# --- 12. STRESS TEST SIMULATOR ---
 st.markdown("---")
 st.subheader("⚠️ Stress Test Simulator")
-st.markdown("Use this section to check your safety margin. This does **not** affect the charts above.")
+st.markdown("""
+This section models a **market crash and stagnation**. It does not change the charts above, but provides a specific "What If" analysis.
+**Scenario Logic:**
+1.  **Drop:** Market drops by X% in the specified Start Year.
+2.  **Stagnation:** Market stays flat (0% growth) for the Duration.
+3.  **Cost:** You continue to pay full interest on the HELOC during the recovery.
+""")
 
 with st.container(border=True):
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
-        crash_scenario = st.slider("📉 Potential Market Drop (%)", 0, 50, 30)
+        crash_drop = st.slider("Crash Magnitude (%)", 0, 50, 30)
     with c2:
-        crash_year = st.slider("📅 Crash Occurs in Year", 1, strategy_horizon, 5)
-    
+        crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, 5)
+    with c3:
+        crash_duration = st.slider("Recovery Duration (Years)", 1, 10, 3)
+
     try:
-        # Pull data from the 'Happy Path' table above
-        row = df_annual[df_annual['Year'] == crash_year].iloc[0]
-        loan = row["Investment Loan"]
-        port_value_before_crash = row["Portfolio Value"]
+        # 1. Get State BEFORE Crash
+        row_before = df_annual[df_annual['Year'] == crash_start].iloc[0]
+        loan_at_start = row_before["Investment Loan"]
+        port_at_start = row_before["Portfolio Value"]
+
+        # 2. Apply Crash (Instant Drop)
+        port_after_drop = port_at_start * (1 - crash_drop / 100)
+
+        # 3. Simulate Stagnation (Interest Costs pile up, Portfolio is flat)
+        # We estimate the interest cost over the duration
+        # Loan grows? Or we assume we pay interest out of pocket?
+        # Standard assumption: You must service the debt.
+        # Cost = Loan * Rate * Duration
         
-        # Apply local crash calculation
-        crashed_value = port_value_before_crash * (1 - crash_scenario / 100)
-        net_position = crashed_value - loan
+        annual_interest_cost = loan_at_start * (loc_rate / 100)
+        total_stagnation_cost = annual_interest_cost * crash_duration
+        
+        # 4. Result at End of Duration
+        # Portfolio is flat for duration (0% growth)
+        port_at_recovery = port_after_drop 
+        
+        # Net Equity = Portfolio - Loan
+        net_equity_at_recovery = port_at_recovery - loan_at_start
         
         st.divider()
-        rc1, rc2, rc3 = st.columns(3)
         
-        with rc1:
-            st.metric(f"Loan Balance (Year {crash_year})", f"${loan:,.0f}")
-        with rc2:
-            st.metric(f"Portfolio (After -{crash_scenario}%)", f"${crashed_value:,.0f}", delta=f"-${port_value_before_crash - crashed_value:,.0f}", delta_color="inverse")
-        with rc3:
-            if net_position < 0:
-                st.metric("Net Equity Position", f"-${abs(net_position):,.0f}", delta="UNDERWATER", delta_color="inverse")
-                st.error("🚨 WARNING: You owe more than you own.")
-                 
-            else:
-                st.metric("Net Equity Position", f"${net_position:,.0f}", delta="Safe")
-                st.success("✅ SOLVENT: You have a safety buffer.")
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("Portfolio Value (After Drop)", f"${port_after_drop:,.0f}", delta=f"-${port_at_start - port_after_drop:,.0f}", delta_color="inverse")
+            st.caption(f"Immediate impact in Year {crash_start}")
+            
+        with col_s2:
+            st.metric(f"Cost to Hold (over {crash_duration} yrs)", f"${total_stagnation_cost:,.0f}", help="Total interest paid while waiting for market to recover.")
+            st.caption("Interest paid while market was flat")
+            
+        with col_s3:
+            if net_equity_at_recovery < 0:
+                st.metric("Net Equity Position", f"-${abs(net_equity_at_recovery):,.0f}", delta="UNDERWATER", delta_color="inverse")
+                st.error("🚨 Warning: Liability exceeds Assets")
+                
 
-    except:
-        st.write("Year out of range.")
+[Image of stock market crash]
+
+            else:
+                st.metric("Net Equity Position", f"${net_equity_at_recovery:,.0f}", delta="Safe")
+                st.success("✅ Solvent (Assets > Loan)")
+
+    except Exception as e:
+        st.write(f"Simulation data unavailable for Year {crash_start}")
