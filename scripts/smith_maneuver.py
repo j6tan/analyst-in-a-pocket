@@ -53,7 +53,7 @@ with header_col1:
 with header_col2:
     st.title("The Smith Maneuver Strategy")
 
-# --- 4. PREREQUISITES CHECKLIST (NEW) ---
+# --- 4. PREREQUISITES CHECKLIST ---
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; margin-bottom: 25px;">
     <h4 style="margin-top:0; color: {SLATE_ACCENT};">✅ Strategy Prerequisites</h4>
@@ -69,7 +69,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. VISUAL EXPLAINER (RESTORED $1000 EXAMPLE) ---
+# --- 5. VISUAL EXPLAINER ---
 st.subheader("⚙️ The Mechanics (Monthly Cycle)")
 c1, c2, c3, c4, c5 = st.columns([1, 0.2, 1, 0.2, 1])
 
@@ -121,15 +121,14 @@ with st.container(border=True):
     with c3:
         mortgage_rate = st.number_input("Mortgage Rate (%)", value=5.0, step=0.1)
 
-    # Row 2: Investment Strategy (UPDATED)
+    # Row 2: Investment Strategy
     c4, c5, c6 = st.columns(3)
     with c4:
         loc_rate = st.number_input("HELOC Rate (%)", value=6.0, step=0.1)
     with c5:
         inv_return = st.number_input("Total Return (%)", value=8.0, step=0.1, help="Total expected growth (Dividends + Capital Appreciation).")
     with c6:
-        # NEW INPUT: Dividend Yield
-        div_yield = st.number_input("Dividend Yield (%)", value=5.0, step=0.1, help="The portion of return paid out as income (Required for deductibility).")
+        div_yield = st.number_input("Dividend Yield (%)", value=5.0, step=0.1, help="The portion of return paid out as income.")
 
     # Row 3: Tax & Room
     c7, c8, c9 = st.columns(3)
@@ -138,7 +137,7 @@ with st.container(border=True):
     with c8:
         initial_lump = st.number_input("Initial Available HELOC ($)", value=0.0, step=5000.0, help="Existing room you can borrow immediately.")
     with c9:
-        st.write("") # Spacer
+        st.write("") 
 
 # --- 7. CALCULATION ENGINE ---
 r_m = mortgage_rate / 100 / 12
@@ -159,12 +158,6 @@ current_year_heloc_interest = 0.0
 year_refund = 0.0
 year_principal_reborrowed = 0.0
 current_year_borrows = 0.0
-
-# Tax Logic Helper (Simplified for Dividend Credit vs Marginal)
-# In reality, eligible dividends are taxed lower than interest. 
-# We will assume a 'Dividend Tax Rate' roughly 2/3rds of Marginal for estimation, 
-# or 0 if inside the exemption limit, but for safety in this model we won't net it out of the refund 
-# to keep the "Interest Refund" logic pure, but we will display the implication.
 
 for month in range(1, n_m + 1):
     # 1. Mortgage
@@ -208,7 +201,6 @@ for month in range(1, n_m + 1):
     if month % 12 == 0 or balance <= 0:
         year = month // 12
         
-        # Dividend Calculation for Display
         annual_div_income = portfolio * (div_yield / 100)
         
         annual_data.append({
@@ -314,10 +306,6 @@ with st.container(border=True):
             if underwater_amount < 0:
                 st.metric("Net Equity", f"-${abs(underwater_amount):,.0f}", delta="UNDERWATER", delta_color="inverse")
                 st.error("🚨 DANGER: Liabilities exceed Assets.")
-                
-
-[Image of market crash chart]
-
             else:
                 st.metric("Net Equity", f"${underwater_amount:,.0f}", delta="Safe")
                 st.success("✅ Buffer: You have positive equity.")
