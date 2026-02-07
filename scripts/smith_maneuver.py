@@ -61,32 +61,50 @@ st.markdown(f"""
         Think of this as <b>"Debt Recycling."</b> Every month, you pay down your mortgage (Bad Debt). 
         The bank immediately lets you borrow that exact amount back (Good Debt) to invest. 
         Because the new loan is for investment, the interest is tax-deductible. 
+        <br><br>
+        <b>The Goal:</b> Convert your non-deductible mortgage into a tax-deductible investment loan faster than paying it off normally.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. PREREQUISITES ---
+# --- 5. PREREQUISITES CHECKLIST ---
 with st.expander("✅ Strategy Prerequisites (Click to View)", expanded=False):
     st.markdown("""
-    1. **Readvanceable Mortgage:** Automatic HELOC limit increase.
+    1. **Readvanceable Mortgage:** Automatic HELOC limit increase (e.g., RBC Homeline).
     2. **Principal Paydown:** Must be a standard amortizing mortgage.
     3. **Non-Registered Account:** Funds must be invested in a taxable account.
-    4. **Income-Generating Assets:** Must pay dividends/interest.
+    4. **Income-Generating Assets:** Must pay dividends/interest (no pure growth stocks).
     """)
 
 # --- 6. VISUAL EXPLAINER ---
 st.subheader("⚙️ The Mechanics (Monthly Cycle)")
 c1, c2, c3, c4, c5 = st.columns([1, 0.2, 1, 0.2, 1])
+
 with c1:
-    st.markdown(f"<div style='text-align:center; border:1px solid #ddd; padding:10px; border-radius:5px;'><b>1. Pay Mortgage</b><br><span style='color:#666'>-$1,000</span></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="text-align: center; border: 2px solid #DEE2E6; padding: 10px; border-radius: 10px; background-color: white;">
+        <h4 style="margin:5px 0;">1. Pay Mortgage</h4>
+        <div style="margin-top:5px; background:#eee; padding:5px; border-radius:5px; font-weight:bold; font-size: 0.9em; color:#666;">-$1,000</div>
+    </div>
+    """, unsafe_allow_html=True)
 with c2:
-    st.markdown("<h2 style='text-align: center; color: #ccc;'>➔</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; padding-top: 30px; color: #ccc;'>➔</h2>", unsafe_allow_html=True)
 with c3:
-    st.markdown(f"<div style='text-align:center; border:1px solid {PRIMARY_GOLD}; background:#FFFDF5; padding:10px; border-radius:5px;'><b>2. Re-Borrow</b><br><span style='color:{PRIMARY_GOLD}'>+$1,000</span></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="text-align: center; border: 2px solid {PRIMARY_GOLD}; padding: 10px; border-radius: 10px; background-color: #FFFDF5;">
+        <h4 style="margin:5px 0;">2. Re-Borrow</h4>
+        <div style="margin-top:5px; background:#FFF8E1; padding:5px; border-radius:5px; font-weight:bold; font-size: 0.9em; color:{PRIMARY_GOLD};">+$1,000</div>
+    </div>
+    """, unsafe_allow_html=True)
 with c4:
-    st.markdown("<h2 style='text-align: center; color: #ccc;'>➔</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; padding-top: 30px; color: #ccc;'>➔</h2>", unsafe_allow_html=True)
 with c5:
-    st.markdown(f"<div style='text-align:center; border:1px solid #333; background:#f9f9f9; padding:10px; border-radius:5px;'><b>3. Invest</b><br><span style='color:#333'>+$1,000</span></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="text-align: center; border: 2px solid #2E2B28; padding: 10px; border-radius: 10px; background-color: #F8F9FA;">
+        <h4 style="margin:5px 0;">3. Invest</h4>
+        <div style="margin-top:5px; background:#ddd; padding:5px; border-radius:5px; font-weight:bold; font-size: 0.9em; color:#333;">+$1,000</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.divider()
 
@@ -108,7 +126,7 @@ with st.container(border=True):
     with c4:
         loc_rate = st.number_input("HELOC Rate (%)", value=6.0, step=0.1)
     with c5:
-        inv_return = st.number_input("Total Return (%)", value=7.0, step=0.1)
+        inv_return = st.number_input("Total Return (%)", value=8.0, step=0.1)
     with c6:
         div_yield = st.number_input("Dividend Yield (%)", value=5.0, step=0.1)
 
@@ -122,11 +140,12 @@ with st.container(border=True):
         strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=25)
 
 # --- 8. CALCULATION ENGINE ---
+# Ensure simulation runs for the LONGER of amortization or strategy horizon
 sim_years = max(amortization, strategy_horizon)
 n_months = sim_years * 12
 
 r_m = mortgage_rate / 100 / 12
-n_m_amort = amortization * 12 
+n_m_amort = amortization * 12 # Payoff schedule follows original amortization
 monthly_payment = mortgage_amt * (r_m * (1 + r_m)**n_m_amort) / ((1 + r_m)**n_m_amort - 1)
 
 balance = mortgage_amt
@@ -141,6 +160,7 @@ if initial_lump > 0:
 annual_data = []
 current_year_heloc_interest = 0.0
 year_refund = 0.0
+current_year_borrows = 0.0
 year_heloc_interest_cost = 0.0
 
 for month in range(1, n_months + 1):
@@ -152,7 +172,7 @@ for month in range(1, n_months + 1):
         if principal_m > balance: principal_m = balance
         balance -= principal_m
     
-    # 2. Reborrow Principal
+    # 2. Reborrow Principal (Only if we paid principal)
     new_borrowing = principal_m 
     
     # 3. Interest Tracking
@@ -165,9 +185,12 @@ for month in range(1, n_months + 1):
         refund_amount = current_year_heloc_interest * (tax_rate / 100)
         
         if balance > 0:
+            # Standard SM: Refund pays down mortgage -> Reborrow -> Invest
             balance -= refund_amount
             new_borrowing += refund_amount 
         else:
+            # Post-Mortgage: Refund is invested directly (added to portfolio)
+            # No new borrowing, just cash injection
             portfolio += refund_amount
         
         current_year_heloc_interest = 0.0 
@@ -175,13 +198,15 @@ for month in range(1, n_months + 1):
         cum_tax_refund += refund_amount
 
     # 5. Invest
+    current_year_borrows += new_borrowing
     heloc_balance += new_borrowing
     portfolio += new_borrowing 
     portfolio = portfolio * (1 + inv_return / 100 / 12)
 
-    # Annual Snapshot
+    # Annual Snapshot (FIXED: Strict End-of-Year Logic)
     if month % 12 == 0:
         year = month // 12
+        
         annual_div_income = portfolio * (div_yield / 100)
         
         annual_data.append({
@@ -194,30 +219,41 @@ for month in range(1, n_months + 1):
             "Annual Interest Cost": year_heloc_interest_cost,
             "Net Equity": portfolio - heloc_balance
         })
+        
+        # Reset annual trackers
         year_refund = 0.0 
+        current_year_borrows = 0.0
         year_heloc_interest_cost = 0.0
 
 df_annual = pd.DataFrame(annual_data)
-df_view = df_annual[df_annual['Year'] <= strategy_horizon].copy()
 
 # --- 9. CASH FLOW ANALYSIS ---
+# Filter by Horizon
+df_view = df_annual[df_annual['Year'] <= strategy_horizon].copy()
+
 total_int_cost = df_view['Annual Interest Cost'].sum()
 total_divs = df_view['Dividend Income'].sum()
 total_refunds = df_view['Annual Tax Refund'].sum()
 net_cashflow = (total_divs + total_refunds) - total_int_cost
 
 st.divider()
-st.subheader(f"💰 Cash Flow Analysis (Total over {strategy_horizon} Years)")
+st.subheader(f"💰 Cash Flow Analysis ({strategy_horizon} Year Horizon)")
+st.markdown("Comparing the cost of the HELOC vs. the income it generates (Dividends + Tax Refunds).")
 
 cf1, cf2, cf3, cf4 = st.columns(4)
 with cf1:
-    st.metric("Total Interest Cost", f"${total_int_cost:,.0f}", help=f"Cost of borrowing at {loc_rate}%")
+    st.metric("Total Interest Cost", f"${total_int_cost:,.0f}", help="Total interest paid to the bank for the HELOC.")
 with cf2:
-    st.metric("Total Dividends", f"${total_divs:,.0f}", help=f"Cash generated at {div_yield}% yield")
+    st.metric("Total Dividends", f"${total_divs:,.0f}", help="Cash income generated by the portfolio.")
 with cf3:
-    st.metric("Total Tax Refunds", f"${total_refunds:,.0f}", help="Based on HELOC Interest x Tax Rate")
+    st.metric("Total Tax Refunds", f"${total_refunds:,.0f}", help="Cash returned by CRA due to interest deductions.")
 with cf4:
-    st.metric("Net Cash Benefit", f"${net_cashflow:,.0f}", delta="Positive" if net_cashflow > 0 else "Negative")
+    if net_cashflow > 0:
+        st.metric("Net Cash Benefit", f"${net_cashflow:,.0f}", delta="Positive", help="Income exceeded Interest costs.")
+    else:
+        st.metric("Net Out-of-Pocket", f"-${abs(net_cashflow):,.0f}", delta="Negative", delta_color="inverse", help="You had to top up the interest payments.")
+
+st.caption("**Note on Dividends:** This model assumes Dividends are used to help pay the HELOC interest. If Dividends > Interest, the excess is pocketed or reinvested.")
 
 # --- 10. TABLE ---
 st.divider()
@@ -226,52 +262,53 @@ st.subheader(f"📅 {strategy_horizon}-Year Projection")
 display_df = df_view[['Year', 'Mortgage Balance', 'Investment Loan', 'Portfolio Value', 'Annual Tax Refund', 'Dividend Income']].copy()
 display_df.columns = ['Year', 'Bad Debt (Mortgage)', 'Good Debt (HELOC)', 'Asset Value (Portfolio)', 'Tax Refund (Re-invested)', 'Dividend Cash Flow']
 
+# Format
 for col in display_df.columns:
     if col != 'Year':
         display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 
 st.table(display_df)
- 
 
-# --- 11. CHARTS ---
+# --- 11. CHARTS (REDUCED HEIGHT) ---
 st.divider()
+st.subheader("📈 Visual Projection")
 col_res1, col_res2 = st.columns(2)
+
 with col_res1:
     fig_debt = go.Figure()
     fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Bad Debt", fill='tozeroy', line=dict(color=INTEREST_COLOR)))
     fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Investment Loan"], name="Good Debt", line=dict(color=PRINCIPAL_COLOR, width=4)))
-    fig_debt.update_layout(title="Debt Swap", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
+    fig_debt.update_layout(title="Debt Swap", hovermode="x unified", plot_bgcolor="white", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_debt, use_container_width=True)
 
 with col_res2:
     fig_wealth = go.Figure()
     fig_wealth.add_trace(go.Bar(x=df_view["Year"], y=df_view["Portfolio Value"], name="Assets", marker_color=PRINCIPAL_COLOR))
     fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Investment Loan"], name="Liabilities", line=dict(color=RISK_RED, width=2, dash='dash')))
-    fig_wealth.update_layout(title="Net Wealth", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
+    fig_wealth.update_layout(title="Net Wealth", hovermode="x unified", plot_bgcolor="white", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
 # --- 12. RISK SIMULATOR ---
 st.markdown("---")
-st.subheader("⚠️ Stress Test: When Leverage Bites")
+st.subheader("⚠️ Stress Test")
 with st.container(border=True):
     c1, c2 = st.columns(2)
     with c1:
         crash_scenario = st.slider("📉 Market Drop (%)", 0, 50, 30)
     with c2:
-        crash_year = st.slider("📅 Simulate Crash occuring in Year", 1, strategy_horizon, 2)
+        crash_year = st.slider("📅 Crash Year", 1, 10, 2)
     
     try:
+        # Use full data for stress testing any year
         row = df_annual[df_annual['Year'] == crash_year].iloc[0]
         loan = row["Investment Loan"]
         port = row["Portfolio Value"]
         crashed = port * (1 - crash_scenario / 100)
         net = crashed - loan
         
-        st.caption(f"Scenario: You wake up in **Year {crash_year}**. You owe **${loan:,.0f}**. The market drops **{crash_scenario}%**.")
-        
         rc1, rc2, rc3 = st.columns(3)
         rc1.metric("Loan Balance", f"${loan:,.0f}")
-        rc2.metric("Portfolio Value", f"${crashed:,.0f}", delta=f"-${port - crashed:,.0f} Loss", delta_color="inverse")
+        rc2.metric("Crashed Portfolio", f"${crashed:,.0f}", delta=f"-${port - crashed:,.0f}", delta_color="inverse")
         if net < 0:
             rc3.metric("Net Equity", f"-${abs(net):,.0f}", delta="UNDERWATER", delta_color="inverse")
         else:
