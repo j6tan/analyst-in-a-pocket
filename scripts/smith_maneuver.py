@@ -298,7 +298,6 @@ for col in display_df.columns:
         display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 
 st.table(display_df)
- 
 
 # --- 11. CHARTS ---
 st.divider()
@@ -388,10 +387,6 @@ with st.container(border=True):
             if net_equity_at_recovery < 0:
                 st.metric("Net Equity Position", f"-${abs(net_equity_at_recovery):,.0f}", delta="UNDERWATER", delta_color="inverse")
                 st.error("🚨 Warning: Liability exceeds Assets")
-                
-
-[Image of stock market crash]
-
             else:
                 st.metric("Net Equity Position", f"${net_equity_at_recovery:,.0f}", delta="Safe")
                 st.success("✅ Solvent (Assets > Loan)")
