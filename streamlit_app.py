@@ -6,6 +6,7 @@ from style_utils import inject_global_css
 
 # --- 1. GLOBAL CONFIG (Universal De-Squish) ---
 st.set_page_config(layout="wide", page_title="Analyst in a Pocket", page_icon="📊")
+st.set_page_config(initial_sidebar_state="expanded")
 
 inject_global_css() # Keep styles active on this page
 
@@ -58,6 +59,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
 
