@@ -53,7 +53,7 @@ with header_col1:
 with header_col2:
     st.title("The Smith Maneuver Strategy")
 
-# --- 4. STORYTELLING ---
+# --- 4. STORYTELLING (RESTORED) ---
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🔄 {household_names}: Recycling Your Debt</h3>
@@ -137,16 +137,12 @@ with st.container(border=True):
     with c8:
         initial_lump = st.number_input("Initial HELOC Room ($)", value=0.0, step=5000.0)
     with c9:
-        strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=25)
+        strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25], value=10)
 
 # --- 8. CALCULATION ENGINE ---
-# Ensure simulation runs for the LONGER of amortization or strategy horizon
-sim_years = max(amortization, strategy_horizon)
-n_months = sim_years * 12
-
 r_m = mortgage_rate / 100 / 12
-n_m_amort = amortization * 12 # Payoff schedule follows original amortization
-monthly_payment = mortgage_amt * (r_m * (1 + r_m)**n_m_amort) / ((1 + r_m)**n_m_amort - 1)
+n_m = amortization * 12
+monthly_payment = mortgage_amt * (r_m * (1 + r_m)**n_m) / ((1 + r_m)**n_m - 1)
 
 balance = mortgage_amt
 heloc_balance = 0.0
@@ -163,16 +159,15 @@ year_refund = 0.0
 current_year_borrows = 0.0
 year_heloc_interest_cost = 0.0
 
-for month in range(1, n_months + 1):
+for month in range(1, n_m + 1):
     # 1. Mortgage
-    principal_m = 0.0
-    if balance > 0:
-        interest_m = balance * r_m
-        principal_m = monthly_payment - interest_m
-        if principal_m > balance: principal_m = balance
-        balance -= principal_m
+    interest_m = balance * r_m
+    principal_m = monthly_payment - interest_m
+    if principal_m > balance: principal_m = balance
     
-    # 2. Reborrow Principal (Only if we paid principal)
+    balance -= principal_m
+    
+    # 2. Reborrow Principal
     new_borrowing = principal_m 
     
     # 3. Interest Tracking
@@ -185,13 +180,8 @@ for month in range(1, n_months + 1):
         refund_amount = current_year_heloc_interest * (tax_rate / 100)
         
         if balance > 0:
-            # Standard SM: Refund pays down mortgage -> Reborrow -> Invest
             balance -= refund_amount
             new_borrowing += refund_amount 
-        else:
-            # Post-Mortgage: Refund is invested directly (added to portfolio)
-            # No new borrowing, just cash injection
-            portfolio += refund_amount
         
         current_year_heloc_interest = 0.0 
         year_refund = refund_amount
@@ -203,8 +193,8 @@ for month in range(1, n_months + 1):
     portfolio += new_borrowing 
     portfolio = portfolio * (1 + inv_return / 100 / 12)
 
-    # Annual Snapshot (FIXED: Strict End-of-Year Logic)
-    if month % 12 == 0:
+    # Annual Snapshot
+    if month % 12 == 0 or balance <= 0:
         year = month // 12
         
         annual_div_income = portfolio * (div_yield / 100)
@@ -220,12 +210,14 @@ for month in range(1, n_months + 1):
             "Net Equity": portfolio - heloc_balance
         })
         
-        # Reset annual trackers
         year_refund = 0.0 
         current_year_borrows = 0.0
         year_heloc_interest_cost = 0.0
+        
+    if balance <= 0 and month >= n_m: break
 
 df_annual = pd.DataFrame(annual_data)
+ 
 
 # --- 9. CASH FLOW ANALYSIS ---
 # Filter by Horizon
@@ -276,15 +268,15 @@ col_res1, col_res2 = st.columns(2)
 
 with col_res1:
     fig_debt = go.Figure()
-    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Bad Debt", fill='tozeroy', line=dict(color=INTEREST_COLOR)))
-    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Investment Loan"], name="Good Debt", line=dict(color=PRINCIPAL_COLOR, width=4)))
+    fig_debt.add_trace(go.Scatter(x=df_annual["Year"], y=df_annual["Mortgage Balance"], name="Bad Debt", fill='tozeroy', line=dict(color=INTEREST_COLOR)))
+    fig_debt.add_trace(go.Scatter(x=df_annual["Year"], y=df_annual["Investment Loan"], name="Good Debt", line=dict(color=PRINCIPAL_COLOR, width=4)))
     fig_debt.update_layout(title="Debt Swap", hovermode="x unified", plot_bgcolor="white", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_debt, use_container_width=True)
 
 with col_res2:
     fig_wealth = go.Figure()
-    fig_wealth.add_trace(go.Bar(x=df_view["Year"], y=df_view["Portfolio Value"], name="Assets", marker_color=PRINCIPAL_COLOR))
-    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Investment Loan"], name="Liabilities", line=dict(color=RISK_RED, width=2, dash='dash')))
+    fig_wealth.add_trace(go.Bar(x=df_annual["Year"], y=df_annual["Portfolio Value"], name="Assets", marker_color=PRINCIPAL_COLOR))
+    fig_wealth.add_trace(go.Scatter(x=df_annual["Year"], y=df_annual["Investment Loan"], name="Liabilities", line=dict(color=RISK_RED, width=2, dash='dash')))
     fig_wealth.update_layout(title="Net Wealth", hovermode="x unified", plot_bgcolor="white", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
@@ -299,7 +291,6 @@ with st.container(border=True):
         crash_year = st.slider("📅 Crash Year", 1, 10, 2)
     
     try:
-        # Use full data for stress testing any year
         row = df_annual[df_annual['Year'] == crash_year].iloc[0]
         loan = row["Investment Loan"]
         port = row["Portfolio Value"]
