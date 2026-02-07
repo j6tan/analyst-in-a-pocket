@@ -70,17 +70,17 @@ with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=Fal
     st.markdown("""
     To execute this strategy legally and effectively, you must meet these criteria:
     
-    1.  **A. Readvanceable Mortgage:**
+    1.  **Readvanceable Mortgage:**
         You need a HELOC that automatically increases limit as principal is paid (e.g., RBC Homeline, Scotia STEP).
         
     2.  **Positive Principal Paydown:**
-        * Your monthly mortgage payment must be reducing the principal balance (Interest-only mortgages do not work).
+        Your monthly payment must actually reduce the principal (interest-only mortgages don't work for the conversion).
         
-    3.  **Non-Registered Investment Account:**
-        * Funds must be invested in a taxable (Non-Registered) account. You **cannot** use RRSPs or TFSAs for this strategy.
+    3.  **Non-Registered Account:**
+        You cannot invest in RRSP/TFSA. To deduct interest, the account must be taxable.
         
-    4.  **Income-Generating Assets (The CRA Rule):**
-        * You must invest in assets with a "reasonable expectation of income" (Dividends, Interest, or Rent). Pure capital gains stocks do not qualify for interest deductibility.
+    4.  **Income-Generating Assets:**
+        You must invest in assets with a "reasonable expectation of income" (Dividends, Rent, or Interest). Pure capital gains stocks do not qualify for interest deductibility.
     """)
 
 # --- 6. MECHANICS (THE CYCLE) ---
@@ -380,5 +380,6 @@ with st.container(border=True):
 
     except Exception as e:
         st.write(f"Simulation data unavailable for Year {crash_start}")
+
 
 
