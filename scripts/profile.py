@@ -1,79 +1,106 @@
 import streamlit as st
-import json
 from style_utils import inject_global_css
+from data_handler import update_data
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Styles
 inject_global_css()
 
+# 2. Back Button
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# Internal function to save to the local JSON file
-def sync_data():
-    with open("user_profile_db.json", "w") as f:
-        json.dump(st.session_state.user_profile, f, indent=4)
+# --- 3. DATA CONNECTION ---
+# Connect to the 'profile' bucket in the Master Database
+prof = st.session_state.app_db['profile']
 
-st.title("👤 General Client Information")
-st.info("Your information is saved automatically to your local session.")
+# Helper function to save changes securely
+def update_profile(key):
+    # Sends data to data_handler (RAM for Guest, Cloud for Paid)
+    update_data('profile', key, st.session_state[f"w_{key}"])
 
-# --- SECTION 1: HOUSEHOLD INCOME DETAILS ---
-st.subheader("👥 Household Income Details")
+st.title("👤 Client Profile & Financials")
+st.info("Changes are saved automatically.")
+
+# --- SECTION 1: PERSONAL & LOCATION ---
+st.subheader("📍 Personal Details")
 c1, c2 = st.columns(2)
 
 with c1:
-    st.markdown("### Primary Client")
-    st.session_state.user_profile['p1_name'] = st.text_input("Full Name", value=st.session_state.user_profile.get('p1_name', ""), on_change=sync_data)
-    st.session_state.user_profile['p1_t4'] = st.number_input("T4 (Employment Income)", value=float(st.session_state.user_profile.get('p1_t4', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['p1_bonus'] = st.number_input("Bonuses / Performance Pay", value=float(st.session_state.user_profile.get('p1_bonus', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['p1_commission'] = st.number_input("Commissions", value=float(st.session_state.user_profile.get('p1_commission', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['p1_pension'] = st.number_input("Pension / CPP / OAS", value=float(st.session_state.user_profile.get('p1_pension', 0.0)), on_change=sync_data)
+    st.text_input("Full Name", value=prof.get('p1_name', ""), key="w_p1_name", on_change=update_profile, args=("p1_name",))
+    
+    # PROVINCE SELECTOR (Fixed Index Lookup)
+    prov_options = ["Ontario", "British Columbia", "Alberta", "Quebec", "Nova Scotia", "Manitoba", "Saskatchewan", "New Brunswick", "PEI", "Newfoundland"]
+    curr_prov = prof.get('province', "Ontario")
+    try:
+        prov_index = prov_options.index(curr_prov)
+    except ValueError:
+        prov_index = 0
+        
+    st.selectbox("Province of Residence", options=prov_options, index=prov_index, key="w_province", on_change=update_profile, args=("province",))
 
 with c2:
-    st.markdown("### Co-Owner / Partner")
-    st.session_state.user_profile['p2_name'] = st.text_input("Full Name ", value=st.session_state.user_profile.get('p2_name', ""), on_change=sync_data)
-    st.session_state.user_profile['p2_t4'] = st.number_input("T4 (Employment Income) ", value=float(st.session_state.user_profile.get('p2_t4', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['p2_bonus'] = st.number_input("Bonuses / Performance Pay ", value=float(st.session_state.user_profile.get('p2_bonus', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['p2_commission'] = st.number_input("Commissions ", value=float(st.session_state.user_profile.get('p2_commission', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['p2_pension'] = st.number_input("Pension / CPP / OAS ", value=float(st.session_state.user_profile.get('p2_pension', 0.0)), on_change=sync_data)
-
-# Joint Rental Income
-st.session_state.user_profile['inv_rental_income'] = st.number_input("Joint Rental Income (Current Portfolio)", value=float(st.session_state.user_profile.get('inv_rental_income', 0.0)), on_change=sync_data)
+    st.text_input("Partner Name (Optional)", value=prof.get('p2_name', ""), key="w_p2_name", on_change=update_profile, args=("p2_name",))
 
 st.divider()
 
-# --- SECTION 2: HOUSING & PROPERTY ---
-st.subheader("🏠 Housing & Property Details")
-h_toggle, h_data = st.columns([1, 2])
-with h_toggle:
-    st.session_state.user_profile['housing_status'] = st.radio("Current Status", ["Renting", "Owning"], index=0 if st.session_state.user_profile.get('housing_status') == "Renting" else 1, on_change=sync_data)
+# --- SECTION 2: INCOME SOURCES (RESTORED ALL MISSING FIELDS) ---
+st.subheader("💰 Annual Income Sources")
+st.markdown("Please enter gross annual amounts (before tax).")
 
-with h_data:
-    if st.session_state.user_profile['housing_status'] == "Renting":
-        st.session_state.user_profile['rent_pmt'] = st.number_input("Monthly Rent ($)", value=float(st.session_state.user_profile.get('rent_pmt', 0.0)), on_change=sync_data)
-    else:
-        sub_c1, sub_c2 = st.columns(2)
-        with sub_c1:
-            st.session_state.user_profile['m_bal'] = st.number_input("Current Mortgage Balance ($)", value=float(st.session_state.user_profile.get('m_bal', 0.0)), on_change=sync_data)
-            st.session_state.user_profile['m_rate'] = st.number_input("Current Interest Rate (%)", value=float(st.session_state.user_profile.get('m_rate', 0.0)), on_change=sync_data)
-        with sub_c2:
-            st.session_state.user_profile['m_amort'] = st.number_input("Remaining Amortization (Years)", value=int(st.session_state.user_profile.get('m_amort', 25)), on_change=sync_data)
-            st.session_state.user_profile['prop_taxes'] = st.number_input("Annual Property Taxes ($)", value=float(st.session_state.user_profile.get('prop_taxes', 4200.0)), on_change=sync_data)
-            st.session_state.user_profile['heat_pmt'] = st.number_input("Estimated Monthly Heating ($)", value=float(st.session_state.user_profile.get('heat_pmt', 125.0)), on_change=sync_data)
+i1, i2 = st.columns(2)
+
+with i1:
+    st.markdown("#### Primary Client")
+    st.number_input("T4 Employment Income", value=float(prof.get('p1_t4', 0.0)), step=1000.0, key="w_p1_t4", on_change=update_profile, args=("p1_t4",))
+    st.number_input("Bonuses / Performance Pay", value=float(prof.get('p1_bonus', 0.0)), step=500.0, key="w_p1_bonus", on_change=update_profile, args=("p1_bonus",))
+    st.number_input("Commission Income", value=float(prof.get('p1_commission', 0.0)), step=500.0, key="w_p1_commission", on_change=update_profile, args=("p1_commission",))
+    st.number_input("Pension Income", value=float(prof.get('p1_pension', 0.0)), step=500.0, key="w_p1_pension", on_change=update_profile, args=("p1_pension",))
+
+with i2:
+    st.markdown("#### Partner / Joint")
+    st.number_input("Partner T4 Income", value=float(prof.get('p2_t4', 0.0)), step=1000.0, key="w_p2_t4", on_change=update_profile, args=("p2_t4",))
+    st.number_input("Partner Bonus/Commission", value=float(prof.get('p2_bonus', 0.0)), step=500.0, key="w_p2_bonus", on_change=update_profile, args=("p2_bonus",))
+    st.number_input("Net Rental Income (Joint)", value=float(prof.get('rental_income', 0.0)), step=500.0, help="Net income after expenses but before tax.", key="w_rental_income", on_change=update_profile, args=("rental_income",))
+    st.number_input("Other Household Income", value=float(prof.get('other_income', 0.0)), step=500.0, key="w_other_income", on_change=update_profile, args=("other_income",))
 
 st.divider()
 
-# --- SECTION 3: MONTHLY LIABILITIES ---
+# --- SECTION 3: CURRENT HOUSING SITUATION (RESTORED) ---
+st.subheader("🏠 Current Housing Situation")
+
+housing_mode = st.radio("Do you currently Rent or Own?", ["Rent", "Own"], index=0 if prof.get('housing_status', 'Rent') == 'Rent' else 1, key="w_housing_status_radio", on_change=lambda: update_profile("housing_status"))
+
+# We manually sync the radio key to the DB key because 'on_change' with args can be tricky with Radios
+if st.session_state.w_housing_status_radio != prof.get('housing_status'):
+    update_data('profile', 'housing_status', st.session_state.w_housing_status_radio)
+
+h1, h2 = st.columns(2)
+
+if st.session_state.w_housing_status_radio == "Rent":
+    with h1:
+        st.number_input("Current Monthly Rent ($)", value=float(prof.get('current_rent', 2000.0)), step=50.0, key="w_current_rent", on_change=update_profile, args=("current_rent",))
+else:
+    with h1:
+        st.number_input("Current Mortgage Payment (Monthly)", value=float(prof.get('current_mortgage', 0.0)), step=50.0, key="w_current_mortgage", on_change=update_profile, args=("current_mortgage",))
+        st.number_input("Property Taxes (Annual)", value=float(prof.get('prop_taxes', 4000.0)), step=100.0, key="w_prop_taxes", on_change=update_profile, args=("prop_taxes",))
+    with h2:
+        st.number_input("Condo Fees (Monthly)", value=float(prof.get('condo_fees', 0.0)), step=10.0, key="w_condo_fees", on_change=update_profile, args=("condo_fees",))
+        st.number_input("Heating Costs (Monthly)", value=float(prof.get('heat_cost', 125.0)), step=10.0, key="w_heat_cost", on_change=update_profile, args=("heat_cost",))
+
+st.divider()
+
+# --- SECTION 4: DEBTS & LIABILITIES (RESTORED) ---
 st.subheader("💳 Monthly Liabilities")
+st.markdown("Debts impacting your borrowing power (TDS Ratio).")
+
 l1, l2, l3 = st.columns(3)
 with l1:
-    st.session_state.user_profile['car_loan'] = st.number_input("Car Loan Payments (Monthly)", value=float(st.session_state.user_profile.get('car_loan', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['student_loan'] = st.number_input("Student Loan Payments (Monthly)", value=float(st.session_state.user_profile.get('student_loan', 0.0)), on_change=sync_data)
+    st.number_input("Car Loan Payments ($)", value=float(prof.get('car_loan', 0.0)), step=10.0, key="w_car_loan", on_change=update_profile, args=("car_loan",))
+    st.number_input("Student Loan Payments ($)", value=float(prof.get('student_loan', 0.0)), step=10.0, key="w_student_loan", on_change=update_profile, args=("student_loan",))
 with l2:
-    st.session_state.user_profile['cc_pmt'] = st.number_input("Credit Card Payments (Monthly)", value=float(st.session_state.user_profile.get('cc_pmt', 0.0)), on_change=sync_data)
-    st.session_state.user_profile['loc_balance'] = st.number_input("Total LOC Balance ($)", value=float(st.session_state.user_profile.get('loc_balance', 0.0)), on_change=sync_data)
+    st.number_input("Credit Card Payments ($)", value=float(prof.get('cc_pmt', 0.0)), step=10.0, help="Minimum monthly payment required.", key="w_cc_pmt", on_change=update_profile, args=("cc_pmt",))
+    st.number_input("Total LOC Balance ($)", value=float(prof.get('loc_balance', 0.0)), step=100.0, help="Total outstanding balance.", key="w_loc_balance", on_change=update_profile, args=("loc_balance",))
 with l3:
-    prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
-    st.session_state.user_profile['province'] = st.selectbox("Province", prov_options, index=prov_options.index(st.session_state.user_profile.get('province', 'Ontario')), on_change=sync_data)
-
-st.success("✅ Financial Passport updated and synchronized.")
+    st.number_input("Spousal/Child Support ($)", value=float(prof.get('support_pmt', 0.0)), step=10.0, key="w_support_pmt", on_change=update_profile, args=("support_pmt",))
+    st.number_input("Other Monthly Debts ($)", value=float(prof.get('other_debt', 0.0)), step=10.0, key="w_other_debt", on_change=update_profile, args=("other_debt",))
