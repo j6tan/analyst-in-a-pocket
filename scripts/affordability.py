@@ -167,6 +167,12 @@ if "aff_final" not in st.session_state:
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
         "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht, "is_fthb": False, "is_toronto": False
     }
+else:
+    # THIS IS THE FIX: Force update with new Profile data
+    st.session_state.aff_final['t4'] = t4_sum
+    st.session_state.aff_final['bonus'] = bonus_sum
+    st.session_state.aff_final['rental'] = rental_sum
+    st.session_state.aff_final['monthly_debt'] = debt_sum
 store = st.session_state.aff_final
 
 # --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
@@ -297,6 +303,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
