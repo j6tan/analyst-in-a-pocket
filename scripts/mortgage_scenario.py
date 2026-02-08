@@ -21,9 +21,23 @@ household_names = f"{client_name1} & {client_name2}" if client_name2 else client
 
 # Retrieve raw data from Affordability (if available)
 aff_store = st.session_state.get('aff_final', {})
-raw_afford_loan = aff_store.get('loan_amt', 640000.0)
-raw_afford_down = st.session_state.get('f_dp', aff_store.get('down_payment', 160000.0))
-raw_afford_max = raw_afford_loan + raw_afford_down
+# Initialization Bridge: Only sync values once per session visit
+if "scenario_initialized" not in st.session_state:
+    # Pull the values calculated on the Affordability page
+    # Note: We add them to get the Price, rather than reading a static 800k
+    loan_val = aff_store.get('loan_amt', 640000.0)
+    down_val = aff_store.get('down_payment', 160000.0)
+    
+    # Initialize the specific widget keys
+    st.session_state.ms_price = loan_val + down_val
+    st.session_state.ms_down = down_val
+    
+    # Set the flag so we don't overwrite user edits on the next rerun
+    st.session_state.scenario_initialized = True
+
+# Values to use for calculations if widgets aren't rendered yet
+default_price = st.session_state.get('ms_price', 800000.0)
+default_down = st.session_state.get('ms_down', 160000.0)
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
@@ -180,11 +194,11 @@ with st.container(border=True):
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="w_price")
+        price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="ms_price")
         store['price'] = price 
     
     with col_i2:
-        down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="w_down")
+        down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="ms_down")
         store['down'] = down 
         
     with col_i3:
@@ -345,6 +359,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
