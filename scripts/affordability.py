@@ -313,15 +313,13 @@ if max_pi_stress > 0:
     
     max_purchase = loan_amt + store['down_payment']
     # Safety Cap: Shrink the loan if the rounded price exceeds what the DP supports
+   # Calculate requirements
     min_required = calculate_min_downpayment(max_purchase)
-    if store['down_payment'] < min_required:
-        loan_amt -= (min_required - store['down_payment'])
-        max_purchase = loan_amt + store['down_payment']
+    is_dp_valid = store['down_payment'] >= (min_required - 1.0)
     
-    if store['down_payment'] < min_required - 1.0: 
+    if not is_dp_valid:
         st.error(f"#### 🛑 Down Payment Too Low")
-        st.warning(f"Minimum Requirement for purchase price of **\${max_purchase:,.0f}** is **\${min_required:,.0f}**.")
-        st.stop()
+        st.warning(f"Minimum Requirement for purchase price of **${max_purchase:,.0f}** is **${min_required:,.0f}**.")
         
     total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
@@ -384,6 +382,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
