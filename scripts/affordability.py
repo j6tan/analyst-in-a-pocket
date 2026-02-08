@@ -126,6 +126,8 @@ def sync_aff_widgets():
     # This captures your manual typing and saves it permanently
     if 'f_dp' in st.session_state:
         st.session_state.aff_final['down_payment'] = st.session_state.f_dp
+    if 'f_bonus' in st.session_state:
+        st.session_state.aff_final['bonus'] = st.session_state.f_bonus
     if 'f_ptax' in st.session_state:
         st.session_state.aff_final['prop_taxes'] = st.session_state.f_ptax
     if 'f_heat' in st.session_state:
@@ -381,6 +383,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
