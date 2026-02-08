@@ -13,7 +13,7 @@ def inject_global_css():
 
         /* 2. LAYOUT */
         .block-container {
-            padding-top: clamp(3rem, 7vh, 5rem) !important;
+            padding-top: 3rem !important;
             padding-bottom: 5rem !important;
             max-width: 1400px !important;
         }
@@ -36,50 +36,54 @@ def inject_global_css():
             color: #444 !important;
         }
 
-        /* 5. CARDS */
-        [data-testid="stVerticalBlock"] > div[style*="border: 1px solid"] {
-            border-radius: 20px !important;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.03) !important;
-        }
-
-        /* --- 6. THE SIDEBAR FIX (DARK MODE HEADERS) --- */
+        /* 5. SIDEBAR FIXES */
+        [data-testid="stSidebarNavItems"] { padding-top: 1rem !important; }
         
-        /* A. Container Spacing */
-        [data-testid="stSidebarNavItems"] {
-            padding-top: 1rem !important;
-        }
-
-        /* B. THE GROUP TITLES (Structure Target) */
-        /* Changed color to #333333 (Dark Ink) */
         [data-testid="stSidebarNavItems"] > div > :first-child {
-            visibility: visible !important;
-            display: block !important;
-            color: #333333 !important;      /* <--- CHANGED TO DARK GREY/BLACK */
-            font-size: 0.75rem !important;  
-            font-weight: 800 !important;    /* Made extra bold to stand out */
-            text-transform: uppercase !important; 
-            letter-spacing: 0.1em !important;
+            color: #333 !important;
+            font-size: 0.75rem !important;
+            font-weight: 800 !important;
+            text-transform: uppercase !important;
             margin-top: 1.5rem !important;
-            margin-bottom: 0.5rem !important;
-            background-color: transparent !important;
-        }
-
-        /* C. THE TOOLS (The Links) */
-        [data-testid="stSidebarNavItems"] a {
-            color: #4D4D4D !important;      
-            font-size: 0.95rem !important;  
-            font-weight: 500 !important;    
-            text-transform: none !important; 
         }
         
-        /* Active Tool Highlight */
-        [data-testid="stSidebarNavItems"] a[aria-current="page"] {
-            background-color: #EDEDED !important;
-            font-weight: 600 !important;
-            border-radius: 8px !important;
-        }
-
-        /* FIX: Only hide footer. Hiding 'header' hides the sidebar toggle button! */
+        /* FIX: Only hide Footer. Do NOT hide Header (it kills the sidebar toggle) */
         footer {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
+
+def check_premium_access():
+    """
+    Stops execution if the user is not a Pro member.
+    """
+    if st.session_state.get("is_pro", False):
+        return  # Allowed
+
+    # Paywall UI
+    st.markdown("""
+    <div style="background-color: #F8F9FA; border: 1px solid #ddd; padding: 40px; border-radius: 15px; text-align: center; margin-top: 50px;">
+        <div style="font-size: 60px;">🔒</div>
+        <h2 style="color: #333; margin-top: 10px;">Pro Feature Locked</h2>
+        <p style="color: #666; font-size: 1.1em; max-width: 600px; margin: 0 auto 20px auto;">
+            This strategy is an advanced wealth-building tool available exclusively to our Premium subscribers.
+        </p>
+        <div style="background-color: #FFF8E1; padding: 15px; border-radius: 8px; display: inline-block; margin-bottom: 20px;">
+            <span style="color: #CEB36F; font-weight: bold;">✨ Premium Features:</span>
+            <ul style="text-align: left; color: #555; margin-bottom: 0;">
+                <li>Unlimited Scenario Modeling</li>
+                <li>PDF Export & Client Reports</li>
+                <li>Advanced Tax & Cash Flow Analysis</li>
+            </ul>
+        </div>
+        <br>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Upgrade Button
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        if st.button("🚀 Upgrade to Pro (Demo)", type="primary", use_container_width=True):
+            st.session_state.is_pro = True
+            st.rerun()
+    
+    st.stop()
