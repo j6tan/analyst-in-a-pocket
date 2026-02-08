@@ -19,10 +19,18 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# Retrieve raw data from Affordability (if available)
+# --- 1. DATA LINKING ---
 aff_store = st.session_state.get('aff_final', {})
-raw_afford_max = aff_store.get('max_purchase_power', 800000.0)
-raw_afford_down = aff_store.get('down_payment', 160000.0)
+
+# This pulls the actual calculated Loan and Down Payment from your other page
+if "scenario_initialized" not in st.session_state:
+    init_loan = aff_store.get('loan_amt', 640000.0)
+    init_down = aff_store.get('down_payment', 160000.0)
+    
+    # We set these in Session State so the widgets can find them
+    st.session_state.ms_price = float(init_loan + init_down)
+    st.session_state.ms_down = float(init_down)
+    st.session_state.scenario_initialized = True
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
@@ -177,11 +185,11 @@ with st.container(border=True):
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="w_price")
+        price = st.number_input("Purchase Price ($)", step=5000.0, key="ms_price")
         store['price'] = price 
     
     with col_i2:
-        down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="w_down")
+        down = st.number_input("Down Payment ($)", step=5000.0, key="ms_down")
         store['down'] = down 
         
     with col_i3:
@@ -257,7 +265,17 @@ for i in range(total_cols):
             store['scenarios'][i]['double'] = False
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
-        results.append(res)
+        results.append({
+        "Name": name,
+        "Rate": active_rate,
+        "Freq": freq_label,
+        "History": pd.DataFrame(history), # FIX: Wrap in pd.DataFrame()
+        "Total_Life_Int": int(total_interest_life),
+        "Term_Prin": int(total_principal_5yr),
+        "Monthly_Avg": int(monthly_pmt + (annual_prepay/12)),
+        "Payoff_Time": round(total_months/12, 1),
+        "Prepay_Active": "Yes" if annual_prepay > 0 else "No"
+    })
 
 with main_cols[-1]:
     st.write("### ") 
@@ -342,5 +360,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
