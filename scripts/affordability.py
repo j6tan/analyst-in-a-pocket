@@ -210,7 +210,7 @@ if "aff_final" not in st.session_state:
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
     st.session_state.aff_final = {
         "t4": t4_sum, 
-        "bonus": bonus_sum
+        "bonus": bonus_sum,
         "rental": rental_sum, 
         "monthly_debt": debt_sum,
         "down_payment": d_dp, 
@@ -383,6 +383,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
