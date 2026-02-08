@@ -172,8 +172,14 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # Applied $1000 buffer to default DP + custom rounding rule
-    return custom_round_up(min_d + 1000), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
+    #apply custom rounding to the price first
+    rounded_p = custom_round_up(max_p)
+    #Calculate the legal minimum for that specific rounded price
+    legal_min_dp = calculate_min_downpayment(rounded_p)
+    #Add a solid $2,000 buffer to ensure it's never "just shy"
+    #and round that DP up to the nearest $100
+    safe_dp = math.ceil((legal_min_dp + 2000) / 100) * 100
+    return float(safe_dp), custom_round_up(rounded_p * tax_rate), custom_round_up(rounded_p * 0.0002)
 
 if "aff_final" not in st.session_state:
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
@@ -335,6 +341,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
