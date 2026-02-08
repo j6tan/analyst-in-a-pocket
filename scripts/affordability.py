@@ -145,10 +145,25 @@ if not is_renter:
     """, unsafe_allow_html=True)
 
 # --- 6. PERSISTENCE ---
-t4_sum = float(prof.get('p1_t4', 0) + prof.get('p2_t4', 0))
-bonus_sum = float(prof.get('p1_bonus', 0) + prof.get('p1_commission', 0) + prof.get('p2_bonus', 0))
-rental_sum = float(prof.get('inv_rental_income', 0))
-debt_sum = float(prof.get('car_loan', 0) + prof.get('student_loan', 0) + prof.get('cc_pmt', 0))
+# --- 6. PERSISTENCE ---
+# Capture all T4 and Pensions
+t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.get('p1_pension', 0)) + float(prof.get('p2_pension', 0))
+
+# Capture all Bonus, Commission, and Other
+bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0)) + float(prof.get('other_income', 0))
+
+# Fixed key for rental income
+rental_sum = float(prof.get('rental_income', 0))
+
+# Capture all Debts including 3% of LOC
+debt_sum = (
+    float(prof.get('car_loan', 0)) + 
+    float(prof.get('student_loan', 0)) + 
+    float(prof.get('cc_pmt', 0)) + 
+    float(prof.get('support_pmt', 0)) + 
+    float(prof.get('other_debt', 0)) + 
+    (float(prof.get('loc_balance', 0)) * 0.03)
+)
 
 TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
@@ -167,26 +182,30 @@ if "aff_final" not in st.session_state:
         "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
         "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht, "is_fthb": False, "is_toronto": False
     }
+    # These lines ensure the input boxes show the calculated values on first load
+    st.session_state.f_dp = d_dp
+    st.session_state.f_ptax = d_tx
+    st.session_state.f_heat = d_ht
 else:
-    # 1. Sync the Incomes/Debts from Profile
+    # DATA SYNC: Update the numbers and RE-CALCULATE defaults
     st.session_state.aff_final['t4'] = t4_sum
     st.session_state.aff_final['bonus'] = bonus_sum
     st.session_state.aff_final['rental'] = rental_sum
     st.session_state.aff_final['monthly_debt'] = debt_sum
     
-    # 2. RE-CALCULATE DEFAULTS (This is the missing link!)
-    # We run the math again with the new income numbers
+    # Rerun the recipe
     new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
     
-    # 3. Update the Storage
+    # Update the storage and the UI widgets
     st.session_state.aff_final['down_payment'] = new_dp
     st.session_state.aff_final['prop_taxes'] = new_tx
     st.session_state.aff_final['heat'] = new_ht
     
-    # 4. Force the UI Widgets to refresh visually
-    if 'f_dp' in st.session_state: st.session_state.f_dp = new_dp
-    if 'f_ptax' in st.session_state: st.session_state.f_ptax = new_tx
-    if 'f_heat' in st.session_state: st.session_state.f_heat = new_ht
+    # This forces the text boxes on screen to actually update
+    st.session_state.f_dp = new_dp
+    st.session_state.f_ptax = new_tx
+    st.session_state.f_heat = new_ht
+
 store = st.session_state.aff_final
 
 # --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
@@ -317,6 +336,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
