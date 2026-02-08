@@ -34,7 +34,7 @@ if "scenario_initialized" not in st.session_state:
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
-    if 'aff_store' in st.session_state:
+    if 'aff_final' in st.session_state:
         return st.session_state.aff_store.get('contract_rate', 4.49)
     
     # Fallback to file (with crash protection)
@@ -351,6 +351,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
