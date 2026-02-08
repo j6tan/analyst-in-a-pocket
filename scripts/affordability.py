@@ -197,10 +197,10 @@ with uw_col1:
     s_rate = max(5.25, c_rate + 2.0)
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
-    store['down_payment'] = st.number_input("Down Payment ($)", value=store['down_payment'], key="f_dp")
-    store['prop_taxes'] = st.number_input("Annual Property Taxes", value=store['prop_taxes'], key="f_ptax")
+    store['down_payment'] = st.number_input("Down Payment ($)", key="f_dp")
+    store['prop_taxes'] = st.number_input("Annual Property Taxes", key="f_ptax")
 with uw_col3:
-    store['heat'] = st.number_input("Monthly Heat", value=store['heat'], key="f_heat")
+    store['heat'] = st.number_input("Monthly Heat", key="f_heat")
     prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
     strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
 
@@ -317,6 +317,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
