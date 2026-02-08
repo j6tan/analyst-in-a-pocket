@@ -14,7 +14,7 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 1. DATA LINKING & UTILS ---
-prof = st.session_state.get('user_profile', {})
+prof = st.session_state.app_db.get('profile', {})
 client_name1 = prof.get('p1_name', 'Dori') 
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
@@ -342,3 +342,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
