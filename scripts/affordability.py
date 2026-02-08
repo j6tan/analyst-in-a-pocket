@@ -226,6 +226,7 @@ else:
     # Check if Profile data has actually changed since last visit
     has_changed = (
         st.session_state.aff_final.get('t4') != t4_sum or
+        st.session_state.aff_final.get('bonus') != bonus_sum or
         st.session_state.aff_final.get('rental') != rental_sum or
         st.session_state.aff_final.get('monthly_debt') != debt_sum
     )
@@ -272,9 +273,9 @@ st.divider()
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
-    store['t4'] = st.number_input("Combined T4 Income", value=store['t4'], key="f_t4")
-    store['bonus'] = st.number_input("Total Additional Income", value=store['bonus'], key="f_bonus")
-    store['rental'] = st.number_input("Joint Rental Income", value=store['rental'], key="f_rental")
+    store['t4'] = st.number_input("Combined T4 Income", value=store['t4'], key="f_t4", on_change=sync_aff_widgets)
+    store['bonus'] = st.number_input("Total Additional Income", value=store['bonus'], key="f_bonus", on_change=sync_aff_widgets)
+    store['rental'] = st.number_input("Joint Rental Income", value=store['rental'], key="f_rental", on_change=sync_aff_widgets)
     total_qualifying = store['t4'] + store['bonus'] + (store['rental'] * 0.80)
     st.markdown(f"""<div style="margin-top: 10px;"><span style="font-size: 1.15em; color: {SLATE_ACCENT}; font-weight: bold;">Qualifying Income: </span><span style="font-size: 1.25em; color: black; font-weight: bold;">${total_qualifying:,.0f}</span></div>""", unsafe_allow_html=True)
 
@@ -383,6 +384,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
