@@ -35,7 +35,7 @@ if "scenario_initialized" not in st.session_state:
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
     if 'aff_final' in st.session_state:
-        # Use the correct dictionary name: aff_final
+        # Correctly use the key you checked for: aff_final
         return st.session_state.aff_final.get('contract_rate', 4.49)
     
     # Fallback to file (with crash protection)
@@ -60,13 +60,16 @@ def smart_round_price(price):
 
 # --- 3. PERSISTENCE INITIALIZATION (SHADOW STORE) ---
 if 'scen_store' not in st.session_state:
+    # Pull the initialized values from Section 1
+    p_val = st.session_state.get('ms_price', 800000.0)
+    d_val = st.session_state.get('ms_down', 160000.0)
+    
     st.session_state.scen_store = {
-        "price": float(st.session_state.get('ms_price', 800000.0)),
-        "down": float(st.session_state.get('ms_down', 160000.0)),
+        "price": float(p_val),
+        "down": float(d_val),
         "amort": 25,
         "scenarios": [] 
     }
-    
     st.session_state.scen_store["scenarios"] = [
         {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False},
         {"label": "Accelerated Bi-Weekly", "rate": global_rate_default, "freq": "Accelerated Bi-weekly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
@@ -353,6 +356,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
