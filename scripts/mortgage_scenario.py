@@ -19,21 +19,17 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# --- 1. DATA LINKING & UTILS ---
 aff_store = st.session_state.get('aff_final', {})
 
-# NEW: Calculation-based initialization to ensure Price = Loan + Down
+# This ensures that when you arrive from the affordability page, 
+# the price and down payment are correctly calculated and not 0.
 if "scenario_initialized" not in st.session_state:
-    # 1. Pull values directly from your Affordability Analysis
-    # Ensure these keys match what is saved in your affordability.py
+    # Use .get with a fallback value to avoid 0s
     init_loan = aff_store.get('loan_amt', 640000.0)
     init_down = aff_store.get('down_payment', 160000.0)
     
-    # 2. Set the Session State keys directly
     st.session_state.ms_price = float(init_loan + init_down)
     st.session_state.ms_down = float(init_down)
-    
-    # 3. Mark as initialized so user overwrites are preserved
     st.session_state.scenario_initialized = True
 
 # Values to use for calculations if widgets aren't rendered yet
@@ -275,7 +271,17 @@ for i in range(total_cols):
             store['scenarios'][i]['double'] = False
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
-        results.append(res)
+        results.append({
+        "Name": name,
+        "Rate": active_rate,
+        "Freq": freq_label,
+        "History": pd.DataFrame(history), # <--- CHANGE THIS LINE
+        "Total_Life_Int": int(total_interest_life),
+        "Term_Prin": int(total_principal_5yr),
+        "Monthly_Avg": int(monthly_pmt + (annual_prepay/12)),
+        "Payoff_Time": round(total_months/12, 1),
+        "Prepay_Active": "Yes" if annual_prepay > 0 else "No"
+    })
 
 with main_cols[-1]:
     st.write("### ") 
@@ -360,6 +366,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
