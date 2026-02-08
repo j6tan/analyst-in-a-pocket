@@ -264,10 +264,8 @@ for i in range(total_cols):
             store['scenarios'][i]['double'] = False
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
-        # Add a custom key for the 5-Year Progress chart
-        res['Term_Int'] = res['Term_Int']
-        # Simply append the 'res' dictionary. It already contains all the 
-        # necessary keys (Rate, History, Total_Life_Int, etc.) for the charts.
+        # FIX: The 'res' dictionary already contains the History DataFrame 
+        # and all calculated metrics from the simulate_mortgage function.
         results.append(res)
 
 with main_cols[-1]:
@@ -353,6 +351,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
