@@ -61,7 +61,7 @@ def smart_round_price(price):
 if 'scen_store' not in st.session_state:
     st.session_state.scen_store = {
         "price": float(st.session_state.get('ms_price', 800000.0)),
-        "down": float(st.session_state.get('ms_down', 160000.0)),,
+        "down": float(st.session_state.get('ms_down', 160000.0)),
         "amort": 25,
         "scenarios": [] 
     }
@@ -229,7 +229,6 @@ if not is_valid:
 total_cols = st.session_state.num_options
 main_cols = st.columns([3] * total_cols + [1]) 
 results = []
-
 while len(store['scenarios']) < total_cols:
     add_option()
 
@@ -354,6 +353,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
