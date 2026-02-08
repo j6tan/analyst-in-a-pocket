@@ -4,20 +4,24 @@ from style_utils import inject_global_css
 # Ensure style is injected
 inject_global_css()
 
-# --- 1. SESSION CHECK (Defensive Coding) ---
-if 'user_profile' not in st.session_state:
-    st.switch_page("streamlit_app.py") # Restart if memory is lost
+# --- 1. SESSION CHECK ---
+# Check for 'app_db' instead of 'user_profile'
+if 'app_db' not in st.session_state:
+    st.session_state.app_db = {'profile': {}} # Prevent crash
 
-st.title("🚀 FIRE Investor Dashboard")
+# Create a shortcut variable to make the rest of the code cleaner
+profile = st.session_state.app_db['profile']
+
+st.title("📊 FIRE Investor Dashboard")
 
 # --- 2. FINANCIAL PASSPORT (Central Info) ---
 with st.container(border=True):
     col1, col2 = st.columns([3, 1])
     with col1:
-        name = st.session_state.user_profile.get('p1_name') or "Investor"
-        income = st.session_state.user_profile.get('p1_t4', 0) + st.session_state.user_profile.get('p2_t4', 0)
+        name = profile.get('p1_name') or "Investor"
+        income = profile.get('p1_t4', 0) + profile.get('p2_t4', 0)
         st.markdown(f"### 👤 {name}'s Financial Passport")
-        st.write(f"**Total Household Income:** ${income:,.0f} | **Province:** {st.session_state.user_profile.get('province')}")
+        st.write(f"**Total Household Income:** ${income:,.0f} | **Province:** {profile.get('province')}")
     with col2:
         if st.button("Manage Profile", use_container_width=True):
             st.switch_page("scripts/profile.py")
