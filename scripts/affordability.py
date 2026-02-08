@@ -145,7 +145,6 @@ if not is_renter:
     """, unsafe_allow_html=True)
 
 # --- 6. PERSISTENCE ---
-# --- 6. PERSISTENCE ---
 # Capture all T4 and Pensions
 t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.get('p1_pension', 0)) + float(prof.get('p2_pension', 0))
 
@@ -337,6 +336,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
