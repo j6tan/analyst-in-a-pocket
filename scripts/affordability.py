@@ -36,7 +36,7 @@ def custom_round_up(n):
     return float(math.ceil(n / step) * step)
 
 # --- 2. DATA RETRIEVAL ---
-prof = st.session_state.get('user_profile', {})
+prof = st.session_state.app_db.get('profile', {})
 province = prof.get('province', 'Ontario')
 name1 = prof.get('p1_name', 'Primary Client')
 name2 = prof.get('p2_name', '')
@@ -297,5 +297,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
