@@ -193,8 +193,8 @@ with st.container(border=True):
         st.session_state.scen_store['down'] = down
         
     with col_i3:
-        amort = st.slider("Amortization (Years)", 5, 30, value=int(store['amort']), key="w_amort")
-        store['amort'] = amort
+        amort = st.slider("Amortization (Years)", 5, 30, value=int(st.session_state.scen_store['amort']), key="w_amort")
+        st.session_state.scen_store['amort'] = amort
 
     # --- LOGIC & CALCULATIONS (Preserved Exactly) ---
     min_down_req = calculate_min_downpayment(price)
@@ -317,6 +317,7 @@ with tabs[1]:
 with tabs[2]:
     stack_list = []
     for r in results:
+        # Use Term_Prin and Term_Int which are calculated inside simulate_mortgage
         stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Prin'], "Type": "Equity Built"})
         stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Int'], "Type": "Interest Paid"})
     
@@ -351,6 +352,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
