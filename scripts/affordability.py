@@ -186,27 +186,24 @@ if "aff_final" not in st.session_state:
     st.session_state.f_ptax = d_tx
     st.session_state.f_heat = d_ht
 else:
-    # DATA SYNC: Update the numbers and RE-CALCULATE defaults
+    # 1. Sync the basic income/debt numbers from Profile
     st.session_state.aff_final['t4'] = t4_sum
     st.session_state.aff_final['bonus'] = bonus_sum
     st.session_state.aff_final['rental'] = rental_sum
     st.session_state.aff_final['monthly_debt'] = debt_sum
     
-    # Rerun the recipe
-    new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
-    
-    # Update the storage and the UI widgets
-    st.session_state.aff_final['down_payment'] = new_dp
-    st.session_state.f_dp = new_dp
-    st.session_state.aff_final['prop_taxes'] = new_tx
-    st.session_state.aff_final['heat'] = new_ht
-    
-    # This forces the text boxes on screen to actually update
-    st.session_state.f_dp = new_dp
-    st.session_state.f_ptax = new_tx
-    st.session_state.f_heat = new_ht
-
-store = st.session_state.aff_final
+    # 2. Safety Check: Only auto-populate if the user hasn't typed anything yet
+    # This prevents the script from "fighting" you when you try to overwrite
+    if "user_has_overwritten" not in st.session_state:
+        new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
+        
+        # Update session state keys for the widgets
+        st.session_state.f_dp = new_dp
+        st.session_state.f_ptax = new_tx
+        st.session_state.f_heat = new_ht
+        
+        # Mark as initialized so it doesn't overwrite your typing again
+        st.session_state.user_has_overwritten = True
 
 # --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
 st.subheader("⚙️ Underwriting Assumptions")
@@ -336,6 +333,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
