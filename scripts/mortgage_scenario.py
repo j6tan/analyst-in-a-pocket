@@ -238,7 +238,7 @@ results = []
 
 while len(store['scenarios']) < total_cols:
     add_option()
-
+results = []
 for i in range(total_cols):
     s_data = store['scenarios'][i]
     with main_cols[i]:
@@ -366,6 +366,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
