@@ -205,6 +205,8 @@ else:
         # Mark as initialized so it doesn't overwrite your typing again
         st.session_state.user_has_overwritten = True
 
+store = st.session_state.aff_final
+
 # --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
@@ -333,6 +335,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
