@@ -19,20 +19,21 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# Retrieve raw data from Affordability (if available)
+# --- 1. DATA LINKING & UTILS ---
 aff_store = st.session_state.get('aff_final', {})
-# Initialization Bridge: Only sync values once per session visit
+
+# NEW: Calculation-based initialization to ensure Price = Loan + Down
 if "scenario_initialized" not in st.session_state:
-    # Pull the values calculated on the Affordability page
-    # Note: We add them to get the Price, rather than reading a static 800k
-    loan_val = aff_store.get('loan_amt', 640000.0)
-    down_val = aff_store.get('down_payment', 160000.0)
+    # 1. Pull values directly from your Affordability Analysis
+    # Ensure these keys match what is saved in your affordability.py
+    init_loan = aff_store.get('loan_amt', 640000.0)
+    init_down = aff_store.get('down_payment', 160000.0)
     
-    # Initialize the specific widget keys
-    st.session_state.ms_price = loan_val + down_val
-    st.session_state.ms_down = down_val
+    # 2. Set the Session State keys directly
+    st.session_state.ms_price = float(init_loan + init_down)
+    st.session_state.ms_down = float(init_down)
     
-    # Set the flag so we don't overwrite user edits on the next rerun
+    # 3. Mark as initialized so user overwrites are preserved
     st.session_state.scenario_initialized = True
 
 # Values to use for calculations if widgets aren't rendered yet
@@ -194,11 +195,11 @@ with st.container(border=True):
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="ms_price")
+        price = st.number_input("Property Price ($)", step=5000.0, key="ms_price")
         store['price'] = price 
     
     with col_i2:
-        down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="ms_down")
+        down = st.number_input("Down Payment ($)", step=5000.0, key="ms_down")
         store['down'] = down 
         
     with col_i3:
@@ -359,6 +360,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
