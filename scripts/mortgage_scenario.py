@@ -19,17 +19,20 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
+# Retrieve raw data from Affordability (if available)
 aff_store = st.session_state.get('aff_final', {})
-
-# This ensures that when you arrive from the affordability page, 
-# the price and down payment are correctly calculated and not 0.
+# Initialization Bridge: Only sync values once per session visit
 if "scenario_initialized" not in st.session_state:
-    # Use .get with a fallback value to avoid 0s
-    init_loan = aff_store.get('loan_amt', 640000.0)
-    init_down = aff_store.get('down_payment', 160000.0)
+    # Pull the values calculated on the Affordability page
+    # Note: We add them to get the Price, rather than reading a static 800k
+    loan_val = aff_store.get('loan_amt', 640000.0)
+    down_val = aff_store.get('down_payment', 160000.0)
     
-    st.session_state.ms_price = float(init_loan + init_down)
-    st.session_state.ms_down = float(init_down)
+    # Initialize the specific widget keys
+    st.session_state.ms_price = loan_val + down_val
+    st.session_state.ms_down = down_val
+    
+    # Set the flag so we don't overwrite user edits on the next rerun
     st.session_state.scenario_initialized = True
 
 # Values to use for calculations if widgets aren't rendered yet
@@ -191,11 +194,11 @@ with st.container(border=True):
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        price = st.number_input("Property Price ($)", step=5000.0, key="ms_price")
+        price = st.number_input("Property Price ($)", value=float(store['price']), step=5000.0, key="ms_price")
         store['price'] = price 
     
     with col_i2:
-        down = st.number_input("Down Payment ($)", step=5000.0, key="ms_down")
+        down = st.number_input("Down Payment ($)", value=float(store['down']), step=5000.0, key="ms_down")
         store['down'] = down 
         
     with col_i3:
@@ -238,7 +241,7 @@ results = []
 
 while len(store['scenarios']) < total_cols:
     add_option()
-results = []
+
 for i in range(total_cols):
     s_data = store['scenarios'][i]
     with main_cols[i]:
@@ -271,17 +274,7 @@ for i in range(total_cols):
             store['scenarios'][i]['double'] = False
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
-        results.append({
-        "Name": name,
-        "Rate": active_rate,
-        "Freq": freq_label,
-        "History": pd.DataFrame(history), # <--- CHANGE THIS LINE
-        "Total_Life_Int": int(total_interest_life),
-        "Term_Prin": int(total_principal_5yr),
-        "Monthly_Avg": int(monthly_pmt + (annual_prepay/12)),
-        "Payoff_Time": round(total_months/12, 1),
-        "Prepay_Active": "Yes" if annual_prepay > 0 else "No"
-    })
+        results.append(res)
 
 with main_cols[-1]:
     st.write("### ") 
@@ -366,9 +359,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
-
-
-
 
 
 
