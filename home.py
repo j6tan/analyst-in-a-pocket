@@ -4,27 +4,20 @@ from style_utils import inject_global_css
 # Ensure style is injected
 inject_global_css()
 
-# --- 1. DATA CONNECTION ---
-# We use the new 'app_db' structure we built. 
-# If it's missing, we default to empty dict to prevent crashes.
-if 'app_db' not in st.session_state:
-    st.session_state.app_db = {'profile': {}}
+# --- 1. SESSION CHECK (Defensive Coding) ---
+if 'user_profile' not in st.session_state:
+    st.switch_page("streamlit_app.py") # Restart if memory is lost
 
-profile = st.session_state.app_db.get('profile', {})
+st.title("🚀 FIRE Investor Dashboard")
 
-st.title("📊 FIRE Investor Dashboard")
-
-# --- 2. FINANCIAL PASSPORT (Restored) ---
+# --- 2. FINANCIAL PASSPORT (Central Info) ---
 with st.container(border=True):
     col1, col2 = st.columns([3, 1])
     with col1:
-        # data fetching from the new DB structure
-        name = profile.get('p1_name') or "Investor"
-        income = float(profile.get('p1_t4', 0)) + float(profile.get('p2_t4', 0))
-        province = profile.get('province', 'Ontario')
-        
+        name = st.session_state.user_profile.get('p1_name') or "Investor"
+        income = st.session_state.user_profile.get('p1_t4', 0) + st.session_state.user_profile.get('p2_t4', 0)
         st.markdown(f"### 👤 {name}'s Financial Passport")
-        st.write(f"**Total Household Income:** ${income:,.0f} | **Province:** {province}")
+        st.write(f"**Total Household Income:** ${income:,.0f} | **Province:** {st.session_state.user_profile.get('province')}")
     with col2:
         if st.button("Manage Profile", use_container_width=True):
             st.switch_page("scripts/profile.py")
@@ -34,20 +27,17 @@ st.divider()
 # --- 3. TOOL GRID LOGIC ---
 def render_tool_card(title, description, page_path, is_pro=False):
     with st.container(border=True):
-        # Add visual indicators for Pro tools
         header = f"{title} 🔒" if is_pro else title
         st.markdown(f"#### {header}")
         st.write(description)
         
-        # Determine button style
-        button_type = "primary" if not is_pro else "secondary"
-        button_label = "Launch Analysis" if not is_pro else "Premium Tool"
-        
-        if st.button(button_label, key=page_path, use_container_width=True, type=button_type):
+        # In Option C, we let them click "Launch" even for Pro tools to show the Paywall
+        button_label = "Launch Analysis" if not is_pro else "View Premium Tool"
+        if st.button(button_label, key=page_path, use_container_width=True):
             st.switch_page(page_path)
 
 # --- 4. TIER 1: FOUNDATIONS (FREE) ---
-st.subheader("🧱 Foundations & Budgeting")
+st.subheader("🏠 Foundations & Budgeting")
 f_c1, f_c2 = st.columns(2)
 with f_c1:
     render_tool_card(
@@ -88,14 +78,14 @@ with p_c3:
     render_tool_card(
         "Renewal Dilemma", 
         "Should you switch lenders or stay?", 
-        "scripts/renewal_scenario.py", 
+        "scripts/renewal_analysis.py", 
         is_pro=True
     )
 
 st.divider()
 
 # --- 6. INVESTMENT DEEP DIVES ---
-st.subheader("📈 Investment Analysis")
+st.subheader("📊 Investment Analysis")
 i_c1, i_c2 = st.columns(2)
 with i_c1:
     render_tool_card(
