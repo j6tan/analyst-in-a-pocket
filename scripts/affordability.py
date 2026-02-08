@@ -198,6 +198,7 @@ else:
     
     # Update the storage and the UI widgets
     st.session_state.aff_final['down_payment'] = new_dp
+    st.session_state.f_dp = new_dp
     st.session_state.aff_final['prop_taxes'] = new_tx
     st.session_state.aff_final['heat'] = new_ht
     
@@ -336,6 +337,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
