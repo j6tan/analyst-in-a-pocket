@@ -207,9 +207,15 @@ if "aff_final" not in st.session_state:
     # First time initialization
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
     st.session_state.aff_final = {
-        "t4": t4_sum, "rental": rental_sum, "monthly_debt": debt_sum,
-        "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht,
-        "is_fthb": False, "is_toronto": False
+        "t4": t4_sum, 
+        "bonus": bonus_sum
+        "rental": rental_sum, 
+        "monthly_debt": debt_sum,
+        "down_payment": d_dp, 
+        "prop_taxes": d_tx, 
+        "heat": d_ht,
+        "is_fthb": False, 
+        "is_toronto": False
     }
     st.session_state.f_dp = d_dp
     st.session_state.f_ptax = d_tx
@@ -375,6 +381,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
