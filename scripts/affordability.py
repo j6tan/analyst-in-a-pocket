@@ -123,7 +123,6 @@ def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate)
     return fp, fd
 
 def sync_aff_widgets():
-    # This captures your manual typing and saves it permanently
     if 'f_dp' in st.session_state:
         st.session_state.aff_final['down_payment'] = st.session_state.f_dp
     if 'f_bonus' in st.session_state:
@@ -223,7 +222,7 @@ if "aff_final" not in st.session_state:
     st.session_state.f_ptax = d_tx
     st.session_state.f_heat = d_ht
 else:
-    # Check if Profile data has actually changed since last visit
+    # Check if Profile data has actually changed
     has_changed = (
         st.session_state.aff_final.get('t4') != t4_sum or
         st.session_state.aff_final.get('bonus') != bonus_sum or
@@ -231,12 +230,14 @@ else:
         st.session_state.aff_final.get('monthly_debt') != debt_sum
     )
 
-    # Always keep the store synced with current profile basics
+    # Sync basic basics
     st.session_state.aff_final.update({
-        "t4": t4_sum, "rental": rental_sum, "monthly_debt": debt_sum
+        "t4": t4_sum, 
+        "bonus": bonus_sum, 
+        "rental": rental_sum, 
+        "monthly_debt": debt_sum
     })
     
-    # ONLY push new defaults if it's a first visit OR the profile data changed
     if "user_has_overwritten" not in st.session_state or has_changed:
         new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
         st.session_state.f_dp = new_dp
@@ -244,12 +245,12 @@ else:
         st.session_state.f_heat = new_ht
         st.session_state.user_has_overwritten = True
     else:
-        # If nothing changed, ensure widgets show what was last saved in the store
-        # This stops the "wiping to 0" when returning from other pages
+        # ENSURE f_dp and others are re-loaded from the store when you return
         st.session_state.f_dp = st.session_state.aff_final.get('down_payment', 0.0)
         st.session_state.f_ptax = st.session_state.aff_final.get('prop_taxes', 0.0)
         st.session_state.f_heat = st.session_state.aff_final.get('heat', 0.0)
 
+# Set the local variable for the widgets
 store = st.session_state.aff_final
 
 # --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
@@ -321,7 +322,8 @@ if max_pi_stress > 0:
         st.error(f"#### 🛑 Down Payment Too Low")
         st.warning(f"Minimum Requirement for purchase price of **${max_purchase:,.0f}** is **${min_required:,.0f}**.")
         
-    total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
+    if is_dp_valid:
+        total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
     # Itemized Closing Costs
     legal_fees, title_ins, appraisal = 1500, 500, 350
@@ -382,6 +384,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
