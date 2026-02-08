@@ -173,8 +173,8 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     stress_val = max(5.25, rate_val + 2.0)
     qual_income = t4 + bonus + (rental * 0.80)
     max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    # Applied $500 buffer to default DP + custom rounding rule
-    return custom_round_up(min_d + 500), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
+    # Applied $1000 buffer to default DP + custom rounding rule
+    return custom_round_up(min_d + 1000), custom_round_up(max_p * tax_rate), custom_round_up(max_p * 0.0002)
 
 if "aff_final" not in st.session_state:
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
@@ -337,6 +337,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
