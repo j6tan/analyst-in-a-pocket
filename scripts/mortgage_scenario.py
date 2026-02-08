@@ -21,13 +21,15 @@ household_names = f"{client_name1} & {client_name2}" if client_name2 else client
 
 # Retrieve raw data from Affordability (if available)
 aff_store = st.session_state.get('aff_final', {})
-raw_afford_max = aff_store.get('max_purchase_power', 800000.0)
+raw_afford_max = aff_store.get('max_purchase', 800000.0)
 raw_afford_down = aff_store.get('down_payment', 160000.0)
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
-    if 'aff_store' in st.session_state:
-        return st.session_state.aff_store.get('contract_rate', 4.49)
+    if 'aff_final' in st.session_state:
+        # Change 'contract_rate' to 'f_crate'
+        return st.session_state.aff_final.get('f_crate', 4.49)
+    return 4.49
     
     # Fallback to file (with crash protection)
     path = os.path.join("data", "market_intel.json")
@@ -342,5 +344,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
