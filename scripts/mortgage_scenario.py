@@ -186,11 +186,11 @@ with st.container(border=True):
     
     with col_i1:
         price = st.number_input("Purchase Price ($)", step=5000.0, key="ms_price")
-        store['price'] = price 
+        st.session_state.scen_store['price'] = price
     
     with col_i2:
         down = st.number_input("Down Payment ($)", step=5000.0, key="ms_down")
-        store['down'] = down 
+        st.session_state.scen_store['down'] = down
         
     with col_i3:
         amort = st.slider("Amortization (Years)", 5, 30, value=int(store['amort']), key="w_amort")
@@ -353,6 +353,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
