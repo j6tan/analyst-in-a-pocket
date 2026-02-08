@@ -60,8 +60,8 @@ def smart_round_price(price):
 # --- 3. PERSISTENCE INITIALIZATION (SHADOW STORE) ---
 if 'scen_store' not in st.session_state:
     st.session_state.scen_store = {
-        "price": float(smart_round_price(raw_afford_max)),
-        "down": float(raw_afford_down),
+        "price": float(st.session_state.get('ms_price', 800000.0)),
+        "down": float(st.session_state.get('ms_down', 160000.0)),,
         "amort": 25,
         "scenarios": [] 
     }
@@ -265,17 +265,11 @@ for i in range(total_cols):
             store['scenarios'][i]['double'] = False
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
-        results.append({
-        "Name": name,
-        "Rate": active_rate,
-        "Freq": freq_label,
-        "History": pd.DataFrame(history), # FIX: Wrap in pd.DataFrame()
-        "Total_Life_Int": int(total_interest_life),
-        "Term_Prin": int(total_principal_5yr),
-        "Monthly_Avg": int(monthly_pmt + (annual_prepay/12)),
-        "Payoff_Time": round(total_months/12, 1),
-        "Prepay_Active": "Yes" if annual_prepay > 0 else "No"
-    })
+        # Add a custom key for the 5-Year Progress chart
+        res['Term_Int'] = res['Term_Int']
+        # Simply append the 'res' dictionary. It already contains all the 
+        # necessary keys (Rate, History, Total_Life_Int, etc.) for the charts.
+        results.append(res)
 
 with main_cols[-1]:
     st.write("### ") 
@@ -360,6 +354,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
