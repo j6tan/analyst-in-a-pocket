@@ -111,10 +111,25 @@ def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate)
     p3 = budget / (0.80 * K + ALPHA)
     p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
     p1 = budget / (0.95 * K + ALPHA)
-    if p3 >= 1000000: fp, fd = p3, p3 * 0.20
-    elif p2 >= 500000: fp = p2; fd = 25000 + (fp - 500000) * 0.10
-    else: fp, fd = p1, p1 * 0.05
+    # Updated logic for Lines 94-98
+    if p3 >= 1000000: 
+        fp, fd = p3, p3 * 0.20
+    elif p2 >= 500000: 
+        fp = min(p2, 999999) # Cap this tier so it doesn't cross the $1M cliff
+        fd = 25000 + (fp - 500000) * 0.10
+    else: 
+        fp = min(p1, 499999) # Cap this tier so it doesn't cross the 5% cliff
+        fd = fp * 0.05
     return fp, fd
+
+def sync_aff_widgets():
+    # This captures your manual typing and saves it permanently
+    if 'f_dp' in st.session_state:
+        st.session_state.aff_final['down_payment'] = st.session_state.f_dp
+    if 'f_ptax' in st.session_state:
+        st.session_state.aff_final['prop_taxes'] = st.session_state.f_ptax
+    if 'f_heat' in st.session_state:
+        st.session_state.aff_final['heat'] = st.session_state.f_heat
 
 # --- 5. HEADER & STORY ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -189,12 +204,13 @@ def get_defaults(t4, bonus, rental, debt, tax_rate):
     return float(safe_dp), custom_round_up(rounded_p * tax_rate), custom_round_up(rounded_p * 0.0002)
 
 if "aff_final" not in st.session_state:
+    # First time initialization
     d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
     st.session_state.aff_final = {
-        "t4": t4_sum, "bonus": bonus_sum, "rental": rental_sum, "monthly_debt": debt_sum,
-        "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht, "is_fthb": False, "is_toronto": False
+        "t4": t4_sum, "rental": rental_sum, "monthly_debt": debt_sum,
+        "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht,
+        "is_fthb": False, "is_toronto": False
     }
-    # These lines ensure the input boxes show the calculated values on first load
     st.session_state.f_dp = d_dp
     st.session_state.f_ptax = d_tx
     st.session_state.f_heat = d_ht
@@ -206,23 +222,24 @@ else:
         st.session_state.aff_final.get('monthly_debt') != debt_sum
     )
 
-    # 1. Sync the basic income/debt numbers from Profile
-    st.session_state.aff_final['t4'] = t4_sum
-    st.session_state.aff_final['bonus'] = bonus_sum
-    st.session_state.aff_final['rental'] = rental_sum
-    st.session_state.aff_final['monthly_debt'] = debt_sum
+    # Always keep the store synced with current profile basics
+    st.session_state.aff_final.update({
+        "t4": t4_sum, "rental": rental_sum, "monthly_debt": debt_sum
+    })
     
-    # 2. Update if it's the first time OR if the Profile data changed
+    # ONLY push new defaults if it's a first visit OR the profile data changed
     if "user_has_overwritten" not in st.session_state or has_changed:
         new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
-        
-        # Update session state keys for the widgets
         st.session_state.f_dp = new_dp
         st.session_state.f_ptax = new_tx
         st.session_state.f_heat = new_ht
-        
-        # Mark as initialized
         st.session_state.user_has_overwritten = True
+    else:
+        # If nothing changed, ensure widgets show what was last saved in the store
+        # This stops the "wiping to 0" when returning from other pages
+        st.session_state.f_dp = st.session_state.aff_final.get('down_payment', 0.0)
+        st.session_state.f_ptax = st.session_state.aff_final.get('prop_taxes', 0.0)
+        st.session_state.f_heat = st.session_state.aff_final.get('heat', 0.0)
 
 store = st.session_state.aff_final
 
@@ -234,10 +251,10 @@ with uw_col1:
     s_rate = max(5.25, c_rate + 2.0)
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
-    store['down_payment'] = st.number_input("Down Payment ($)", key="f_dp")
-    store['prop_taxes'] = st.number_input("Annual Property Taxes", key="f_ptax")
+    store['down_payment'] = st.number_input("Down Payment ($)", key="f_dp", on_change=sync_aff_widgets)
+    store['prop_taxes'] = st.number_input("Annual Property Taxes", key="f_ptax", on_change=sync_aff_widgets)
 with uw_col3:
-    store['heat'] = st.number_input("Monthly Heat", key="f_heat")
+    store['heat'] = st.number_input("Monthly Heat", key="f_heat", on_change=sync_aff_widgets)
     prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
     strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
 
@@ -286,7 +303,11 @@ if max_pi_stress > 0:
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300)
     
     max_purchase = loan_amt + store['down_payment']
+    # Safety Cap: Shrink the loan if the rounded price exceeds what the DP supports
     min_required = calculate_min_downpayment(max_purchase)
+    if store['down_payment'] < min_required:
+        loan_amt -= (min_required - store['down_payment'])
+        max_purchase = loan_amt + store['down_payment']
     
     if store['down_payment'] < min_required - 1.0: 
         st.error(f"#### 🛑 Down Payment Too Low")
@@ -354,6 +375,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
