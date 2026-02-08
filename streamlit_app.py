@@ -2,7 +2,7 @@ import streamlit as st
 import json
 import os
 from style_utils import inject_global_css
-
+from data_handler import init_session_state, load_user_data
 
 # --- 1. GLOBAL CONFIG (Universal De-Squish) ---
 st.set_page_config(
@@ -11,38 +11,55 @@ st.set_page_config(
     page_icon="📊",
     initial_sidebar_state="expanded"
 )
-
 inject_global_css() # Keep styles active on this page
 
-# --- 2. DATA PERSISTENCE & VAULT ---
-DB_FILE = "user_profile_db.json"
-
-def load_profile():
-    if os.path.exists(DB_FILE):
-        try:
-            with open(DB_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {
-        "p1_name": "Investor", "p1_t4": 0.0, "p1_bonus": 0.0, 
-        "p1_commission": 0.0, "p1_pension": 0.0, "p2_t4": 0.0,
-        "province": "Ontario", "is_pro": False
-    }
-
-if 'user_profile' not in st.session_state:
-    st.session_state.user_profile = load_profile()
-
-if 'is_pro' not in st.session_state:
-    st.session_state.is_pro = st.session_state.user_profile.get("is_pro", False)
-
-# --- 3. DEV TOOLS ---
+# --- 2. DATA INIT ---
+init_session_state()
+# --- 3. AUTHENTICATION SYSTEM (Sidebar) ---
 with st.sidebar:
-    st.title("🛠️ Dev Tools")
-    st.session_state.is_pro = st.checkbox("Simulate Paid Account", value=st.session_state.is_pro)
+    st.image("logo.png", width=100) if "logo.png" in "." else None
+    
+    # Check if user is already logged in
+    if not st.session_state.get("is_logged_in", False):
+        st.header("🔓 Member Login")
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login")
+            
+            if submit:
+                # SIMPLE AUTH LOGIC (Replace with real DB check later)
+                if password == "paid123":  # Demo Password
+                    st.session_state.is_logged_in = True
+                    st.session_state.username = username
+                    st.session_state.is_pro = True # Unlock Pro Features
+                    load_user_data(username) # Load their permanent data
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials")
+        
+        st.info("Guest Mode Active: Data will be lost when you close the tab.")
+    
+    else:
+        # LOGGED IN VIEW
+        st.success(f"Logged in as: **{st.session_state.username}**")
+        st.caption("✅ Cloud Sync Active")
+        
+        if st.button("Logout"):
+            st.session_state.is_logged_in = False
+            st.session_state.username = None
+            st.session_state.is_pro = False
+            st.session_state.app_db = {} # Wipe sensitive data from RAM
+            st.rerun()
+    
     st.divider()
 
-# --- 4. OPTION C NAVIGATION (Grouped Sidebar) ---
+# --- 4. NAVIGATION ---
+# Unlock Pro pages only if logged in (or if 'is_pro' is somehow simulated)
+is_pro = st.session_state.get("is_pro", False)
+lock_icon = "🔓" if is_pro else "🔒"
+
+# --- 5. OPTION C NAVIGATION (Grouped Sidebar) ---
 pages = {
     "Overview": [
         st.Page("home.py", title="Home Dashboard", icon="🏠", default=True),
@@ -63,6 +80,7 @@ pages = {
 
 pg = st.navigation(pages)
 pg.run()
+
 
 
 
