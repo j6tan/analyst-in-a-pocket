@@ -309,7 +309,14 @@ tabs = st.tabs(["📉 Balance Projection", "💰 Monthly Cash-Out", "📊 5-Year
 with tabs[0]:
     fig1 = go.Figure()
     for i, r in enumerate(results): 
-        fig1.add_trace(go.Scatter(x=r['History']['Year'], y=r['History']['Balance'], name=r['Name'], line=dict(color=SCENARIO_COLORS[i % len(SCENARIO_COLORS)], width=4)))
+        # Check if History is empty to avoid the 'Year' KeyError
+        if not r['History'].empty:
+            fig1.add_trace(go.Scatter(
+                x=r['History']['Year'], 
+                y=r['History']['Balance'], 
+                name=r['Name'], 
+                line=dict(color=SCENARIO_COLORS[i % len(SCENARIO_COLORS)], width=4)
+            ))
     st.plotly_chart(apply_style(fig1, "Projected Mortgage Balance"), use_container_width=True)
 
 with tabs[1]:
@@ -356,6 +363,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
