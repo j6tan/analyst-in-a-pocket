@@ -17,6 +17,7 @@ prof = st.session_state.app_db['profile']
 # Helper function to save changes securely
 def update_profile(key):
     # Sends data to data_handler (RAM for Guest, Cloud for Paid)
+    # It looks for st.session_state["w_" + key]
     update_data('profile', key, st.session_state[f"w_{key}"])
 
 st.title("👤 Client Profile & Financials")
@@ -44,7 +45,7 @@ with c2:
 
 st.divider()
 
-# --- SECTION 2: INCOME SOURCES (RESTORED ALL MISSING FIELDS) ---
+# --- SECTION 2: INCOME SOURCES ---
 st.subheader("💰 Annual Income Sources")
 st.markdown("Please enter gross annual amounts (before tax).")
 
@@ -66,18 +67,22 @@ with i2:
 
 st.divider()
 
-# --- SECTION 3: CURRENT HOUSING SITUATION (RESTORED) ---
+# --- SECTION 3: CURRENT HOUSING SITUATION ---
 st.subheader("🏠 Current Housing Situation")
 
-housing_mode = st.radio("Do you currently Rent or Own?", ["Rent", "Own"], index=0 if prof.get('housing_status', 'Rent') == 'Rent' else 1, key="w_housing_status_radio", on_change=lambda: update_profile("housing_status"))
-
-# We manually sync the radio key to the DB key because 'on_change' with args can be tricky with Radios
-if st.session_state.w_housing_status_radio != prof.get('housing_status'):
-    update_data('profile', 'housing_status', st.session_state.w_housing_status_radio)
+# FIX: We renamed the key to 'w_housing_status' so it matches the args=("housing_status",)
+housing_mode = st.radio(
+    "Do you currently Rent or Own?", 
+    ["Rent", "Own"], 
+    index=0 if prof.get('housing_status', 'Rent') == 'Rent' else 1, 
+    key="w_housing_status", 
+    on_change=update_profile, 
+    args=("housing_status",)
+)
 
 h1, h2 = st.columns(2)
 
-if st.session_state.w_housing_status_radio == "Rent":
+if housing_mode == "Rent":
     with h1:
         st.number_input("Current Monthly Rent ($)", value=float(prof.get('current_rent', 2000.0)), step=50.0, key="w_current_rent", on_change=update_profile, args=("current_rent",))
 else:
@@ -90,7 +95,7 @@ else:
 
 st.divider()
 
-# --- SECTION 4: DEBTS & LIABILITIES (RESTORED) ---
+# --- SECTION 4: DEBTS & LIABILITIES ---
 st.subheader("💳 Monthly Liabilities")
 st.markdown("Debts impacting your borrowing power (TDS Ratio).")
 
