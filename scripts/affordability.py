@@ -168,11 +168,25 @@ if "aff_final" not in st.session_state:
         "down_payment": d_dp, "prop_taxes": d_tx, "heat": d_ht, "is_fthb": False, "is_toronto": False
     }
 else:
-    # THIS IS THE FIX: Force update with new Profile data
+    # 1. Sync the Incomes/Debts from Profile
     st.session_state.aff_final['t4'] = t4_sum
     st.session_state.aff_final['bonus'] = bonus_sum
     st.session_state.aff_final['rental'] = rental_sum
     st.session_state.aff_final['monthly_debt'] = debt_sum
+    
+    # 2. RE-CALCULATE DEFAULTS (This is the missing link!)
+    # We run the math again with the new income numbers
+    new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
+    
+    # 3. Update the Storage
+    st.session_state.aff_final['down_payment'] = new_dp
+    st.session_state.aff_final['prop_taxes'] = new_tx
+    st.session_state.aff_final['heat'] = new_ht
+    
+    # 4. Force the UI Widgets to refresh visually
+    if 'f_dp' in st.session_state: st.session_state.f_dp = new_dp
+    if 'f_ptax' in st.session_state: st.session_state.f_ptax = new_tx
+    if 'f_heat' in st.session_state: st.session_state.f_heat = new_ht
 store = st.session_state.aff_final
 
 # --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
@@ -303,6 +317,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
