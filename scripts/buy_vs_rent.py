@@ -19,13 +19,16 @@ SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
 # --- 2. DATA RETRIEVAL (GLOBAL PROFILE) ---
-prof = st.session_state.get('user_profile', {})
+prof = st.session_state.app_db.get('profile', {})
 name1 = prof.get('p1_name') or "Primary Client"
 name2 = prof.get('p2_name') or ""
 household = f"{name1} and {name2}" if name2 else name1
 
 # --- 3. PERSISTENCE INITIALIZATION ---
 if "aff_rent_store" not in st.session_state:
+    # Grab rent from profile, or default to 2500 if missing
+    profile_rent = float(prof.get('current_rent', 2500.0))
+    
     st.session_state.aff_rent_store = {
         "price": 800000, "dp": 200000, "rate": 4.0, "ann_tax": 2000,
         "mo_maint": 500, "apprec": 1.5, "rent": 3000, "rent_inc": 2.5,
@@ -209,5 +212,6 @@ st.markdown("""
 
 
 st.caption("Analyst in a Pocket | Strategic Wealth Hub")
+
 
 
