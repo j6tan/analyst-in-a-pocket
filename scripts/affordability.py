@@ -6,17 +6,6 @@ import json
 import math
 from style_utils import inject_global_css
 
-# --- DEBUGGING SECTION ---
-st.subheader("🛠️ Debugger: Data Check")
-if 'app_db' in st.session_state:
-    raw_profile_data = st.session_state.app_db.get('profile', {})
-    val = raw_profile_data.get('rental_income', "KEY NOT FOUND")
-    st.write(f"**Raw Profile Dictionary:** {raw_profile_data}")
-    st.write(f"**Value found for 'rental_income':** {val}")
-else:
-    st.error("Critical Error: 'app_db' not found in session state.")
-st.divider()
-
 # 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
@@ -163,7 +152,7 @@ t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.
 bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0)) + float(prof.get('other_income', 0))
 
 # Fixed key for rental income
-rental_sum = float(prof.get('rental_income', 0))
+rental_sum = float(prof.get('inv_rental_income', 0))
 
 # Capture all Debts including 3% of LOC
 debt_sum = (
@@ -347,6 +336,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
