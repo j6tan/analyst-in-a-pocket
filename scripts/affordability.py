@@ -328,7 +328,9 @@ if max_pi_stress > 0:
     
     max_purchase = loan_amt + store['down_payment']
     # Safety Cap: Shrink the loan if the rounded price exceeds what the DP supports
-   # Calculate requirements
+    st.session_state.aff_final['max_purchase'] = max_purchase
+    st.session_state.aff_final['down_payment'] = store['down_payment']
+    # Calculate requirements
     min_required = calculate_min_downpayment(max_purchase)
     is_dp_valid = store['down_payment'] >= (min_required - 1.0)
     
@@ -410,6 +412,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
