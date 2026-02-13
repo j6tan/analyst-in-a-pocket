@@ -189,6 +189,7 @@ if 'f_heat' not in st.session_state:
     
 TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
+market_rate = float(intel['rates'].get('five_year_fixed_uninsured', 4.26))
 
 def get_defaults(t4, bonus, rental, debt, tax_rate):
     rate_val = float(intel['rates'].get('five_year_fixed_uninsured', 4.26))
@@ -215,14 +216,14 @@ if "aff_final" not in st.session_state:
         "down_payment": d_dp, 
         "prop_taxes": d_tx, 
         "heat": d_ht,
-        "bank_rate":market_rate,
+        "bank_rate": market_rate,
         "is_fthb": False, 
         "is_toronto": False
     }
     st.session_state.f_dp = d_dp
     st.session_state.f_ptax = d_tx
     st.session_state.f_heat = d_ht
-    st.session_state.f_heat = market_rate
+    st.session_state.f_crate = market_rate
 else:
     # Check if Profile data has actually changed
     has_changed = (
@@ -410,6 +411,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
