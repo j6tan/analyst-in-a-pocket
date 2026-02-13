@@ -322,8 +322,12 @@ if max_pi_stress > 0:
     if not is_dp_valid:
         st.error("#### 🛑 Down Payment Too Low")
         # Using a clean format to avoid the asterisk/bolding glitch
-        st.warning(f"The minimum requirement for a purchase price of **${max_purchase:,.0f}** is **${min_required:,.0f}**.")
-    
+        # We use a single string and ensure spaces are outside the bold markers
+        message = (
+            f"The minimum requirement for a purchase price of "
+            f"**${max_purchase:,.0f}** is **${min_required:,.0f}**."
+          )
+        st.warning(message)
         # CRITICAL: Stop the script here so it doesn't try to run calculations on line 330
         st.stop() 
     if is_dp_valid:
@@ -388,6 +392,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
