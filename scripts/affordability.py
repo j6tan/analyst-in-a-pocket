@@ -321,15 +321,19 @@ if max_pi_stress > 0:
 # 2. Validation Check
     if not is_dp_valid:
         st.error("#### 🛑 Down Payment Too Low")
-        # Using a clean format to avoid the asterisk/bolding glitch
-        # We use a single string and ensure spaces are outside the bold markers
-        message = (
-            f"The minimum requirement for a purchase price of "
-            f"**${max_purchase:,.0f}** is **${min_required:,.0f}**."
-          )
-        st.warning(message)
-        # CRITICAL: Stop the script here so it doesn't try to run calculations on line 330
-        st.stop() 
+    
+        # Using HTML to ensure the font, colors, and $ symbols stay exactly as intended
+        error_html = f"""
+        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba; font-family: sans-serif;">
+            The minimum requirement for a purchase price of 
+            <strong>${max_purchase:,.0f}</strong> is 
+            <strong>${min_required:,.0f}</strong>.
+        </div>
+        """
+        st.markdown(error_html, unsafe_allow_html=True)
+    
+        st.stop()
+        
     if is_dp_valid:
         total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
@@ -392,6 +396,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
