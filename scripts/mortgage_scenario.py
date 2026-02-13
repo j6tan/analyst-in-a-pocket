@@ -22,15 +22,17 @@ household_names = f"{client_name1} & {client_name2}" if client_name2 else client
 # --- 1. DATA LINKING ---
 aff_store = st.session_state.get('aff_final', {})
 
-# This pulls the actual calculated Loan and Down Payment from your other page
-if "scenario_initialized" not in st.session_state:
-    init_loan = aff_store.get('loan_amt', 640000.0)
-    init_down = aff_store.get('down_payment', 160000.0)
-    
-    # We set these in Session State so the widgets can find them
-    st.session_state.ms_price = float(init_loan + init_down)
-    st.session_state.ms_down = float(init_down)
-    st.session_state.scenario_initialized = True
+# We want to pull the latest results from the Affordability page
+# 'max_purchase' and 'down_payment' are calculated in affordability.py
+latest_price = float(aff_store.get('max_purchase', 800000.0))
+latest_down = float(aff_store.get('down_payment', 160000.0))
+
+# We use a 'source' tracker to see if the affordability data has changed 
+# since the last time we were on this page.
+if "last_synced_price" not in st.session_state or st.session_state.last_synced_price != latest_price:
+    st.session_state.ms_price = latest_price
+    st.session_state.ms_down = latest_down
+    st.session_state.last_synced_price = latest_price # Track the sync
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
@@ -363,6 +365,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
