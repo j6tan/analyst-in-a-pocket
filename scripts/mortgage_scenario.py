@@ -19,19 +19,26 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# Pull the results store from the affordability page
+# --- 1. DATA LINKING (Updated to prevent $0 resets) ---
 aff_store = st.session_state.get('aff_final', {})
 
-# Mapping the exact variables from affordability (39).py
-# Note: affordability calculates 'max_purchase' and 'down_payment'
-latest_price = float(aff_store.get('max_purchase', 800000.0))
-latest_down = float(aff_store.get('down_payment', 160000.0))
+# 1. Pull the values from the store
+# We add a check: if the store has 0, we don't treat it as a valid sync source
+raw_price = float(aff_store.get('max_purchase', 0.0))
+raw_down = float(aff_store.get('down_payment', 0.0))
 
-# Sync logic: If the price from the affordability page changes, we reset the inputs here
-if "last_synced_price" not in st.session_state or st.session_state.last_synced_price != latest_price:
-    st.session_state.ms_price = latest_price
-    st.session_state.ms_down = latest_down
-    st.session_state.last_synced_price = latest_price
+# 2. Sync Logic
+# Only sync IF the affordability page actually has a calculated price > 0
+if raw_price > 0:
+    if "last_synced_price" not in st.session_state or st.session_state.last_synced_price != raw_price:
+        st.session_state.ms_price = raw_price
+        st.session_state.ms_down = raw_down
+        st.session_state.last_synced_price = raw_price
+        
+# 3. Final fallback: If for some reason state is still empty, set a hard default
+if "ms_price" not in st.session_state or st.session_state.ms_price == 0:
+    st.session_state.ms_price = 800000.0
+    st.session_state.ms_down = 160000.0
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
@@ -364,6 +371,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
