@@ -268,7 +268,6 @@ uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
     c_rate = st.number_input(
         "Bank Contract Rate %", 
-        value=st.session_state.f_crate, 
         step=0.01, 
         key="f_crate",
         on_change=sync_rate
@@ -411,6 +410,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
