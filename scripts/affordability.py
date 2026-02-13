@@ -318,10 +318,14 @@ if max_pi_stress > 0:
     min_required = calculate_min_downpayment(max_purchase)
     is_dp_valid = store['down_payment'] >= (min_required - 1.0)
     
+# 2. Validation Check
     if not is_dp_valid:
-        st.error(f"#### 🛑 Down Payment Too Low")
-        st.warning(f"Minimum Requirement for purchase price of **${max_purchase:,.0f}** is **${min_required:,.0f}**.")
-        
+        st.error("#### 🛑 Down Payment Too Low")
+        # Using a clean format to avoid the asterisk/bolding glitch
+        st.warning(f"The minimum requirement for a purchase price of **${max_purchase:,.0f}** is **${min_required:,.0f}**.")
+    
+        # CRITICAL: Stop the script here so it doesn't try to run calculations on line 330
+        st.stop() 
     if is_dp_valid:
         total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
     
@@ -384,6 +388,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
