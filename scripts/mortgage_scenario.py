@@ -19,21 +19,22 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# --- 1. DATA LINKING (Updated to prevent $0 resets) ---
+# --- 1. DATA LINKING (Robust Sync) ---
 aff_store = st.session_state.get('aff_final', {})
 
-# 1. Pull the values from the store
-# We add a check: if the store has 0, we don't treat it as a valid sync source
-raw_price = float(aff_store.get('max_purchase', 0.0))
-raw_down = float(aff_store.get('down_payment', 0.0))
+# 1. Define the values coming from the Affordability page
+# We use 0 as a check to see if calculations have been run yet
+aff_price = float(aff_store.get('max_purchase', 0.0))
+aff_down = float(aff_store.get('down_payment', 0.0))
 
-# 2. Sync Logic
-# Only sync IF the affordability page actually has a calculated price > 0
-if raw_price > 0:
-    if "last_synced_price" not in st.session_state or st.session_state.last_synced_price != raw_price:
-        st.session_state.ms_price = raw_price
-        st.session_state.ms_down = raw_down
-        st.session_state.last_synced_price = raw_price
+# 2. Initialization & Sync Logic
+# If the user has NEVER been here, or if the Affordability results changed...
+if "ms_price" not in st.session_state or (aff_price > 0 and st.session_state.get('last_synced_price') != aff_price):
+    # If affordability has data, use it. Otherwise, use a healthy default.
+    st.session_state.ms_price = aff_price if aff_price > 0 else 800000.0
+    st.session_state.ms_down = aff_down if aff_down > 0 else 160000.0
+    # Update the sync marker
+    st.session_state.last_synced_price = aff_price
         
 # 3. Final fallback: If for some reason state is still empty, set a hard default
 if "ms_price" not in st.session_state or st.session_state.ms_price == 0:
@@ -71,11 +72,12 @@ if 'scen_store' not in st.session_state:
     # Pull the initialized values from Section 1
     p_val = st.session_state.get('ms_price', 800000.0)
     d_val = st.session_state.get('ms_down', 160000.0)
+    a_val = st.session_state.get('w_amort', 25)
     
     st.session_state.scen_store = {
         "price": float(p_val),
         "down": float(d_val),
-        "amort": 25,
+        "amort": int(a_val),
         "scenarios": [] 
     }
     st.session_state.scen_store["scenarios"] = [
@@ -84,6 +86,13 @@ if 'scen_store' not in st.session_state:
     ]
 
 store = st.session_state.scen_store
+
+# --- NEW: SYNC CALLBACK ---
+# Stick this right here so it's defined before your widgets call it
+def update_ms_store():
+    st.session_state.scen_store['price'] = st.session_state.ms_price
+    st.session_state.scen_store['down'] = st.session_state.ms_down
+    st.session_state.scen_store['amort'] = st.session_state.w_amort
 
 if 'num_options' not in st.session_state:
     st.session_state.num_options = len(store['scenarios'])
@@ -190,6 +199,11 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- 6. GLOBAL SETTINGS (MOVED TO MAIN PAGE) ---
+def update_ms_store():
+    st.session_state.scen_store['price'] = st.session_state.ms_price
+    st.session_state.scen_store['down'] = st.session_state.ms_down
+    st.session_state.scen_store['amort'] = st.session_state.w_amort
+
 with st.container(border=True):
     st.markdown("### 🏠 Property & Mortgage Details")
     
@@ -197,16 +211,31 @@ with st.container(border=True):
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        price = st.number_input("Purchase Price ($)", step=5000.0, key="ms_price")
-        st.session_state.scen_store['price'] = price
+        # We use the key="ms_price" and the callback. 
+        # Streamlit handles the 'stickiness' via the key.
+        price = st.number_input(
+            "Purchase Price ($)", 
+            step=5000.0, 
+            key="ms_price", 
+            on_change=update_ms_store
+        )
     
     with col_i2:
-        down = st.number_input("Down Payment ($)", step=5000.0, key="ms_down")
-        st.session_state.scen_store['down'] = down
+        down = st.number_input(
+            "Down Payment ($)", 
+            step=5000.0, 
+            key="ms_down", 
+            on_change=update_ms_store
+        )
         
     with col_i3:
-        amort = st.slider("Amortization (Years)", 5, 30, value=int(st.session_state.scen_store['amort']), key="w_amort")
-        st.session_state.scen_store['amort'] = amort
+        # We use the store's value to ensure the slider doesn't jump
+        amort = st.slider(
+            "Amortization (Years)", 
+            5, 30, 
+            key="w_amort", 
+            on_change=update_ms_store
+        )
 
     # --- LOGIC & CALCULATIONS (Preserved Exactly) ---
     min_down_req = calculate_min_downpayment(price)
@@ -371,6 +400,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
