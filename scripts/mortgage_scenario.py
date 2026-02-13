@@ -87,12 +87,26 @@ if 'scen_store' not in st.session_state:
 
 store = st.session_state.scen_store
 
-# --- NEW: SYNC CALLBACK ---
-# Stick this right here so it's defined before your widgets call it
+# --- 3. UPDATED SYNC CALLBACK ---
 def update_ms_store():
     st.session_state.scen_store['price'] = st.session_state.ms_price
     st.session_state.scen_store['down'] = st.session_state.ms_down
     st.session_state.scen_store['amort'] = st.session_state.w_amort
+
+    # 2. Sync the dynamic scenarios list
+    # We loop through current options and save their specific widget keys
+    for i in range(st.session_state.num_options):
+        s = st.session_state.scen_store['scenarios'][i]
+        s['label'] = st.session_state.get(f"n{i}", s['label'])
+        s['rate'] = st.session_state.get(f"r{i}", s['rate'])
+        s['freq'] = st.session_state.get(f"f{i}", s['freq'])
+        s['strat'] = st.session_state.get(f"s{i}", s['strat'])
+        s['extra'] = st.session_state.get(f"ex{i}", s['extra']) # Added .get()
+        s['lump'] = st.session_state.get(f"ls{i}", s['lump'])   # Added .get()
+        
+        # Save sub-inputs if they exist in session state
+        if f"ex{i}" in st.session_state: s['extra'] = st.session_state[f"ex{i}"]
+        if f"ls{i}" in st.session_state: s['lump'] = st.session_state[f"ls{i}"]
 
 if 'num_options' not in st.session_state:
     st.session_state.num_options = len(store['scenarios'])
@@ -277,36 +291,30 @@ for i in range(total_cols):
     s_data = store['scenarios'][i]
     with main_cols[i]:
         st.markdown(f"### Option {chr(65+i)}")
-        name = st.text_input("Label", value=s_data['label'], key=f"n{i}")
-        store['scenarios'][i]['label'] = name
-        rate = st.number_input("Rate %", value=float(s_data['rate']), step=0.01, key=f"r{i}")
-        store['scenarios'][i]['rate'] = rate
+        
+        # We just capture the widget values; the callback saves them to the store
+        name = st.text_input("Label", value=s_data['label'], key=f"n{i}", on_change=update_ms_store)
+        rate = st.number_input("Rate %", value=float(s_data['rate']), step=0.01, key=f"r{i}", on_change=update_ms_store)
+        
         freq = st.selectbox("Frequency", ["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"], 
                             index=["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"].index(s_data['freq']),
-                            key=f"f{i}")
-        store['scenarios'][i]['freq'] = freq
+                            key=f"f{i}", on_change=update_ms_store)
+        
         strat = st.selectbox("Strategy", ["None", "Extra/Pmt", "Double Up", "Annual Lump"], 
                              index=["None", "Extra/Pmt", "Double Up", "Annual Lump"].index(s_data['strat']),
-                             key=f"s{i}")
-        store['scenarios'][i]['strat'] = strat
+                             key=f"s{i}", on_change=update_ms_store)
+        
         ex, ls, db = 0, 0, False
         if strat == "Extra/Pmt": 
-            ex = st.number_input("Extra $", value=float(s_data['extra']), key=f"ex{i}")
-            store['scenarios'][i]['extra'] = ex
+            ex = st.number_input("Extra $", value=float(s_data['extra']), key=f"ex{i}", on_change=update_ms_store)
         elif strat == "Annual Lump": 
-            ls = st.number_input("Lump $", value=float(s_data['lump']), key=f"ls{i}")
-            store['scenarios'][i]['lump'] = ls
+            ls = st.number_input("Lump $", value=float(s_data['lump']), key=f"ls{i}", on_change=update_ms_store)
         elif strat == "Double Up": 
             db = True
-            store['scenarios'][i]['double'] = True
-        else:
-            store['scenarios'][i]['extra'] = 0.0
-            store['scenarios'][i]['lump'] = 0.0
-            store['scenarios'][i]['double'] = False
+        
+        # The math still uses the local variables (rate, freq, etc.)
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
-        # FIX: The 'res' dictionary already contains the History DataFrame 
-        # and all calculated metrics from the simulate_mortgage function.
         results.append(res)
 
 with main_cols[-1]:
@@ -400,6 +408,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
