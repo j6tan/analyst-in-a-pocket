@@ -19,20 +19,19 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# --- 1. DATA LINKING ---
+# Pull the results store from the affordability page
 aff_store = st.session_state.get('aff_final', {})
 
-# We want to pull the latest results from the Affordability page
-# 'max_purchase' and 'down_payment' are calculated in affordability.py
+# Mapping the exact variables from affordability (39).py
+# Note: affordability calculates 'max_purchase' and 'down_payment'
 latest_price = float(aff_store.get('max_purchase', 800000.0))
 latest_down = float(aff_store.get('down_payment', 160000.0))
 
-# We use a 'source' tracker to see if the affordability data has changed 
-# since the last time we were on this page.
+# Sync logic: If the price from the affordability page changes, we reset the inputs here
 if "last_synced_price" not in st.session_state or st.session_state.last_synced_price != latest_price:
     st.session_state.ms_price = latest_price
     st.session_state.ms_down = latest_down
-    st.session_state.last_synced_price = latest_price # Track the sync
+    st.session_state.last_synced_price = latest_price
 
 # Retrieve rate from Affordability Store (SAFE VERSION)
 def get_default_rate():
@@ -365,6 +364,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
+
 
 
 
