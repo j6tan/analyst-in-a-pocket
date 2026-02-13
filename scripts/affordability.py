@@ -215,12 +215,14 @@ if "aff_final" not in st.session_state:
         "down_payment": d_dp, 
         "prop_taxes": d_tx, 
         "heat": d_ht,
+        "bank_rate":market_rate,
         "is_fthb": False, 
         "is_toronto": False
     }
     st.session_state.f_dp = d_dp
     st.session_state.f_ptax = d_tx
     st.session_state.f_heat = d_ht
+    st.session_state.f_heat = market_rate
 else:
     # Check if Profile data has actually changed
     has_changed = (
@@ -243,12 +245,18 @@ else:
         st.session_state.f_dp = new_dp
         st.session_state.f_ptax = new_tx
         st.session_state.f_heat = new_ht
+        st.session_state.f_crate = market_rate
         st.session_state.user_has_overwritten = True
     else:
         # ENSURE f_dp and others are re-loaded from the store when you return
         st.session_state.f_dp = st.session_state.aff_final.get('down_payment', 0.0)
         st.session_state.f_ptax = st.session_state.aff_final.get('prop_taxes', 0.0)
         st.session_state.f_heat = st.session_state.aff_final.get('heat', 0.0)
+        st.session_state.f_crate = st.session_state.aff_final.get('bank_rate', market_rate)
+
+# Local helper to sync the UI back to the store
+def sync_rate():
+    st.session_state.aff_final['bank_rate'] = st.session_state.f_crate
 
 # Set the local variable for the widgets
 store = st.session_state.aff_final
@@ -257,7 +265,13 @@ store = st.session_state.aff_final
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
-    c_rate = st.number_input("Bank Contract Rate %", value=4.26, step=0.01, key="f_crate")
+    c_rate = st.number_input(
+        "Bank Contract Rate %", 
+        value=st.session_state.f_crate, 
+        step=0.01, 
+        key="f_crate",
+        on_change=sync_rate
+    )
     s_rate = max(5.25, c_rate + 2.0)
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
@@ -396,6 +410,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
 
 
 
