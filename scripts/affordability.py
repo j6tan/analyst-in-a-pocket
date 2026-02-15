@@ -162,10 +162,10 @@ with col_2:
 with col_3:
     st.info("""
     **💡 Underwriting Insights:**
-    * **T4 Income:** Lenders qualify you based on **100%** of your base salary.
-    * **Additional Income:** Bonuses and commissions usually require a **2-year average**.
-    * **Rental Income:** Typically 'haircut' to **80%** to account for taxes and maintenance.
-    * **Liabilities:** Debts reduce your room; LOCs are stressed at **3% of the limit**.
+    * **T4:** Lenders qualify you based on **100%** of your T4.
+    * **Additional:** Bonuses usually require a **2-year average**.
+    * **Rental:** Typically 'haircut' to **80%** to account for taxes and maintenance.
+    * **Liabilities:** LOCs are stressed at **3% of the limit**.
     """)
 
 # --- 9. CALCULATION LOGIC ---
@@ -240,4 +240,5 @@ else:
     st.error("Approval amount is $0.")
 
 show_disclaimer()
+
 
