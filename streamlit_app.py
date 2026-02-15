@@ -47,7 +47,7 @@ with st.sidebar:
                     st.error("Invalid Username or Password")
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
-is_pro = st.session_state.is_pro
+is_pro = st.session_state.get("is_pro", False)
 
 # Helper to create Pro labels and icons
 def get_pro_meta(label, icon, is_pro):
@@ -135,6 +135,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
