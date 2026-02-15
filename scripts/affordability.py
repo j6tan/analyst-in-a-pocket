@@ -101,13 +101,18 @@ if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
+# Force carry-over from profile if the affordability fields are 0
+if aff.get('combined_t4', 0) == 0: aff['combined_t4'] = t4_sum
+if aff.get('combined_bonus', 0) == 0: aff['combined_bonus'] = bonus_sum
+if aff.get('rental', 0) == 0: aff['rental'] = rental_sum
+if aff.get('combined_debt', 0) == 0: aff['combined_debt'] = debt_sum
+
 if aff.get('bank_rate', 0) == 0:
     TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
     tr = TAX_DEFAULTS.get(province, 0.0075)
     max_p, min_d = solve_max_affordability(t4_sum + bonus_sum + (rental_sum * 0.8), debt_sum, 6.26, tr)
     aff.update({'bank_rate': 4.26, 'down_payment': custom_round_up(min_d + 2000), 'prop_taxes': custom_round_up(max_p * tr), 
-                'heat': custom_round_up(max_p * 0.0002), 'combined_t4': t4_sum, 'combined_bonus': bonus_sum, 
-                'combined_debt': debt_sum, 'rental': rental_sum}) # Ensure rental is synced
+                'heat': custom_round_up(max_p * 0.0002)})
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
@@ -143,7 +148,7 @@ with col_1:
     st.subheader("💰 Income Summary")
     i_t4 = cloud_input("Combined T4 Income", "affordability", "combined_t4", step=1000.0)
     i_bonus = cloud_input("Total Additional Income", "affordability", "combined_bonus", step=500.0)
-    i_rental = cloud_input("Joint Rental Income", "affordability", "rental", step=100.0) # Corrected Link
+    i_rental = cloud_input("Joint Rental Income", "affordability", "rental", step=100.0)
     total_qualifying = i_t4 + i_bonus + (i_rental * 0.80)
     st.markdown(f"**Qualifying Income:** ${total_qualifying:,.0f}")
 
@@ -154,13 +159,12 @@ with col_2:
     f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
 
 with col_3:
-    # RESTORED FULL UNDERWRITING INSIGHTS
     st.info("""
     **💡 Underwriting Insights:**
-    * **T4:** Banks use **100%** of base salary.
-    * **Additional Income:** Usually a **2-year average** of Bonuses or Commissions is used.
-    * **Rental:** Typically 'haircut' to **80%** to account for vacancies and expenses.
-    * **LOC:** Stress-tested at **3%** of the total balance as a monthly payment.
+    * **T4:** 100% of base salary used.
+    * **Bonus/Comm:** Usually a 2-year average.
+    * **Rental:** 80% haircut for costs/vacancy.
+    * **LOC:** Stress-tested at 3% of balance.
     """)
 
 # --- 9. CALCULATION LOGIC ---
@@ -177,6 +181,18 @@ if max_pi_stress > 0:
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
     max_purchase = loan_amt + f_dp
     
+    # --- SAFETY CHECK: MIN DOWNPAYMENT BUG FIX ---
+    min_required = calculate_min_downpayment(max_purchase)
+    if f_dp < (min_required - 0.99):
+        st.error(f"#### 🛑 Down Payment Too Low")
+        st.markdown(f"""
+        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
+            The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.
+            Please increase your down payment or reduce the target loan.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Max Purchase", f"${max_purchase:,.0f}")
