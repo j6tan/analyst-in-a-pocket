@@ -28,51 +28,40 @@ VALID_USERS = {
 with st.sidebar:
     st.image("logo.png", width=100) if os.path.exists("logo.png") else None
     
-    # 1. Check if the user IS NOT logged in
+    # Block A: Login Form
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
-        
-        # Everything inside this 'with' block MUST use form_submit_button
         with st.form("login_form"):
             user_input = st.text_input("Username").lower().strip()
             pw_input = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login")
-            
-            if submit:
+            if st.form_submit_button("Login"):
                 if user_input in VALID_USERS and pw_input == VALID_USERS[user_input]:
                     st.session_state.is_logged_in = True
                     st.session_state.is_pro = True 
                     st.session_state.username = user_input
-                    
                     from data_handler import load_user_data
                     load_user_data(user_input) 
                     st.rerun()
                 else:
                     st.error("Invalid Username or Password")
     
-    # 2. If the user IS logged in, show the Logout button OUTSIDE of any form
+    # Block B: Logout View
     else:
         st.success(f"Welcome, {st.session_state.username.capitalize()}")
-        st.caption("✨ Cloud Sync Active")
-        
-        # This button is now safely outside the st.form block
         if st.button("Logout"):
             st.session_state.is_logged_in = False
-            st.session_state.username = None
             st.session_state.is_pro = False
-            
             if 'app_db' in st.session_state:
                 del st.session_state['app_db']
-            
             st.rerun()
 
-    # --- THE MOVE: Place this AFTER the if/else blocks ---
-    st.divider() # Adds a nice visual line
+    # --- THE FIX: THIS PART IS NOW INDEPENDENT ---
+    st.divider() 
     if st.button("Test Cloud Connection"):
         try:
-            # Tries to read the URL from your secrets
+            # This checks if your .streamlit/secrets.toml is working
             url = st.secrets["SUPABASE_URL"]
-            st.write(f"Connected to: {url}")
+            st.write(f"Cloud URL: {url}")
             st.success("Supabase is Live! ☁️")
         except Exception as e:
             st.error(f"Connection Failed: {e}")
@@ -166,6 +155,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
