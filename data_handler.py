@@ -92,9 +92,11 @@ def update_data(category, key, value):
     # 2. If the user is logged in, sync to the Cloud
     if st.session_state.get("is_logged_in", False):
         username = st.session_state.get("username")
+        print(f"DEBUG: Attempting to save for {username}...") # ADD THIS
         try:
-            supabase.table("user_vault").update({
+            res = supabase.table("user_vault").update({
                 "data": st.session_state.app_db
             }).eq("id", username).execute()
+            print(f"DEBUG: Supabase Response: {res}") # ADD THIS
         except Exception as e:
-            print(f"Background Sync Failed: {e}")
+            print(f"DEBUG: ERROR SAVING TO CLOUD: {e}")
