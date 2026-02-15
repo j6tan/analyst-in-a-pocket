@@ -5,6 +5,7 @@ import os
 import json
 import math
 from style_utils import inject_global_css
+from data_handler import cloud_input, sync_widget # ADDED FOR SYNC
 
 # 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
@@ -111,26 +112,15 @@ def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate)
     p3 = budget / (0.80 * K + ALPHA)
     p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
     p1 = budget / (0.95 * K + ALPHA)
-    # Updated logic for Lines 94-98
     if p3 >= 1000000: 
         fp, fd = p3, p3 * 0.20
     elif p2 >= 500000: 
-        fp = min(p2, 999999) # Cap this tier so it doesn't cross the $1M cliff
+        fp = min(p2, 999999) 
         fd = 25000 + (fp - 500000) * 0.10
     else: 
-        fp = min(p1, 499999) # Cap this tier so it doesn't cross the 5% cliff
+        fp = min(p1, 499999) 
         fd = fp * 0.05
     return fp, fd
-
-def sync_aff_widgets():
-    if 'f_dp' in st.session_state:
-        st.session_state.aff_final['down_payment'] = st.session_state.f_dp
-    if 'f_bonus' in st.session_state:
-        st.session_state.aff_final['bonus'] = st.session_state.f_bonus
-    if 'f_ptax' in st.session_state:
-        st.session_state.aff_final['prop_taxes'] = st.session_state.f_ptax
-    if 'f_heat' in st.session_state:
-        st.session_state.aff_final['heat'] = st.session_state.f_heat
 
 # --- 5. HEADER & STORY ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -153,24 +143,11 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-if not is_renter:
-    st.markdown(f"""
-        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px; margin-left: 25px;">
-            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>
-        </p>
-    """, unsafe_allow_html=True)
-
-# --- 6. PERSISTENCE ---
-# Capture all T4 and Pensions
+# --- 6. PERSISTENCE & DEFAULTS ---
+# Using current values from st.session_state.app_db
 t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.get('p1_pension', 0)) + float(prof.get('p2_pension', 0))
-
-# Capture all Bonus, Commission, and Other
 bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0)) + float(prof.get('other_income', 0))
-
-# Fixed key for rental income
 rental_sum = float(prof.get('inv_rental_income', 0))
-
-# Capture all Debts including 3% of LOC
 debt_sum = (
     float(prof.get('car_loan', 0)) + 
     float(prof.get('student_loan', 0)) + 
@@ -179,127 +156,59 @@ debt_sum = (
     float(prof.get('other_debt', 0)) + 
     (float(prof.get('loc_balance', 0)) * 0.03)
 )
-# INSERT THIS HERE: Pre-initialize widget keys to prevent 0.0 wipeouts
-if 'f_dp' not in st.session_state:
-    st.session_state.f_dp = 0.0
-if 'f_ptax' not in st.session_state:
-    st.session_state.f_ptax = 0.0
-if 'f_heat' not in st.session_state:
-    st.session_state.f_heat = 0.0
-    
+
 TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
 prov_tax_rate = TAX_DEFAULTS.get(province, 0.0075)
 market_rate = float(intel['rates'].get('five_year_fixed_uninsured', 4.26))
 
-def get_defaults(t4, bonus, rental, debt, tax_rate):
-    rate_val = float(intel['rates'].get('five_year_fixed_uninsured', 4.26))
-    stress_val = max(5.25, rate_val + 2.0)
-    qual_income = t4 + bonus + (rental * 0.80)
-    max_p, min_d = solve_max_affordability(qual_income, debt, stress_val, tax_rate)
-    #apply custom rounding to the price first
-    rounded_p = custom_round_up(max_p)
-    #Calculate the legal minimum for that specific rounded price
-    legal_min_dp = calculate_min_downpayment(rounded_p)
-    #Add a solid $2,000 buffer to ensure it's never "just shy"
-    #and round that DP up to the nearest $100
-    safe_dp = math.ceil((legal_min_dp + 2000) / 100) * 100
-    return float(safe_dp), custom_round_up(rounded_p * tax_rate), custom_round_up(rounded_p * 0.0002)
-
-if "aff_final" not in st.session_state:
-    # First time initialization
-    d_dp, d_tx, d_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
-    st.session_state.aff_final = {
-        "t4": t4_sum, 
-        "bonus": bonus_sum,
-        "rental": rental_sum, 
-        "monthly_debt": debt_sum,
-        "down_payment": d_dp, 
-        "prop_taxes": d_tx, 
-        "heat": d_ht,
-        "bank_rate": market_rate,
-        "is_fthb": False, 
-        "is_toronto": False
-    }
-    st.session_state.f_dp = d_dp
-    st.session_state.f_ptax = d_tx
-    st.session_state.f_heat = d_ht
-    st.session_state.f_crate = market_rate
-else:
-    # Check if Profile data has actually changed
-    has_changed = (
-        st.session_state.aff_final.get('t4') != t4_sum or
-        st.session_state.aff_final.get('bonus') != bonus_sum or
-        st.session_state.aff_final.get('rental') != rental_sum or
-        st.session_state.aff_final.get('monthly_debt') != debt_sum
-    )
-
-    # Sync basic basics
-    st.session_state.aff_final.update({
-        "t4": t4_sum, 
-        "bonus": bonus_sum, 
-        "rental": rental_sum, 
-        "monthly_debt": debt_sum
-    })
-    
-    if "user_has_overwritten" not in st.session_state or has_changed:
-        new_dp, new_tx, new_ht = get_defaults(t4_sum, bonus_sum, rental_sum, debt_sum, prov_tax_rate)
-        st.session_state.f_dp = new_dp
-        st.session_state.f_ptax = new_tx
-        st.session_state.f_heat = new_ht
-        st.session_state.f_crate = market_rate
-        st.session_state.user_has_overwritten = True
-    else:
-        # ENSURE f_dp and others are re-loaded from the store when you return
-        st.session_state.f_dp = st.session_state.aff_final.get('down_payment', 0.0)
-        st.session_state.f_ptax = st.session_state.aff_final.get('prop_taxes', 0.0)
-        st.session_state.f_heat = st.session_state.aff_final.get('heat', 0.0)
-        st.session_state.f_crate = st.session_state.aff_final.get('bank_rate', market_rate)
-
-# Local helper to sync the UI back to the store
-def sync_rate():
-    st.session_state.aff_final['bank_rate'] = st.session_state.f_crate
-
-# Set the local variable for the widgets
-store = st.session_state.aff_final
-
-# --- 7. UNDERWRITING ASSUMPTIONS (MOVED FROM SIDEBAR) ---
+# --- 7. UNDERWRITING ASSUMPTIONS (NOW DYNAMIC) ---
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
-    c_rate = st.number_input(
-        "Bank Contract Rate %", 
-        step=0.01, 
-        key="f_crate",
-        on_change=sync_rate
-    )
+    c_rate = cloud_input("Bank Contract Rate %", "affordability", "bank_rate", step=0.01)
     s_rate = max(5.25, c_rate + 2.0)
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
-    store['down_payment'] = st.number_input("Down Payment ($)", key="f_dp", on_change=sync_aff_widgets)
-    store['prop_taxes'] = st.number_input("Annual Property Taxes", key="f_ptax", on_change=sync_aff_widgets)
+    f_dp = cloud_input("Down Payment ($)", "affordability", "down_payment", step=1000.0)
+    f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100.0)
 with uw_col3:
-    store['heat'] = st.number_input("Monthly Heat", key="f_heat", on_change=sync_aff_widgets)
-    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], key="f_type")
-    strata = st.number_input("Monthly Strata", value=400.0) if prop_type == "Condo / Townhome" else 0
+    f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10.0)
+    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], 
+                             index=0 if st.session_state.app_db['affordability'].get('prop_type') == "House / Freehold" else 1,
+                             key="affordability:prop_type", on_change=sync_widget, args=("affordability:prop_type",))
+    
+    strata = 0
+    if prop_type == "Condo / Townhome":
+        strata = cloud_input("Monthly Strata", "affordability", "strata", step=10.0)
 
 st.divider()
 
-# --- 8. INPUTS & UI ---
+# --- 8. INPUTS & UI (NOW DYNAMIC) ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
-    store['t4'] = st.number_input("Combined T4 Income", value=store['t4'], key="f_t4", on_change=sync_aff_widgets)
-    store['bonus'] = st.number_input("Total Additional Income", value=store['bonus'], key="f_bonus", on_change=sync_aff_widgets)
-    store['rental'] = st.number_input("Joint Rental Income", value=store['rental'], key="f_rental", on_change=sync_aff_widgets)
-    total_qualifying = store['t4'] + store['bonus'] + (store['rental'] * 0.80)
+    # Mapping these back to 'profile' so they update the main client data
+    i_t4 = cloud_input("Combined T4 Income", "profile", "p1_t4", step=1000.0)
+    i_bonus = cloud_input("Total Additional Income", "profile", "p1_bonus", step=500.0)
+    i_rental = cloud_input("Joint Rental Income", "profile", "inv_rental_income", step=100.0)
+    
+    total_qualifying = i_t4 + i_bonus + (i_rental * 0.80)
     st.markdown(f"""<div style="margin-top: 10px;"><span style="font-size: 1.15em; color: {SLATE_ACCENT}; font-weight: bold;">Qualifying Income: </span><span style="font-size: 1.25em; color: black; font-weight: bold;">${total_qualifying:,.0f}</span></div>""", unsafe_allow_html=True)
 
 with col_2:
     st.subheader("💳 Debt & Status")
-    store['monthly_debt'] = st.number_input("Monthly Debts", value=store['monthly_debt'], key="f_debt")
-    store['is_fthb'] = st.checkbox("First-Time Home Buyer?", value=store['is_fthb'], key="f_fthb")
+    i_debt = cloud_input("Monthly Debts", "profile", "car_loan", step=50.0) # Using car_loan as the proxy for the sum
+    
+    # Checkbox uses sync_widget directly
+    f_fthb = st.checkbox("First-Time Home Buyer?", 
+                         value=st.session_state.app_db['affordability'].get('is_fthb', False),
+                         key="affordability:is_fthb", on_change=sync_widget, args=("affordability:is_fthb",))
+    
+    f_toronto = False
     if province == "Ontario":
-        store['is_toronto'] = st.checkbox("Within Toronto City Limits?", value=store['is_toronto'], key="f_toronto")
+        f_toronto = st.checkbox("Within Toronto City Limits?", 
+                                 value=st.session_state.app_db['affordability'].get('is_toronto', False),
+                                 key="affordability:is_toronto", on_change=sync_widget, args=("affordability:is_toronto",))
 
 with col_3:
     st.info("""
@@ -309,57 +218,42 @@ with col_3:
     * **Rental:** Typically 'haircut' to **80%**.
     """)
 
-# --- 9. CALCULATION LOGIC ---
+# --- 9. CALCULATION LOGIC (IDENTICAL MATH) ---
 monthly_inc = total_qualifying / 12
-gds_max = (monthly_inc * 0.39) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5)
-tds_max = (monthly_inc * 0.44) - store['heat'] - (store['prop_taxes']/12) - (strata*0.5) - store['monthly_debt']
+gds_max = (monthly_inc * 0.39) - f_heat - (f_ptax/12) - (strata*0.5)
+tds_max = (monthly_inc * 0.44) - f_heat - (f_ptax/12) - (strata*0.5) - i_debt
 max_pi_stress = min(gds_max, tds_max)
 
 if max_pi_stress > 0:
-    # Stress Rate P&I
     r_mo_stress = (s_rate/100)/12
     raw_loan_amt = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress
-    # Applied rounding logic to loan size
     loan_amt = custom_round_up(raw_loan_amt)
     
-    # Contract Rate P&I Calculation
     r_mo_contract = (c_rate/100)/12
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300)
     
-    max_purchase = loan_amt + store['down_payment']
-    # Safety Cap: Shrink the loan if the rounded price exceeds what the DP supports
-    st.session_state.aff_final['max_purchase'] = max_purchase
-    st.session_state.aff_final['down_payment'] = store['down_payment']
-    # Calculate requirements
-    min_required = calculate_min_downpayment(max_purchase)
-    is_dp_valid = store['down_payment'] >= (min_required - 1.0)
+    max_purchase = loan_amt + f_dp
     
-# 2. Validation Check
+    # Store results for other pages
+    st.session_state.aff_final = {'max_purchase': max_purchase, 'down_payment': f_dp}
+    
+    min_required = calculate_min_downpayment(max_purchase)
+    is_dp_valid = f_dp >= (min_required - 1.0)
+    
     if not is_dp_valid:
         st.error("#### 🛑 Down Payment Too Low")
-    
-        # Using HTML to ensure the font, colors, and $ symbols stay exactly as intended
-        error_html = f"""
-        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba; font-family: sans-serif;">
-            The minimum requirement for a purchase price of 
-            <strong>${max_purchase:,.0f}</strong> is 
-            <strong>${min_required:,.0f}</strong>.
+        st.markdown(f"""
+        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
+            The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.
         </div>
-        """
-        st.markdown(error_html, unsafe_allow_html=True)
-    
+        """, unsafe_allow_html=True)
         st.stop()
         
-    if is_dp_valid:
-        total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, store['is_fthb'], store.get('is_toronto', False))
-    
-    # Itemized Closing Costs
+    total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, f_fthb, f_toronto)
     legal_fees, title_ins, appraisal = 1500, 500, 350
     total_closing_costs = total_tax - total_rebate + legal_fees + title_ins + appraisal
-    total_cash_required = store['down_payment'] + total_closing_costs
-    
-    # Monthly Home Cost calculation
-    monthly_home_cost = contract_pi + (store['prop_taxes']/12) + store['heat']
+    total_cash_required = f_dp + total_closing_costs
+    monthly_home_cost = contract_pi + (f_ptax/12) + f_heat
 
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
@@ -376,14 +270,13 @@ if max_pi_stress > 0:
     with r_c2:
         st.subheader("⚖️ Cash-to-Close")
         breakdown = [
-            {"Item": "Down Payment", "Cost": store['down_payment']},
+            {"Item": "Down Payment", "Cost": f_dp},
             {"Item": "Land Transfer Tax", "Cost": total_tax},
             {"Item": "FTHB Rebate", "Cost": -total_rebate},
             {"Item": "Legal / Title / Appraisal", "Cost": (legal_fees + title_ins + appraisal)}
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
         
-        # TOTAL CASH REQUIRED TO CLOSE
         st.markdown(f"""
         <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #B49A57; margin-bottom: 10px;">
             <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">TOTAL CASH REQUIRED TO CLOSE</p>
@@ -391,7 +284,6 @@ if max_pi_stress > 0:
         </div>
         """, unsafe_allow_html=True)
         
-        # MONTHLY HOME COST
         st.markdown(f"""
         <div style="background-color: #C0C0C0; color: white; padding: 10px 15px; border-radius: 8px; text-align: center; border: 1px solid #A9A9A9;">
             <p style="margin: 0; font-size: 0.85em; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">MONTHLY HOME COST</p>
@@ -406,39 +298,8 @@ st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
     <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
         <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
-        This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
-        This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+        This tool is for <strong>informational and educational purposes only</strong>.
     </p>
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
