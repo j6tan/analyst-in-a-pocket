@@ -172,7 +172,7 @@ with col_3:
     st.info("""
     **💡 Underwriting Insights:**
     * **T4:** Qualified at **100%** of base salary.
-    * **Additional Income:** Bonuses use a **2-year average**.
+    * **Additional Income:** Bonuses use a **2-yr average**.
     * **Rental Income:** Typically 'haircut' to **80%** for expenses.
     * **Liabilities:** LOCs stressed at **3% of limit**.
     """)
@@ -247,5 +247,6 @@ else:
     st.error("Approval amount is $0.")
 
 show_disclaimer()
+
 
 
