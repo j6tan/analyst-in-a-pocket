@@ -6,7 +6,7 @@ import math
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject Style
+# 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -17,16 +17,23 @@ st.divider()
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
+
+# Color constants for metrics
 CRIMSON_RED = "#A52A2A"
 DARK_GREEN = "#1B4D3E"
 
+# --- ROUNDING UTILITY ---
 def custom_round_up(n):
     if n <= 0: return 0.0
     digits = int(math.log10(n)) + 1
-    step = {1:10, 2:10, 3:10, 4:100, 5:100, 6:1000, 7:10000}.get(digits, 50000)
+    if digits <= 3: step = 10
+    elif digits <= 5: step = 100
+    elif digits == 6: step = 1000
+    elif digits == 7: step = 10000
+    else: step = 50000 
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA RETRIEVAL (GLOBAL PROFILE) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Primary Client')
@@ -76,45 +83,25 @@ with ts_col2:
                              key="affordability_second:use_case", on_change=sync_widget, args=("affordability_second:use_case",))
     is_rental = True if use_case == "Rental Property" else False
 
-# --- 6. CORE CALCULATIONS FOR LIVE FEEDBACK ---
+# --- 6. CORE CALCULATION PREP ---
 def get_f(k, d=0.0):
     try: return float(prof.get(k, d))
     except: return d
 
-# Household Base Math
 m_inc = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + (get_f('inv_rental_income') * 0.80)) / 12
 m_rate_p = (get_f('m_rate', 4.0) / 100) / 12
 primary_mtg = (get_f('m_bal') * m_rate_p) / (1 - (1 + m_rate_p)**-300) if get_f('m_bal') > 0 else 0
 primary_carrying = (get_f('prop_taxes', 4200) / 12) + get_f('heat_pmt', 125)
 p_debts = get_f('car_loan') + get_f('student_loan') + get_f('cc_pmt') + (get_f('loc_balance') * 0.03)
 
-# QUALIFYING POWER CALCULATOR
-f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
-c_rate = aff_sec.get('contract_rate', 4.26)
-s_rate = max(5.25, c_rate + 2.0)
-r_stress = (s_rate / 100) / 12
-stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
-
-qual_room = (m_inc * 0.44) - primary_mtg - primary_carrying - p_debts 
-max_by_income = ((qual_room - 250) / stress_k) + f_dp if qual_room > 250 else f_dp
-max_by_dp = f_dp / 0.20
-
-max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
-limit_reason = "Income Test" if max_by_income < max_by_dp else "20% Down Payment rule"
-
-st.markdown(f"""
-    <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-bottom: 20px;">
-        <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
-        <p style="margin: 0; font-size: 1.4em; color: {SLATE_ACCENT}; font-weight: 800;">${max_buying_power:,.0f}</p>
-        <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power limited by <b>{limit_reason}</b>.</p>
-    </div>
-""", unsafe_allow_html=True)
-
 # --- 7. CORE INPUTS ---
+st.divider()
 c_left, c_right = st.columns(2)
+
 with c_left:
     st.subheader("💰 Capital Requirement")
-    f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0, max_value=max_buying_power)
+    f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
+    f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
     f_rate = cloud_input("Mortgage Contract Rate (%)", "affordability_second", "contract_rate", step=0.1)
     
     scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
@@ -144,7 +131,28 @@ with c_right:
     mgmt_fee = (f_rent * (st.slider("Property Management Fee %", 0.0, 12.0, float(aff_sec.get('mgmt_pct', 5.0)), key="affordability_second:mgmt_pct", on_change=sync_widget, args=("affordability_second:mgmt_pct",)) / 100)) if is_rental else 0
     total_opex_mo = (f_tax / 12) + f_strata + f_ins + f_rm + bc_extra + mgmt_fee
 
-# --- 8. ANALYSIS ---
+# --- 8. LIVE QUALIFYING POWER BOX ---
+stress_rate = max(5.25, f_rate + 2.0)
+r_stress = (stress_rate / 100) / 12
+stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
+rent_offset = (f_rent * 0.80) if is_rental else 0
+
+qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (f_tax / 12)
+max_by_income = (qual_room / stress_k) + f_dp if qual_room > 0 else f_dp
+max_by_dp = f_dp / 0.20
+
+max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
+limit_reason = "Income Test" if max_by_income < max_by_dp else "20% Down Payment rule"
+
+st.markdown(f"""
+    <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-top: 20px;">
+        <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
+        <p style="margin: 0; font-size: 1.4em; color: {SLATE_ACCENT}; font-weight: 800;">${max_buying_power:,.0f}</p>
+        <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power limited by <b>{limit_reason}</b>.</p>
+    </div>
+""", unsafe_allow_html=True)
+
+# --- 9. ANALYSIS ---
 target_loan = max(0, f_price - f_dp)
 r_contract = (f_rate / 100) / 12
 new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
@@ -171,7 +179,7 @@ with col_b2:
         {"Item": "Net Asset Cash Flow", "Amount": f"${asset_net:,.0f}"}
     ]))
 
-# --- 9. METRICS BAR ---
+# --- 10. METRICS BAR ---
 st.divider()
 m1, m2, m3, m4 = st.columns(4)
 with m1:
@@ -189,32 +197,28 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 10. STRATEGIC VERDICT ---
+# --- 11. STRATEGIC VERDICT ---
 st.subheader("🎯 Strategic Verdict")
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
 is_unsustainable = overall_cash_flow < 0
 
+v_html = [f"<div style='background-color: {'#FEF2F2' if is_unsustainable else '#FFFBEB' if (is_neg_carry or is_low_safety) else '#F0FDF4'}; padding: 20px; border-radius: 10px; border: 1.5px solid {'#dc2626' if is_unsustainable else '#ca8a04' if (is_neg_carry or is_low_safety) else '#16a34a'}; color: {SLATE_ACCENT};'>"]
 if is_unsustainable:
-    v_status, v_color, v_bg = "❌ Unsustainable Move", "#dc2626", "#FEF2F2"
-    v_msg = "Total monthly obligations exceed your current net income inflow."
+    v_html.append(f"<h4 style='color: #dc2626; margin-top: 0;'>❌ Unsustainable Move</h4><p>Total monthly obligations exceed your current net income inflow.</p>")
 elif is_neg_carry or is_low_safety:
-    v_status, v_color, v_bg = "⚠️ Speculative Move", "#ca8a04", "#FFFBEB"
-    v_msg = "Acquisition is viable on paper but carries significant lifestyle opportunity costs."
+    v_html.append(f"<h4 style='color: #ca8a04; margin-top: 0;'>⚠️ Speculative Move</h4><p>Acquisition is viable on paper but carries significant lifestyle opportunity costs.</p>")
 else:
-    v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
-    v_msg = "Your household ecosystem shows strong resilience for this acquisition."
+    v_html.append(f"<h4 style='color: #16a34a; margin-top: 0;'>✅ Strategically Sound</h4><p>Your household ecosystem shows strong resilience for this acquisition.</p>")
 
-st.markdown(f"""
-<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>
-    <h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>
-    <p style='font-size: 1.05em; margin-bottom: 10px;'>{v_msg}</p>
-    <div style='font-size: 1em;'>
-        <p style='margin: 5px 0;'>• <b>The "Blind Spot" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses.</p>
-        {f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This requires <b>${abs(asset_net):,.0f}</b>/mo from salary support.</p>" if is_neg_carry else ""}
-        {f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Safety Margin of <b>{safety_margin:.1f}%</b> is high-leverage.</p>" if is_low_safety else ""}
-    </div>
-</div>
-""", unsafe_allow_html=True)
+v_html.append("<div style='font-size: 1em;'>")
+v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for lifestyle expenses.</p>")
+if is_neg_carry:
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary support.</p>")
+if is_low_safety:
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b> (threshold 45%).</p>")
+v_html.append("</div></div>")
+
+st.markdown("".join(v_html), unsafe_allow_html=True)
 
 show_disclaimer()
