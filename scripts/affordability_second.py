@@ -6,7 +6,7 @@ import math
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject Style
+# 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -17,9 +17,12 @@ st.divider()
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
+
+# Color constants for metrics
 CRIMSON_RED = "#A52A2A"
 DARK_GREEN = "#1B4D3E"
 
+# --- ROUNDING UTILITY ---
 def custom_round_up(n):
     if n <= 0: return 0.0
     digits = int(math.log10(n)) + 1
@@ -86,8 +89,9 @@ def get_f(k, d=0.0):
     except: return d
 
 m_inc = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + (get_f('inv_rental_income') * 0.80)) / 12
+m_bal = get_f('m_bal')
 m_rate_p = (get_f('m_rate', 4.0) / 100) / 12
-primary_mtg = (get_f('m_bal') * m_rate_p) / (1 - (1 + m_rate_p)**-300) if get_f('m_bal') > 0 else 0
+primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 0
 primary_carrying = (get_f('prop_taxes', 4200) / 12) + get_f('heat_pmt', 125)
 p_debts = get_f('car_loan') + get_f('student_loan') + get_f('cc_pmt') + (get_f('loc_balance') * 0.03)
 
@@ -128,7 +132,7 @@ with c_right:
     mgmt_fee = (f_rent * (st.slider("Property Management Fee %", 0.0, 12.0, float(aff_sec.get('mgmt_pct', 5.0)), key="affordability_second:mgmt_pct", on_change=sync_widget, args=("affordability_second:mgmt_pct",)) / 100)) if is_rental else 0
     total_opex_mo = (f_tax / 12) + f_strata + f_ins + f_rm + bc_extra + mgmt_fee
 
-# --- 8. LIVE QUALIFYING POWER BOX (RESTORED TO BOTTOM) ---
+# --- 8. LIVE QUALIFYING POWER BOX ---
 stress_rate = max(5.25, f_rate + 2.0)
 r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
@@ -194,7 +198,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 11. STRATEGIC VERDICT (ORIGINAL LOGIC) ---
+# --- 11. STRATEGIC VERDICT ---
 st.subheader("🎯 Strategic Verdict")
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
@@ -209,9 +213,9 @@ else:
     v_html.append(f"<h4 style='color: #16a34a; margin-top: 0;'>✅ Strategically Sound</h4><p>Your household ecosystem shows strong resilience for this acquisition.</p>")
 
 v_html.append("<div style='font-size: 1em;'>")
-v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for lifestyle expenses.</p>")
+v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses such as food, utilities, shopping, childcare, etc.</p>")
 if is_neg_carry:
-    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary support.</p>")
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
 if is_low_safety:
     v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>")
 v_html.append("</div></div>")
