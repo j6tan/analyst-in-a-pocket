@@ -216,7 +216,7 @@ v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b>
 if is_neg_carry:
     v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary support.</p>")
 if is_low_safety:
-    v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b> (threshold 45%).</p>")
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>")
 v_html.append("</div></div>")
 
 st.markdown("".join(v_html), unsafe_allow_html=True)
