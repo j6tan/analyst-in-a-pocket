@@ -1,25 +1,21 @@
 import streamlit as st
 
-st.title("💎 Membership Dashboard")
+st.title("💎 Pro Membership")
 
 if st.session_state.get("is_pro", False):
-    st.success("✅ Pro Access Active. All professional tools are unlocked.")
-    if st.button("Log Out / Test Public View"):
+    st.success(f"Verified Pro Account: {st.session_state.username}")
+    st.markdown("### ✨ You have full access")
+    st.write("All locks have been removed. You can now use the Smith Manoeuvre, Renewal Scenarios, and more.")
+    
+    if st.button("Log Out"):
+        st.session_state.is_logged_in = False
         st.session_state.is_pro = False
         st.rerun()
 else:
-    st.subheader("Redeem Membership ID")
-    member_id = st.text_input("Enter your PRO ID", placeholder="PRO-123")
+    st.subheader("Upgrade to Analyst Pro")
+    st.write("Get the full power of the suite for $19/mo.")
     
-    if st.button("Verify & Unlock Access"):
-        if member_id == "PRO-123":
-            st.session_state.is_pro = True
-            st.success("Access Granted! Navigation updated.")
-            st.rerun()
-        else:
-            st.error("Invalid ID. Try using PRO-123")
-
-st.divider()
-st.markdown("### 🚀 Pro Features")
-st.write("- **Secondary Property:** Analyze investment property affordability.")
-# ... add other features as needed
+    # This is where your future Stripe button goes
+    st.button("Subscribe with Credit Card", use_container_width=True)
+    
+    st.info("💡 Already a member? Use the login form in the sidebar to unlock your tools.")
