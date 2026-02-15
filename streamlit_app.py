@@ -82,49 +82,59 @@ pages = {
 
 pg = st.navigation(pages)
 
-# --- 5. BLURRED PAYWALL LOGIC ---
+# --- 5. FIXED BLURRED PAYWALL LOGIC ---
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
 if pg.title in pro_titles and not is_pro:
-    # 1. Show the "Upgrade Card" as an overlay
+    # 1. The Membership Promotion Card (Clear and Sharp)
     st.markdown(f"""
     <div style="
         position: fixed;
         top: 50%;
         left: 55%;
         transform: translate(-50%, -50%);
-        z-index: 9999;
+        z-index: 999999; /* Higher than everything else */
         background: white;
         padding: 40px;
         border-radius: 20px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
         text-align: center;
-        width: 400px;
-        border: 1px solid #CEB36F;
+        width: 450px;
+        border: 2px solid #CEB36F;
     ">
-        <h2 style="color: #4A4E5A; margin-bottom: 10px;">💎 Unlock {pg.title.replace(' 🔒', '')}</h2>
-        <p style="color: #6c757d; font-size: 0.95em;">Join our Pro members to access advanced modeling, tax strategies, and multi-property analysis.</p>
+        <div style="font-size: 50px; margin-bottom: 10px;">💎</div>
+        <h2 style="color: #4A4E5A; margin-top: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
+        <p style="color: #6c757d; font-size: 1.1em;">This tool is part of the <b>Pro Analyst Suite</b>.</p>
         <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-        <ul style="text-align: left; font-size: 0.85em; color: #4A4E5A; margin-bottom: 25px;">
-            <li>✅ Save unlimited client scenarios</li>
-            <li>✅ Deep-dive Rental vs. Stock analysis</li>
-            <li>✅ Full Smith Manoeuvre Calculator</li>
-        </ul>
+        <div style="text-align: left; display: inline-block; color: #4A4E5A; font-size: 0.95em; line-height: 1.8;">
+            ✅ Deep-dive investment comparisons<br>
+            ✅ Advanced tax-deductibility modeling<br>
+            ✅ Save & Export unlimited scenarios
+        </div>
+        <div style="margin-top: 30px;">
+            <p style="font-size: 0.9em; color: #CEB36F; font-weight: bold;">Login via sidebar or Membership page to unlock.</p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # 2. Add the Blur Effect to the BACKGROUND
+    # 2. Targeted Blur (Only blurs the underlying Streamlit elements)
     st.markdown("""
         <style>
-        [data-testid="stVerticalBlock"] > div:not(:first-child) {
-            filter: blur(8px);
+        /* This blurs the actual app content but leaves the custom HTML above alone */
+        [data-testid="stVerticalBlock"] > div {
+            filter: blur(12px) grayscale(50%);
             pointer-events: none;
             user-select: none;
+            opacity: 0.6;
+        }
+        
+        /* This ensures the sidebar and top-level navigation remain usable */
+        [data-testid="stSidebar"], [data-testid="stHeader"] {
+            filter: none !important;
         }
         </style>
     """, unsafe_allow_html=True)
-    
-    # We DON'T use st.stop() here. We let the page below run so it shows the blurred charts.
 
 pg.run()
+
 
