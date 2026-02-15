@@ -230,6 +230,13 @@ if max_pi_stress > 0:
     loan_amt = custom_round_up(raw_loan_amt)
     
     r_mo_contract = (c_rate/100)/12
+    if r_mo_contract > 0:
+        # Standard Mortgage Formula
+        contract_pi = (loan_amt * r_mo_contract) / (1 - (1 + r_mo_contract)**-300)
+    else:
+        # If rate is 0%, it's just Loan / Total Months (300 months for 25 years)
+        contract_pi = loan_amt / 300
+
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300)
     
     max_purchase = loan_amt + f_dp
@@ -303,3 +310,4 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Equity Strategy")
+
