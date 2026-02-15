@@ -74,3 +74,24 @@ def cloud_input(label, category, key, input_type="number", **kwargs):
     elif input_type == "text":
         return st.text_input(label, value=str(current_val), key=widget_id, 
                              on_change=sync_widget, args=(widget_id,), **kwargs)
+
+def load_user_data(username):
+    """
+    Fetches the 'data' column from Supabase for the specific user.
+    """
+    try:
+        response = supabase.table("user_vault").select("data").eq("id", username).execute()
+        
+        if response.data:
+            # If user exists, pull their saved JSON into the app
+            st.session_state.app_db = response.data[0]['data']
+            st.toast(f"☁️ {username.capitalize()}'s data synced from Cloud")
+        else:
+            # If it's a new user, start with the DEFAULTS
+            st.session_state.app_db = DEFAULTS
+            # Create the row in Supabase so they have a place to save later
+            supabase.table("user_vault").insert({"id": username, "data": DEFAULTS}).execute()
+            st.toast("🆕 Created new Cloud Vault")
+            
+    except Exception as e:
+        st.error(f"Cloud Load Error: {e}")
