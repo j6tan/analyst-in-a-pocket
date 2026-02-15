@@ -96,12 +96,12 @@ bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0)) + float(prof.get('student_loan', 0)) + float(prof.get('cc_pmt', 0)) + (float(prof.get('loc_balance', 0)) * 0.03)
 
-# --- 5. INITIALIZE SCENARIO (RENTAL & INCOME CARRY-OVER) ---
+# --- 5. INITIALIZE SCENARIO ---
 if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
-# Force Carry-over if currently 0
+# Carry-over logic from Profile
 if aff.get('rental', 0) == 0: aff['rental'] = rental_sum
 if aff.get('combined_t4', 0) == 0: aff['combined_t4'] = t4_sum
 if aff.get('combined_bonus', 0) == 0: aff['combined_bonus'] = bonus_sum
@@ -116,14 +116,27 @@ if aff.get('bank_rate', 0) == 0:
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
-# --- 6. HEADER ---
+# --- 6. PRE-CALCULATION FOR UI NOTES ---
+# We calculate a 'preview' of the qualified loan so the Loan Cap note is accurate
+monthly_inc_preview = (aff.get('combined_t4', 0) + aff.get('combined_bonus', 0) + (aff.get('rental', 0)*0.80)) / 12
+s_rate_preview = max(5.25, aff.get('bank_rate', 4.26) + 2.0)
+gds_preview = (monthly_inc_preview * 0.39) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12)
+tds_preview = (monthly_inc_preview * 0.44) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12) - aff.get('combined_debt', 0)
+max_pi_preview = min(gds_preview, tds_preview)
+r_mo_stress_preview = (s_rate_preview/100)/12
+if r_mo_stress_preview > 0:
+    qualified_loan_preview = custom_round_up(max_pi_preview * (1 - (1+r_mo_stress_preview)**-300) / r_mo_stress_preview)
+else:
+    qualified_loan_preview = 0.0
+
+# --- 7. HEADER ---
 st.title("Mortgage Affordability Analysis")
 st.markdown(f"""<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD};">
     <h3 style="margin-top:0;">🚀 {household}: Planning Your Move</h3>
     <p style="margin-bottom:0;">Mapping out the math for your next home in <b>{province}</b>.</p>
 </div>""", unsafe_allow_html=True)
 
-# --- 7. UNDERWRITING ASSUMPTIONS ---
+# --- 8. UNDERWRITING ASSUMPTIONS ---
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
@@ -132,7 +145,9 @@ with uw_col1:
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
     f_dp = cloud_input("Down Payment ($)", "affordability", "down_payment", step=1000.0)
+    # MANUAL LOAN CAP WITH DYNAMIC NOTE
     loan_cap = cloud_input("Manual Loan Cap (Optional)", "affordability", "loan_cap", step=5000.0)
+    st.caption(f"Note: Your maximum qualified loan is **${qualified_loan_preview:,.0f}**")
 with uw_col3:
     f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100.0)
     f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10.0)
@@ -143,7 +158,7 @@ with uw_col3:
 
 st.divider()
 
-# --- 8. INCOME & DEBT ---
+# --- 9. INCOME & DEBT ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
@@ -160,15 +175,16 @@ with col_2:
     f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
 
 with col_3:
+    # 4-BULLET CONCISE UNDERWRITING INSIGHTS
     st.info("""
     **💡 Underwriting Insights:**
-    * **T4:** Lenders qualify you based on **100%** of your T4.
-    * **Additional:** Bonuses usually require a **2-year average**.
-    * **Rental:** Typically 'haircut' to **80%** to account for taxes and maintenance.
-    * **Liabilities:** LOCs are stressed at **3% of the limit**.
+    * **T4 Income:** Qualified at **100%** of base salary.
+    * **Additional Income:** Bonuses/Commissions use a **2-year average**.
+    * **Rental Income:** Typically 'haircut' to **80%** for expenses.
+    * **Liabilities:** Debts reduce room; LOCs stressed at **3% of limit**.
     """)
 
-# --- 9. CALCULATION LOGIC ---
+# --- 10. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
 gds_max = (monthly_inc * 0.39) - f_heat - (f_ptax/12) - (strata*0.5)
 tds_max = (monthly_inc * 0.44) - f_heat - (f_ptax/12) - (strata*0.5) - i_debt
@@ -178,7 +194,7 @@ if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
     raw_loan = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress if r_mo_stress > 0 else max_pi_stress * 300
     
-    # APPLY LOAN CAP
+    # Logic for manual cap
     qualified_loan = custom_round_up(raw_loan)
     loan_amt = min(qualified_loan, loan_cap) if loan_cap > 0 else qualified_loan
     
@@ -186,59 +202,17 @@ if max_pi_stress > 0:
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
     max_purchase = loan_amt + f_dp
     
-    # DOWNPAYMENT VALIDATION BUG FIX
+    # Downpayment Validation
     min_required = calculate_min_downpayment(max_purchase)
     if f_dp < (min_required - 0.99):
         st.error(f"#### 🛑 Down Payment Too Low")
         st.markdown(f"""
         <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
             The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.
-            Increase your down payment or use the <b>Manual Loan Cap</b> above to reduce your target purchase.
+            Adjust your down payment or use the <b>Manual Loan Cap</b> to target a lower purchase price.
         </div>
         """, unsafe_allow_html=True)
         st.stop()
 
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Max Purchase", f"${max_purchase:,.0f}")
-    m2.metric("Max Loan", f"${loan_amt:,.0f}")
-    m3.metric("Contract P&I", f"${contract_pi:,.0f}")
-    m4.metric("Stress P&I", f"${max_pi_stress:,.0f}")
-
-    r_c1, r_c2 = st.columns([2, 1.2])
-    with r_c1:
-        fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
-        fig.update_layout(height=350, margin=dict(t=50, b=20))
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with r_c2:
-        st.subheader("⚖️ Cash-to-Close")
-        total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, f_fthb, f_toronto)
-        total_closing = total_tax - total_rebate + 2350
-        total_cash = f_dp + total_closing
-        monthly_cost = contract_pi + (f_ptax/12) + f_heat + strata
-        
-        breakdown = [
-            {"Item": "Down Payment", "Cost": f_dp},
-            {"Item": "Land Transfer Tax", "Cost": total_tax},
-            {"Item": "FTHB Rebate", "Cost": -total_rebate},
-            {"Item": "Legal / Misc", "Cost": 2350}
-        ]
-        st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
-        
-        st.markdown(f"""
-        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
-            <p style="margin: 0; font-size: 0.8em;">TOTAL CASH TO CLOSE</p>
-            <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${total_cash:,.0f}</p>
-        </div>
-        <div style="background-color: #C0C0C0; color: white; padding: 10px; border-radius: 8px; text-align: center;">
-            <p style="margin: 0; font-size: 0.8em;">MONTHLY HOME COST</p>
-            <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${monthly_cost:,.0f}</p>
-        </div>
-        """, unsafe_allow_html=True)
-else:
-    st.error("Approval amount is $0.")
-
-show_disclaimer()
-
-
