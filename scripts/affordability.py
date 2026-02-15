@@ -4,22 +4,25 @@ import plotly.graph_objects as go
 import os
 import json
 import math
-from style_utils import inject_global_css, show_disclaimer # Added central disclaimer
-from data_handler import cloud_input, sync_widget
+from style_utils import inject_global_css, show_disclaimer
+from data_handler import cloud_input, sync_widget, supabase
 
+# 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. THEME & UTILS ---
+# --- 1. THEME & STYLING ---
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
+# --- ROUNDING UTILITY ---
 def custom_round_up(n):
-    if n <= 0: return 0.0
+    if n <= 0:
+        return 0.0
     digits = int(math.log10(n)) + 1
     step = {1:10, 2:10, 3:10, 4:100, 5:100, 6:1000, 7:10000}.get(digits, 50000)
     return float(math.ceil(n / step) * step)
@@ -32,11 +35,11 @@ name2 = prof.get('p2_name', '')
 is_renter = prof.get('housing_status') == "Renting"
 household = f"{name1} and {name2}" if name2 else name1
 
-# Market Intel & Tax Functions (Keeping your exact logic)
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
-        with open(path, "r") as f: return json.load(f)
+        with open(path, "r") as f:
+            return json.load(f)
     return {"rates": {"five_year_fixed_uninsured": 4.26}}
 
 intel = load_market_intel()
@@ -60,7 +63,6 @@ def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
                 taxable = min(price, rule["threshold"]) - prev_m
                 total_muni_tax += taxable * rule["rate"]
                 prev_m = rule["threshold"]
-    
     rebates = tax_rules.get("rebates", {})
     total_rebate = 0
     if is_fthb:
@@ -77,24 +79,68 @@ def calculate_min_downpayment(price):
     elif price <= 500000: return price * 0.05
     else: return (500000 * 0.05) + ((price - 500000) * 0.10)
 
-# --- 3. SUMMARIES & SMART DEFAULTS ---
+# --- 3. THE ULTIMATE SOLVER ---
+def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate):
+    m_inc = income_annual / 12
+    HEAT_FACTOR, TAX_FACTOR = 0.0002, tax_rate / 12
+    ALPHA = HEAT_FACTOR + TAX_FACTOR
+    r_mo = (stress_rate / 100) / 12
+    if r_mo > 0:
+        K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1)
+    else:
+        K = 1/300
+    budget = min(m_inc * 0.39, (m_inc * 0.44) - debts_monthly)
+    p3 = budget / (0.80 * K + ALPHA)
+    p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
+    p1 = budget / (0.95 * K + ALPHA)
+    if p3 >= 1000000: fp, fd = p3, p3 * 0.20
+    elif p2 >= 500000: 
+        fp = min(p2, 999999) 
+        fd = 25000 + (fp - 500000) * 0.10
+    else: 
+        fp = min(p1, 499999) 
+        fd = fp * 0.05
+    return fp, fd
+
+# --- 4. DATA LINKING (SUMS) ---
 t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.get('p1_pension', 0)) + float(prof.get('p2_pension', 0))
 bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0)) + float(prof.get('student_loan', 0)) + float(prof.get('cc_pmt', 0)) + (float(prof.get('loc_balance', 0)) * 0.03)
 
+# --- 5. INITIALIZE SCENARIO (THE AUTO-POPULATE FIX) ---
 if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
-# --- 4. HEADER ---
-st.title("Mortgage Affordability Analysis")
-st.markdown(f"""<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD};">
-    <h3 style="margin-top:0;">🚀 {household}: From Renting to Ownership</h3>
-    <p>Mapping out the math needed for <b>{province}</b>.</p>
-</div>""", unsafe_allow_html=True)
+if aff.get('bank_rate', 0) == 0 or aff.get('combined_t4', 0) == 0:
+    TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
+    tr = TAX_DEFAULTS.get(province, 0.0075)
+    max_p, min_d = solve_max_affordability(t4_sum + bonus_sum + (rental_sum * 0.8), debt_sum, 6.26, tr)
+    aff['bank_rate'] = 4.26
+    aff['down_payment'] = custom_round_up(min_d + 2000)
+    aff['prop_taxes'] = custom_round_up(max_p * tr)
+    aff['heat'] = custom_round_up(max_p * 0.0002)
+    aff['combined_t4'] = t4_sum
+    aff['combined_bonus'] = bonus_sum
+    aff['combined_debt'] = debt_sum
+    # Force cloud sync
+    if st.session_state.get("is_logged_in"):
+        supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
-# --- 5. INPUT SECTIONS (Restored UI) ---
+# --- 6. HEADER ---
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col2:
+    st.title("Mortgage Affordability Analysis")
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0;">🚀 {household}: Planning Your Move</h3>
+    <p style="margin-bottom: 0;">Mapping out the math for your next home in <b>{province}</b>.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 7. UNDERWRITING ASSUMPTIONS ---
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
@@ -113,6 +159,7 @@ with uw_col3:
 
 st.divider()
 
+# --- 8. INCOME & DEBT ---
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
@@ -131,7 +178,7 @@ with col_2:
 with col_3:
     st.info("**💡 Underwriting Insights:** T4 100%, Bonus 2-yr avg, Rental 80% haircut.")
 
-# --- 6. DASHBOARD CALCULATIONS & VISUALS ---
+# --- 9. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
 gds_max = (monthly_inc * 0.39) - f_heat - (f_ptax/12) - (strata*0.5)
 tds_max = (monthly_inc * 0.44) - f_heat - (f_ptax/12) - (strata*0.5) - i_debt
@@ -141,13 +188,10 @@ if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
     raw_loan = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress if r_mo_stress > 0 else max_pi_stress * 300
     loan_amt = custom_round_up(raw_loan)
-    
     r_mo_contract = (c_rate/100)/12
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
-    
     max_purchase = loan_amt + f_dp
     
-    # Restored Dashboard Metrics
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Max Purchase", f"${max_purchase:,.0f}")
@@ -155,7 +199,6 @@ if max_pi_stress > 0:
     m3.metric("Contract P&I", f"${contract_pi:,.0f}")
     m4.metric("Stress P&I", f"${max_pi_stress:,.0f}")
 
-    # Restored Gauge and Closing Costs Table
     r_c1, r_c2 = st.columns([2, 1.2])
     with r_c1:
         fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
@@ -165,7 +208,7 @@ if max_pi_stress > 0:
     with r_c2:
         st.subheader("⚖️ Cash-to-Close")
         total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, f_fthb, f_toronto)
-        total_closing = total_tax - total_rebate + 2350 # Legal/Title/Appraisal
+        total_closing = total_tax - total_rebate + 2350
         total_cash = f_dp + total_closing
         monthly_cost = contract_pi + (f_ptax/12) + f_heat + strata
         
@@ -177,7 +220,6 @@ if max_pi_stress > 0:
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
         
-        # Restored Color Cards
         st.markdown(f"""
         <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
             <p style="margin: 0; font-size: 0.8em;">TOTAL CASH TO CLOSE</p>
@@ -188,9 +230,7 @@ if max_pi_stress > 0:
             <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${monthly_cost:,.0f}</p>
         </div>
         """, unsafe_allow_html=True)
-
 else:
     st.error("Approval amount is $0.")
 
-# --- CENTRALIZED DISCLAIMER ---
 show_disclaimer()
