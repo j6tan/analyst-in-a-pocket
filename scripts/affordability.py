@@ -96,15 +96,15 @@ bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0)) + float(prof.get('student_loan', 0)) + float(prof.get('cc_pmt', 0)) + (float(prof.get('loc_balance', 0)) * 0.03)
 
-# --- 5. INITIALIZE SCENARIO ---
+# --- 5. INITIALIZE SCENARIO (RENTAL & INCOME CARRY-OVER) ---
 if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
-# Force carry-over from profile if the affordability fields are 0
+# Force Carry-over if currently 0
+if aff.get('rental', 0) == 0: aff['rental'] = rental_sum
 if aff.get('combined_t4', 0) == 0: aff['combined_t4'] = t4_sum
 if aff.get('combined_bonus', 0) == 0: aff['combined_bonus'] = bonus_sum
-if aff.get('rental', 0) == 0: aff['rental'] = rental_sum
 if aff.get('combined_debt', 0) == 0: aff['combined_debt'] = debt_sum
 
 if aff.get('bank_rate', 0) == 0:
@@ -112,7 +112,7 @@ if aff.get('bank_rate', 0) == 0:
     tr = TAX_DEFAULTS.get(province, 0.0075)
     max_p, min_d = solve_max_affordability(t4_sum + bonus_sum + (rental_sum * 0.8), debt_sum, 6.26, tr)
     aff.update({'bank_rate': 4.26, 'down_payment': custom_round_up(min_d + 2000), 'prop_taxes': custom_round_up(max_p * tr), 
-                'heat': custom_round_up(max_p * 0.0002)})
+                'heat': custom_round_up(max_p * 0.0002), 'loan_cap': 0.0})
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
@@ -132,8 +132,9 @@ with uw_col1:
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
     f_dp = cloud_input("Down Payment ($)", "affordability", "down_payment", step=1000.0)
-    f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100.0)
+    loan_cap = cloud_input("Manual Loan Cap (Optional)", "affordability", "loan_cap", step=5000.0)
 with uw_col3:
+    f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100.0)
     f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10.0)
     prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], 
                              index=0 if aff.get('prop_type') == "House / Freehold" else 1,
@@ -161,10 +162,9 @@ with col_2:
 with col_3:
     st.info("""
     **💡 Underwriting Insights:**
-    * **T4:** 100% of base salary used.
-    * **Bonus/Comm:** Usually a 2-year average.
-    * **Rental:** 80% haircut for costs/vacancy.
-    * **LOC:** Stress-tested at 3% of balance.
+    * **Income:** T4 uses 100%; Variable uses a 2-year average.
+    * **Rental:** 80% of gross rent is typically added to income.
+    * **Liabilities:** Debts reduce qualifying room; LOCs stressed at 3%.
     """)
 
 # --- 9. CALCULATION LOGIC ---
@@ -176,19 +176,23 @@ max_pi_stress = min(gds_max, tds_max)
 if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
     raw_loan = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress if r_mo_stress > 0 else max_pi_stress * 300
-    loan_amt = custom_round_up(raw_loan)
+    
+    # APPLY LOAN CAP
+    qualified_loan = custom_round_up(raw_loan)
+    loan_amt = min(qualified_loan, loan_cap) if loan_cap > 0 else qualified_loan
+    
     r_mo_contract = (c_rate/100)/12
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
     max_purchase = loan_amt + f_dp
     
-    # --- SAFETY CHECK: MIN DOWNPAYMENT BUG FIX ---
+    # DOWNPAYMENT VALIDATION BUG FIX
     min_required = calculate_min_downpayment(max_purchase)
     if f_dp < (min_required - 0.99):
         st.error(f"#### 🛑 Down Payment Too Low")
         st.markdown(f"""
         <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
             The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.
-            Please increase your down payment or reduce the target loan.
+            Increase your down payment or use the <b>Manual Loan Cap</b> above to reduce your target purchase.
         </div>
         """, unsafe_allow_html=True)
         st.stop()
