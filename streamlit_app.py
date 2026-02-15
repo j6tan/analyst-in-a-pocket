@@ -66,15 +66,16 @@ with st.sidebar:
             
             st.rerun()
 
-    st.divider()
-    # PASTE THE HEALTH CHECK HERE:
-    if st.sidebar.button("Test Cloud Connection"):
+    # --- THE MOVE: Place this AFTER the if/else blocks ---
+    st.divider() # Adds a nice visual line
+    if st.button("Test Cloud Connection"):
         try:
             # Tries to read the URL from your secrets
-            st.sidebar.write(f"Connected to: {st.secrets['SUPABASE_URL']}")
-            st.sidebar.success("Supabase is Live! ☁️")
+            url = st.secrets["SUPABASE_URL"]
+            st.write(f"Connected to: {url}")
+            st.success("Supabase is Live! ☁️")
         except Exception as e:
-            st.sidebar.error("Connection Failed. Check your Secrets.")
+            st.error(f"Connection Failed: {e}")
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
 is_pro = st.session_state.get("is_pro", False)
@@ -165,6 +166,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
