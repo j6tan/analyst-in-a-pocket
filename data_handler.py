@@ -69,8 +69,7 @@ def load_user_data(username):
             st.session_state.app_db = response.data[0]['data']
             st.toast(f"☁️ {username.capitalize()}'s data synced from Cloud")
         else:
-            # If it's a new user, start with your DEFAULTS and create their cloud row
-            from data_handler_defaults import DEFAULTS # Assuming your defaults are here
+            # If it's a new user, start with the DEFAULTS already in this file
             st.session_state.app_db = DEFAULTS
             supabase.table("user_vault").insert({"id": username, "data": DEFAULTS}).execute()
             st.toast("🆕 Created new Cloud Vault")
