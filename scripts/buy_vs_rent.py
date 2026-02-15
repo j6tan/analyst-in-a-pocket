@@ -76,17 +76,18 @@ def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent
         curr_rent *= (1 + rent_inc/100)
     return pd.DataFrame(data)
 
-# --- 5. HEADER & STORY ---
+# --- 5. RESTORED STORYBOX ---
 st.markdown("<style>div.block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col2:
-    st.title("Buy vs. Rent Analysis")
+    st.title("Rent vs. Own Analysis")
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
-    <h3 style="color: {SLATE_ACCENT}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
+    <h3 style="color: {CHARCOAL}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.4; margin: 0;">
-        {name1} values <b>equity growth</b>, while {name2 if name2 else 'the household'} is focused on <b>opportunity cost</b>. 
+        {name1} values the <b>equity growth</b> and stability of ownership, while {name2 if name2 else 'the household'} is focused on the <b>opportunity cost</b> of the stock market. 
+        Is the "forced savings" of a mortgage worth more than a optimized investment portfolio?
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -111,18 +112,25 @@ with col_right:
 
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
-# --- 7. VISUALS ---
+# --- 7. VISUALS (FIXED SPACING) ---
 owner_unrec, renter_unrec = df['Owner Unrecoverable'].iloc[-1], df['Renter Unrecoverable'].iloc[-1]
 owner_wealth, renter_wealth = df['Owner Net Wealth'].iloc[-1], df['Renter Wealth'].iloc[-1]
 
 st.subheader("📊 Performance Comparison")
 v_col1, v_col2 = st.columns(2)
+
 with v_col1:
     fig_unrec = go.Figure(data=[
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
     ])
-    fig_unrec.update_layout(title=dict(text="Total Sunk Costs", x=0.5, xanchor='center'), height=300, showlegend=False)
+    # Reduced top margin and title gap
+    fig_unrec.update_layout(
+        title=dict(text="Total Sunk Costs", x=0.5, y=0.9, xanchor='center', yanchor='top'),
+        margin=dict(t=40, b=0, l=0, r=0), 
+        height=300, 
+        showlegend=False
+    )
     st.plotly_chart(fig_unrec, use_container_width=True)
 
 with v_col2:
@@ -130,7 +138,13 @@ with v_col2:
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
     ])
-    fig_wealth.update_layout(title=dict(text="Final Net Worth", x=0.5, xanchor='center'), height=300, showlegend=False)
+    # Reduced top margin and title gap
+    fig_wealth.update_layout(
+        title=dict(text="Final Net Worth", x=0.5, y=0.9, xanchor='center', yanchor='top'),
+        margin=dict(t=40, b=0, l=0, r=0), 
+        height=300, 
+        showlegend=False
+    )
     st.plotly_chart(fig_wealth, use_container_width=True)
 
 # --- 8. RESTORED STRATEGIC VERDICT ---
@@ -165,6 +179,6 @@ with ins_col2:
         if be_year:
             st.write(f"**Break-Even Horizon:** Year {be_year}. This is when equity build-up finally overcomes the high friction costs of interest and taxes.")
         else:
-            st.write("**Growth Outlook:** Under current market settings, the 'Opportunity Cost' of the down payment prevents the home from catching up in net worth.")
+            st.write("**Growth Outlook:** Under current market settings, the home is not projected to catch up in net worth.")
 
 show_disclaimer()
