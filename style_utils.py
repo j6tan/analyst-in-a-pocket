@@ -87,3 +87,15 @@ def check_premium_access():
             st.rerun()
     
     st.stop()
+def show_disclaimer():
+    st.markdown("---")
+    st.markdown("""
+    <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
+        <p style='font-size: 12px; color: #6c757d; line-height: 1.6; margin-bottom: 0;'>
+            <strong>⚠️ Errors and Omissions Disclaimer:</strong><br>
+            This tool is for <strong>informational and educational purposes only</strong>. Figures are based on mathematical estimates and historical data. 
+            This does not constitute financial, legal, or tax advice. Consult with a professional before making significant financial decisions.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.caption("Analyst in a Pocket | Strategic Equity Strategy")
