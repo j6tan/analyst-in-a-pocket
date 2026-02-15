@@ -16,34 +16,19 @@ inject_global_css()
 # --- 2. DATA INIT ---
 init_session_state()
 
-# --- 3. AUTHENTICATION (SIDEBAR) ---
-if "is_pro" not in st.session_state:
-    st.session_state.is_pro = False
-
+# --- 3. AUTHENTICATION SYSTEM (Sidebar) ---
 with st.sidebar:
-    st.image("logo.png", width=100) if os.path.exists("logo.png") else None
-    
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
         with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login")
-            
-            if submit:
-                if password == "paid123":  # Demo Password
+            user = st.text_input("Username")
+            pw = st.text_input("Password", type="password")
+            if st.form_submit_button("Login"):
+                if pw == "paid123":  # Your master test password
                     st.session_state.is_logged_in = True
-                    st.session_state.username = username
-                    st.session_state.is_pro = True 
+                    st.session_state.is_pro = True # Everyone who logs in is Pro
+                    st.session_state.username = user
                     st.rerun()
-                else:
-                    st.error("Invalid Credentials")
-    else:
-        st.success(f"Welcome, {st.session_state.username}")
-        if st.button("Logout"):
-            st.session_state.is_logged_in = False
-            st.session_state.is_pro = False
-            st.rerun()
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
 is_pro = st.session_state.is_pro
@@ -134,4 +119,5 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
