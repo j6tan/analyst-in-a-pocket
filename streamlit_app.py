@@ -85,6 +85,7 @@ pg = st.navigation(pages)
 # --- 5. THE "SIDEBAR INJECTION" PAYWALL (Bulletproof) ---
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
+# Check if the current page is a Pro tool and the user is NOT a Pro member
 if pg.title in pro_titles and not is_pro:
     
     # 1. Inject CSS to heavily blur the MAIN content area
@@ -110,9 +111,9 @@ if pg.title in pro_titles and not is_pro:
     with st.sidebar:
         st.markdown(f"""
         <div style="
-            position: fixed; /* Force it out of the sidebar and onto the center screen */
+            position: fixed; 
             top: 50%;
-            left: 55%; /* Offset slightly to account for sidebar width */
+            left: 55%; 
             transform: translate(-50%, -50%);
             z-index: 999999;
             background: white;
@@ -122,10 +123,11 @@ if pg.title in pro_titles and not is_pro:
             text-align: center;
             width: 500px;
             border: 2px solid #CEB36F;
-            pointer-events: auto; /* Re-enable clicks for this card */
+            pointer-events: auto;
+            font-family: sans-serif;
         ">
             <div style="font-size: 60px; margin-bottom: 15px;">💎</div>
-            <h2 style="color: #4A4E5A; margin: 0; font-family: sans-serif;">Unlock {pg.title.replace(' 🔒', '')}</h2>
+            <h2 style="color: #4A4E5A; margin: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
             
             <p style="color: #6c757d; font-size: 1.1em; margin-top: 15px; line-height: 1.5;">
                 You've hit the limit of the Free Tier.<br>
@@ -151,5 +153,6 @@ if pg.title in pro_titles and not is_pro:
     # The script continues, rendering the charts in the background so they appear through the blur.
 
 pg.run()
+
 
 
