@@ -1,14 +1,17 @@
 import streamlit as st
 import json
 import os
+from supabase import create_client, Client
 
-# --- CONFIGURATION ---
-# In production, this would be a database connection string
-MOCK_DB_FOLDER = "user_data_vault"
+# --- 1. CONNECTION SETUP ---
+@st.cache_resource
+def init_supabase():
+    """Connects to Supabase using the secrets you just verified."""
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-# Ensure the vault exists (for paid user simulation)
-if not os.path.exists(MOCK_DB_FOLDER):
-    os.makedirs(MOCK_DB_FOLDER)
+supabase = init_supabase()
 
 # Default Empty Profile Structure
 DEFAULTS = {
@@ -50,36 +53,49 @@ def init_session_state():
             if key not in st.session_state.app_db[category]:
                 st.session_state.app_db[category][key] = val
 
+# --- 2. THE CLOUD LOAD FUNCTION ---
 def load_user_data(username):
     """
-    PAID FEATURE: Loads data from the 'Cloud' (Simulated JSON file)
+    Replaces the old JSON file loading. 
+    It fetches the 'data' column from Supabase for the specific user.
     """
-    user_file = os.path.join(MOCK_DB_FOLDER, f"{username}.json")
-    if os.path.exists(user_file):
-        try:
-            with open(user_file, "r") as f:
-                data = json.load(f)
-                st.session_state.app_db = data
-                st.toast(f"Welcome back, {username}! Data loaded.", icon="☁️")
-        except:
-            st.error("Error loading user profile.")
-    else:
-        # New Paid User - Start fresh
-        st.toast(f"Creating new profile for {username}...", icon="🆕")
+    try:
+        # Search the 'user_vault' table for the matching username
+        # Note: In production, we'll use UUIDs, but for your test users, we'll use 'id'
+        response = supabase.table("user_vault").select("data").eq("id", username).execute()
+        
+        if response.data:
+            # If user exists, pull their saved JSON into the app
+            st.session_state.app_db = response.data[0]['data']
+            st.toast(f"☁️ {username.capitalize()}'s data synced from Cloud")
+        else:
+            # If it's a new user, start with your DEFAULTS and create their cloud row
+            from data_handler_defaults import DEFAULTS # Assuming your defaults are here
+            st.session_state.app_db = DEFAULTS
+            supabase.table("user_vault").insert({"id": username, "data": DEFAULTS}).execute()
+            st.toast("🆕 Created new Cloud Vault")
+            
+    except Exception as e:
+        st.error(f"Cloud Load Error: {e}")
 
+# --- 3. THE CLOUD SAVE FUNCTION ---
 def update_data(category, key, value):
     """
-    The Master Save Function.
-    1. Updates the immediate RAM (Session State) so UI is fast.
-    2. If Logged In: Saves to the 'Cloud' (File) for permanence.
+    The Master Save: Updates the app's 'RAM' instantly, 
+    then pushes the entire update to the Supabase Cloud.
     """
-    # 1. Update RAM (Instant)
+    # 1. Update the local session state (RAM) so the UI stays fast
+    if 'app_db' not in st.session_state:
+        return
+        
     st.session_state.app_db[category][key] = value
-
-    # 2. Check Authentication
+    
+    # 2. If the user is logged in, sync to the Cloud
     if st.session_state.get("is_logged_in", False):
-        user = st.session_state.get("username")
-        # Save to 'Cloud'
-        user_file = os.path.join(MOCK_DB_FOLDER, f"{user}.json")
-        with open(user_file, "w") as f:
-            json.dump(st.session_state.app_db, f, indent=4)
+        username = st.session_state.get("username")
+        try:
+            supabase.table("user_vault").update({
+                "data": st.session_state.app_db
+            }).eq("id", username).execute()
+        except Exception as e:
+            print(f"Background Sync Failed: {e}")
