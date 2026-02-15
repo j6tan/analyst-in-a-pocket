@@ -7,3 +7,4 @@ requests
 pdfplumber
 openpyxl
 xlrd>=2.0.1
+supabase
