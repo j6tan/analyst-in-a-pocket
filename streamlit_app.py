@@ -86,68 +86,59 @@ pg = st.navigation(pages)
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
 if pg.title in pro_titles and not is_pro:
-    # 1. Create a clear area at the very top of the app for the Card
-    # This prevents the card from being inside the blurred container
-    overlay_container = st.empty()
-    
-    with overlay_container:
-        st.markdown(f"""
-        <div style="
-            position: fixed;
-            top: 50%;
-            left: 55%;
-            transform: translate(-50%, -50%);
-            z-index: 9999999;
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-            text-align: center;
-            width: 450px;
-            border: 2px solid #CEB36F;
-            filter: none !important; /* Forces this div to NEVER blur */
-        ">
-            <div style="font-size: 50px; margin-bottom: 10px;">💎</div>
-            <h2 style="color: #4A4E5A; margin: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
-            <p style="color: #6c757d; font-size: 1.1em; margin-top: 10px;">This is a <b>Pro Analyst Feature</b></p>
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-            <div style="text-align: left; display: inline-block; color: #4A4E5A; font-size: 0.95em; line-height: 1.8;">
-                ✅ Deep-dive investment comparisons<br>
-                ✅ Advanced tax-deductibility modeling<br>
-                ✅ Save & Export unlimited scenarios
-            </div>
-            <div style="margin-top: 30px;">
-                <p style="font-size: 0.9em; color: #CEB36F; font-weight: bold;">Login via sidebar to remove the blur.</p>
-            </div>
+    # 1. Inject the Membership Card (The sharp overlay)
+    st.markdown(f"""
+    <div style="
+        position: fixed;
+        top: 50%;
+        left: 55%;
+        transform: translate(-50%, -50%);
+        z-index: 9999999;
+        background: white;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+        text-align: center;
+        width: 450px;
+        border: 2px solid #CEB36F;
+    ">
+        <div style="font-size: 50px; margin-bottom: 10px;">💎</div>
+        <h2 style="color: #4A4E5A; margin: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
+        <p style="color: #6c757d; font-size: 1.1em; margin-top: 10px;">This is a <b>Pro Analyst Feature</b></p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <div style="text-align: left; display: inline-block; color: #4A4E5A; font-size: 0.95em; line-height: 1.8;">
+            ✅ Deep-dive investment comparisons<br>
+            ✅ Advanced tax-deductibility modeling<br>
+            ✅ Save & Export unlimited scenarios
         </div>
-        """, unsafe_allow_html=True)
+        <div style="margin-top: 30px;">
+            <p style="font-size: 0.9em; color: #CEB36F; font-weight: bold;">Login via sidebar to remove the blur.</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    # 2. Add the CSS to blur everything EXCEPT our new overlay
+    # 2. Apply the Blur (Targeting the main data-testid)
     st.markdown("""
         <style>
-        /* Blur the main app content area only */
-        .main .block-container > div:not(:first-child) {
-            filter: blur(15px) grayscale(80%);
+        /* This targets the main content area specifically */
+        [data-testid="stMainView"] [data-testid="stVerticalBlock"] > div {
+            filter: blur(15px) grayscale(90%);
             pointer-events: none;
             user-select: none;
-            opacity: 0.5;
+            opacity: 0.4;
         }
 
-        /* Ensure the sidebar stays clear so they can actually log in! */
-        [data-testid="stSidebar"] {
-            filter: none !important;
-            opacity: 1 !important;
-        }
-        
-        /* Force the specific overlay div to be sharp */
+        /* This ensures your NEW Membership Card is NEVER blurred */
         div[style*="z-index: 9999999"] {
             filter: none !important;
             opacity: 1 !important;
+        }
+
+        /* Keep the sidebar clear */
+        [data-testid="stSidebar"] {
+            filter: none !important;
         }
         </style>
     """, unsafe_allow_html=True)
 
 pg.run()
-
-
-
