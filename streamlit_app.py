@@ -24,42 +24,49 @@ VALID_USERS = {
     "analyst_test": "paid123"
 }
 
+# --- 3. AUTHENTICATION SYSTEM (Sidebar) ---
 with st.sidebar:
+    st.image("logo.png", width=100) if os.path.exists("logo.png") else None
+    
+    # 1. Check if the user IS NOT logged in
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
+        
+        # Everything inside this 'with' block MUST use form_submit_button
         with st.form("login_form"):
             user_input = st.text_input("Username").lower().strip()
             pw_input = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login")
             
-            if st.form_submit_button("Login"):
-                # Check if the user exists and the password matches
+            if submit:
                 if user_input in VALID_USERS and pw_input == VALID_USERS[user_input]:
                     st.session_state.is_logged_in = True
                     st.session_state.is_pro = True 
                     st.session_state.username = user_input
                     
-                    # IMPORTANT: Load the user-specific vault file
                     from data_handler import load_user_data
                     load_user_data(user_input) 
-                    
                     st.rerun()
                 else:
-                    # This is the "Authenticated" sidebar view
-                    st.success(f"Welcome, {st.session_state.username.capitalize()}")
-                    st.caption("✨ Cloud Sync Active")
+                    st.error("Invalid Username or Password")
+    
+    # 2. If the user IS logged in, show the Logout button OUTSIDE of any form
+    else:
+        st.success(f"Welcome, {st.session_state.username.capitalize()}")
+        st.caption("✨ Cloud Sync Active")
         
-                    if st.button("Logout"):
-                        # 1. Reset Auth States
-                        st.session_state.is_logged_in = False
-                        st.session_state.username = None
-                        st.session_state.is_pro = False
+        # This button is now safely outside the st.form block
+        if st.button("Logout"):
+            st.session_state.is_logged_in = False
+            st.session_state.username = None
+            st.session_state.is_pro = False
             
-                        # 2. THE CRITICAL FIX: Physically delete the data bucket from RAM
-                        if 'app_db' in st.session_state:
-                            del st.session_state['app_db']
+            if 'app_db' in st.session_state:
+                del st.session_state['app_db']
             
-                        # 3. Refresh the app to trigger init_session_state() and load DEFAULTS
-                        st.rerun()
+            st.rerun()
+
+    st.divider()
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
 is_pro = st.session_state.get("is_pro", False)
@@ -150,6 +157,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
