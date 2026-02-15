@@ -6,7 +6,7 @@ import math
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -17,12 +17,9 @@ st.divider()
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
-
-# Color constants for metrics
 CRIMSON_RED = "#A52A2A"
 DARK_GREEN = "#1B4D3E"
 
-# --- ROUNDING UTILITY ---
 def custom_round_up(n):
     if n <= 0: return 0.0
     digits = int(math.log10(n)) + 1
@@ -131,7 +128,7 @@ with c_right:
     mgmt_fee = (f_rent * (st.slider("Property Management Fee %", 0.0, 12.0, float(aff_sec.get('mgmt_pct', 5.0)), key="affordability_second:mgmt_pct", on_change=sync_widget, args=("affordability_second:mgmt_pct",)) / 100)) if is_rental else 0
     total_opex_mo = (f_tax / 12) + f_strata + f_ins + f_rm + bc_extra + mgmt_fee
 
-# --- 8. LIVE QUALIFYING POWER BOX (RESTORED POSITION) ---
+# --- 8. LIVE QUALIFYING POWER BOX (RESTORED TO BOTTOM) ---
 stress_rate = max(5.25, f_rate + 2.0)
 r_stress = (stress_rate / 100) / 12
 stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
@@ -197,7 +194,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 11. STRATEGIC VERDICT (RESTORED LOGIC) ---
+# --- 11. STRATEGIC VERDICT (ORIGINAL LOGIC) ---
 st.subheader("🎯 Strategic Verdict")
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
