@@ -82,50 +82,31 @@ pages = {
 
 pg = st.navigation(pages)
 
-# --- 5. THE "SIDEBAR INJECTION" PAYWALL (Bulletproof) ---
+# --- 5. THE "SIDEBAR INJECTION" PAYWALL (Syntax Fixed) ---
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
-# Check if the current page is a Pro tool and the user is NOT a Pro member
 if pg.title in pro_titles and not is_pro:
     
-    # 1. Inject CSS to heavily blur the MAIN content area
+    # 1. INJECT CSS (Standard String - No f-string variables here)
     st.markdown("""
         <style>
-            /* Blur the entire main content area */
+            /* Blur the main content */
             [data-testid="stMain"] {
                 filter: blur(15px) grayscale(50%);
-                pointer-events: none; /* Block clicks on the blurred content */
-                user-select: none;    /* Block text highlighting */
+                pointer-events: none;
+                user-select: none;
                 overflow: hidden;
             }
-            
-            /* Hide the top header to prevent clicking 'Deploy' or 'Settings' */
-            header {
-                display: none !important;
-            }
+            /* Hide header */
+            header { display: none !important; }
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. Inject the Membership Card via the SIDEBAR
-    # By putting it in the sidebar, it avoids the blur filter applied to "stMain"
+    # 2. INJECT CARD HTML (Clean f-string)
+    # We put the styling inline to avoid brace conflicts
     with st.sidebar:
         st.markdown(f"""
-        <div style="
-            position: fixed; 
-            top: 50%;
-            left: 55%; 
-            transform: translate(-50%, -50%);
-            z-index: 999999;
-            background: white;
-            padding: 40px;
-            border-radius: 20px;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
-            text-align: center;
-            width: 500px;
-            border: 2px solid #CEB36F;
-            pointer-events: auto;
-            font-family: sans-serif;
-        ">
+        <div style="position: fixed; top: 50%; left: 55%; transform: translate(-50%, -50%); z-index: 999999; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); text-align: center; width: 500px; border: 2px solid #CEB36F; pointer-events: auto; font-family: sans-serif;">
             <div style="font-size: 60px; margin-bottom: 15px;">💎</div>
             <h2 style="color: #4A4E5A; margin: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
             
@@ -149,10 +130,10 @@ if pg.title in pro_titles and not is_pro:
         </div>
         """, unsafe_allow_html=True)
 
-    # Note: We do NOT use st.stop() here. 
-    # The script continues, rendering the charts in the background so they appear through the blur.
+    # Note: We do NOT use st.stop() here so the background content still renders.
 
 pg.run()
+
 
 
 
