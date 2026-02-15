@@ -78,7 +78,7 @@ def sync_widget(widget_key):
                     "id": username, 
                     "data": st.session_state.app_db
                 }).execute()
-                st.toast(f"✅ Saved {data_key}")
+                st.toast(f"✅ Info Saved")
             except Exception as e:
                 print(f"Cloud Sync Error: {e}")
 
