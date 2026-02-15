@@ -2,24 +2,27 @@ import streamlit as st
 import json
 import os
 from style_utils import inject_global_css
-from data_handler import init_session_state, load_user_data
+from data_handler import init_session_state
 
-# --- 1. GLOBAL CONFIG (Universal De-Squish) ---
+# --- 1. GLOBAL CONFIG ---
 st.set_page_config(
     layout="wide", 
     page_title="Analyst in a Pocket", 
     page_icon="📊",
     initial_sidebar_state="expanded"
 )
-inject_global_css() # Keep styles active on this page
+inject_global_css()
 
 # --- 2. DATA INIT ---
 init_session_state()
-# --- 3. AUTHENTICATION SYSTEM (Sidebar) ---
+
+# --- 3. AUTHENTICATION (SIDEBAR) ---
+if "is_pro" not in st.session_state:
+    st.session_state.is_pro = False
+
 with st.sidebar:
-    st.image("logo.png", width=100) if "logo.png" in "." else None
+    st.image("logo.png", width=100) if os.path.exists("logo.png") else None
     
-    # Check if user is already logged in
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
         with st.form("login_form"):
@@ -28,38 +31,34 @@ with st.sidebar:
             submit = st.form_submit_button("Login")
             
             if submit:
-                # SIMPLE AUTH LOGIC (Replace with real DB check later)
                 if password == "paid123":  # Demo Password
                     st.session_state.is_logged_in = True
                     st.session_state.username = username
-                    st.session_state.is_pro = True # Unlock Pro Features
-                    load_user_data(username) # Load their permanent data
+                    st.session_state.is_pro = True 
                     st.rerun()
                 else:
-                    st.error("Invalid credentials")
-        
-        st.info("Guest Mode Active: Data will be lost when you close the tab.")
-    
+                    st.error("Invalid Credentials")
     else:
-        # LOGGED IN VIEW
-        st.success(f"Logged in as: **{st.session_state.username}**")
-        st.caption("✅ Cloud Sync Active")
-        
+        st.success(f"Welcome, {st.session_state.username}")
         if st.button("Logout"):
             st.session_state.is_logged_in = False
-            st.session_state.username = None
             st.session_state.is_pro = False
-            st.session_state.app_db = {} # Wipe sensitive data from RAM
             st.rerun()
-    
-    st.divider()
 
-# --- 4. NAVIGATION ---
-# Unlock Pro pages only if logged in (or if 'is_pro' is somehow simulated)
-is_pro = st.session_state.get("is_pro", False)
-lock_icon = "🔓" if is_pro else "🔒"
+# --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
+is_pro = st.session_state.is_pro
 
-# --- 5. OPTION C NAVIGATION (Grouped Sidebar) ---
+# Helper to create Pro labels and icons
+def get_pro_meta(label, icon, is_pro):
+    return (label if is_pro else f"{label} 🔒"), (icon if is_pro else "🔒")
+
+# Define Dynamic Metadata for Pro Tools
+mort_label, mort_icon = get_pro_meta("Mortgage Scenarios", "📈", is_pro)
+smith_label, smith_icon = get_pro_meta("Smith Maneuver", "💰", is_pro)
+second_label, second_icon = get_pro_meta("Secondary Property", "🏢", is_pro)
+renewal_label, renewal_icon = get_pro_meta("Renewal Scenario", "🔄", is_pro)
+duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
+
 pages = {
     "Overview": [
         st.Page("home.py", title="Home Dashboard", icon="🏠", default=True),
@@ -70,23 +69,35 @@ pages = {
         st.Page("scripts/buy_vs_rent.py", title="Buy vs Rent", icon="⚖️"),
     ],
     "Advanced Wealth Strategy": [
-        st.Page("scripts/mortgage_scenario.py", title="Mortgage Scenarios 🔒", icon="📈"),
-        st.Page("scripts/smith_maneuver.py", title="Smith Maneuver 🔒", icon="🛡️"),
-        st.Page("scripts/affordability_second.py", title="Secondary Property 🔒", icon="🏢"),
-        st.Page("scripts/renewal_scenario.py", title="Renewal Scenario 🔒", icon="🔄"),
-        st.Page("scripts/rental_vs_stock.py", title="Rental vs Stock 🔒", icon="📉"),
+        st.Page("scripts/mortgage_scenario.py", title=mort_label, icon=mort_icon),
+        st.Page("scripts/affordability_second.py", title=second_label, icon=second_icon),
+        st.Page("scripts/renewal_scenario.py", title=renewal_label, icon=renewal_icon),
+        st.Page("scripts/rental_vs_stock.py", title=duel_label, icon=duel_icon),
+        st.Page("scripts/smith_maneuver.py", title=smith_label, icon=smith_icon),
+    ],
+    "Account": [
+        st.Page("scripts/membership.py", title="Membership 💎", icon="💎")
     ]
 }
 
 pg = st.navigation(pages)
+
+# --- 5. GLOBAL PAYWALL LOGIC ---
+# This checks if the current page title is one of the "Locked" ones
+pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
+
+if pg.title in pro_titles and not is_pro:
+    st.markdown(f"""
+    <div style="text-align: center; padding: 50px; background-color: #f8f9fa; border-radius: 15px; border: 2px dashed #CEB36F; margin-top: 50px;">
+        <h1 style="font-size: 4em;">🔒</h1>
+        <h2 style="color: #4A4E5A;">Pro Analyst Feature</h2>
+        <p style="font-size: 1.2em;">The <b>{pg.title.replace(' 🔒', '')}</b> is reserved for professional members.</p>
+        <p>Unlock multi-property modeling and complex investment duels.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("Upgrade Now / Enter Member ID", use_container_width=True):
+        st.switch_page("scripts/membership.py")
+    st.stop() 
+
 pg.run()
-
-
-
-
-
-
-
-
-
-
