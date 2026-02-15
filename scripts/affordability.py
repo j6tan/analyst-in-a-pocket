@@ -90,7 +90,7 @@ def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate)
     else: fp, fd = min(p1, 499999), min(p1, 499999) * 0.05
     return fp, fd
 
-# --- 4. PROFILE SUMMARIES ---
+# --- 4. DATA RETRIEVAL & SUMS ---
 t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.get('p1_pension', 0)) + float(prof.get('p2_pension', 0))
 bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
@@ -124,12 +124,33 @@ max_pi_pre = min(gds_pre, tds_pre)
 r_mo_pre = (s_rate_pre/100)/12
 qual_loan_pre = custom_round_up(max_pi_pre * (1 - (1+r_mo_pre)**-300) / r_mo_pre) if r_mo_pre > 0 else 0.0
 
-# --- 7. HEADER ---
-st.title("Mortgage Affordability Analysis")
-st.markdown(f"""<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD};">
-    <h3 style="margin-top:0;">🚀 {household}: Planning Your Move</h3>
-    <p style="margin-bottom:0;">Mapping out the math for your next home in <b>{province}</b>.</p>
-</div>""", unsafe_allow_html=True)
+# --- 7. HEADER & STORYTELLING BOX ---
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col1:
+    if os.path.exists("logo.png"): st.image("logo.png", width=140)
+with header_col2:
+    st.title("Mortgage Affordability Analysis")
+
+if is_renter:
+    story_headline = f"🚀 {household}: From Renting to Ownership"
+    story_body = f"This is the moment where your monthly rent becomes an investment in your future. Based on your current profile, we're mapping out the exact math needed to secure your first home in <b>{province}</b>."
+else:
+    story_headline = f"📈 {household}: Planning Your Next Move"
+    story_body = f"Scaling up or relocating is a strategic play. We’ve analyzed your current income to determine how much house your wealth can truly buy in today's <b>{province}</b> market."
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">{story_headline}</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">{story_body}</p>
+</div>
+""", unsafe_allow_html=True)
+
+if not is_renter:
+    st.markdown(f"""
+        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px; margin-left: 25px;">
+            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>
+        </p>
+    """, unsafe_allow_html=True)
 
 # --- 8. UNDERWRITING ASSUMPTIONS ---
 st.subheader("⚙️ Underwriting Assumptions")
@@ -169,6 +190,7 @@ with col_2:
     f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
 
 with col_3:
+    # UPDATED UNDERWRITING INSIGHTS
     st.info("""
     **💡 Underwriting Insights:**
     * **T4:** Qualified at **100%** of base salary.
@@ -177,7 +199,7 @@ with col_3:
     * **Liabilities:** LOCs stressed at **3% of limit**.
     """)
 
-# --- 10. THE DASHBOARD (RELOADED) ---
+# --- 10. DASHBOARD CALCULATIONS & VISUALS ---
 monthly_inc = total_qualifying / 12
 gds_max = (monthly_inc * 0.39) - f_heat - (f_ptax/12) - (strata*0.5)
 tds_max = (monthly_inc * 0.44) - f_heat - (f_ptax/12) - (strata*0.5) - i_debt
@@ -187,22 +209,25 @@ if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
     raw_loan = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress if r_mo_stress > 0 else max_pi_stress * 300
     
-    # Apply Cap
+    # Qualified Loan & Application of Loan Cap
     qualified_loan = custom_round_up(raw_loan)
     loan_amt = min(qualified_loan, loan_cap) if loan_cap > 0 else qualified_loan
     max_purchase = loan_amt + f_dp
     
-    # Math for display
+    # Contract Rate P&I for display
     r_mo_contract = (c_rate/100)/12
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
 
-    # Validation check
+    # VALIDATION: Downpayment Check
     min_required = calculate_min_downpayment(max_purchase)
     if f_dp < (min_required - 0.99):
         st.error(f"#### 🛑 Down Payment Too Low")
-        st.markdown(f"""<div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px;">
-            Min. required for <b>${max_purchase:,.0f}</b> is <b>${min_required:,.0f}</b>. Use the <b>Manual Loan Cap</b> to target a lower price.
-        </div>""", unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
+            The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.<br><br>
+            Please <b>increase your downpayment</b> or <b>adjust the loan size</b> by using the <b>Manual Loan Cap</b> box above.
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
 
     st.divider()
@@ -247,6 +272,3 @@ else:
     st.error("Approval amount is $0.")
 
 show_disclaimer()
-
-
-
