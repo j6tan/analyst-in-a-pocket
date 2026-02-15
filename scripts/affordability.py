@@ -171,10 +171,10 @@ with col_2:
 with col_3:
     st.info("""
     **💡 Underwriting Insights:**
-    * **T4 Income:** Qualified at **100%** of base salary.
-    * **Additional Income:** Bonuses/Commissions use a **2-year average**.
-    * **Rental Income:** Typically 'haircut' to **80%** for expenses.
-    * **Liabilities:** Debts reduce room; LOCs stressed at **3% of limit**.
+    * **T4:** Qualified at **100%** of base salary.
+    * **Additional:** Bonuses use a **2-year average**.
+    * **Rental:** Typically 'haircut' to **80%** for expenses.
+    * **Liabilities:** LOCs stressed at **3% of limit**.
     """)
 
 # --- 10. THE DASHBOARD (RELOADED) ---
@@ -247,3 +247,4 @@ else:
     st.error("Approval amount is $0.")
 
 show_disclaimer()
+
