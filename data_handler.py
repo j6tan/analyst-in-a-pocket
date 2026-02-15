@@ -10,26 +10,46 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- 2. THE UNIVERSAL SYNC FUNCTION ---
+# --- 2. THE DEFAULT STRUCTURE ---
+# This ensures that even if Supabase is empty, your app doesn't crash
+DEFAULTS = {
+    "profile": {
+        "p1_name": "Investor", "province": "Ontario", "is_pro": False,
+        "p1_t4": 0.0, "p1_bonus": 0.0, "p2_t4": 0.0, "housing_status": "Renting"
+    },
+    "smith": {
+        "mortgage_amt": 500000.0, "amortization": 25, "mortgage_rate": 5.0
+    },
+    "mortgage": {
+        "price": 800000.0, "down": 160000.0, "amort": 25
+    }
+}
+
+def init_session_state():
+    """
+    Called by streamlit_app.py at startup.
+    Ensures app_db exists in memory.
+    """
+    if "app_db" not in st.session_state:
+        st.session_state.app_db = DEFAULTS
+    if "is_logged_in" not in st.session_state:
+        st.session_state.is_logged_in = False
+
+# --- 3. THE UNIVERSAL SYNC FUNCTION ---
 def sync_widget(widget_key):
-    """
-    Splits a key like 'profile:p1_t4' and saves the entire state to Supabase.
-    """
     if widget_key not in st.session_state:
         return
         
     category, data_key = widget_key.split(":")
     new_value = st.session_state[widget_key]
     
-    # Update local memory
     if 'app_db' in st.session_state:
         st.session_state.app_db[category][data_key] = new_value
         
-        # PUSH TO CLOUD
         if st.session_state.get("is_logged_in", False):
             username = st.session_state.get("username")
             try:
-                # UPSERT ensures the row is created if it doesn't exist
+                # UPSERT creates the record if 'dori' doesn't exist yet
                 supabase.table("user_vault").upsert({
                     "id": username, 
                     "data": st.session_state.app_db
@@ -38,12 +58,11 @@ def sync_widget(widget_key):
             except Exception as e:
                 print(f"Cloud Sync Error: {e}")
 
-# --- 3. THE SMART INPUT HELPER ---
+# --- 4. THE SMART INPUT HELPER ---
 def cloud_input(label, category, key, input_type="number", **kwargs):
-    """Generates an input wired to the sync_widget."""
     widget_id = f"{category}:{key}"
     
-    # Ensure category exists in app_db
+    # Safety check to prevent crashes if a category is missing
     if category not in st.session_state.app_db:
         st.session_state.app_db[category] = {}
         
