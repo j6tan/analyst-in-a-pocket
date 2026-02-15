@@ -82,22 +82,49 @@ pages = {
 
 pg = st.navigation(pages)
 
-# --- 5. GLOBAL PAYWALL LOGIC ---
-# This checks if the current page title is one of the "Locked" ones
+# --- 5. BLURRED PAYWALL LOGIC ---
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
 if pg.title in pro_titles and not is_pro:
+    # 1. Show the "Upgrade Card" as an overlay
     st.markdown(f"""
-    <div style="text-align: center; padding: 50px; background-color: #f8f9fa; border-radius: 15px; border: 2px dashed #CEB36F; margin-top: 50px;">
-        <h1 style="font-size: 4em;">🔒</h1>
-        <h2 style="color: #4A4E5A;">Pro Analyst Feature</h2>
-        <p style="font-size: 1.2em;">The <b>{pg.title.replace(' 🔒', '')}</b> is reserved for professional members.</p>
-        <p>Unlock multi-property modeling and complex investment duels.</p>
+    <div style="
+        position: fixed;
+        top: 50%;
+        left: 55%;
+        transform: translate(-50%, -50%);
+        z-index: 9999;
+        background: white;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        text-align: center;
+        width: 400px;
+        border: 1px solid #CEB36F;
+    ">
+        <h2 style="color: #4A4E5A; margin-bottom: 10px;">💎 Unlock {pg.title.replace(' 🔒', '')}</h2>
+        <p style="color: #6c757d; font-size: 0.95em;">Join our Pro members to access advanced modeling, tax strategies, and multi-property analysis.</p>
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+        <ul style="text-align: left; font-size: 0.85em; color: #4A4E5A; margin-bottom: 25px;">
+            <li>✅ Save unlimited client scenarios</li>
+            <li>✅ Deep-dive Rental vs. Stock analysis</li>
+            <li>✅ Full Smith Manoeuvre Calculator</li>
+        </ul>
     </div>
     """, unsafe_allow_html=True)
+
+    # 2. Add the Blur Effect to the BACKGROUND
+    st.markdown("""
+        <style>
+        [data-testid="stVerticalBlock"] > div:not(:first-child) {
+            filter: blur(8px);
+            pointer-events: none;
+            user-select: none;
+        }
+        </style>
+    """, unsafe_allow_html=True)
     
-    if st.button("Upgrade Now / Enter Member ID", use_container_width=True):
-        st.switch_page("scripts/membership.py")
-    st.stop() 
+    # We DON'T use st.stop() here. We let the page below run so it shows the blurred charts.
 
 pg.run()
+
