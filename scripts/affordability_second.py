@@ -23,14 +23,10 @@ DARK_GREEN = "#1B4D3E"
 def custom_round_up(n):
     if n <= 0: return 0.0
     digits = int(math.log10(n)) + 1
-    if digits <= 3: step = 10
-    elif digits <= 5: step = 100
-    elif digits == 6: step = 1000
-    elif digits == 7: step = 10000
-    else: step = 50000 
+    step = {1:10, 2:10, 3:10, 4:100, 5:100, 6:1000, 7:10000}.get(digits, 50000)
     return float(math.ceil(n / step) * step)
 
-# --- 2. DATA RETRIEVAL (FROM GLOBAL PROFILE) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Dori')
@@ -50,7 +46,7 @@ if 'affordability_second' not in st.session_state.app_db:
     
 aff_sec = st.session_state.app_db['affordability_second']
 
-# Default values if scenario is new
+# Default values for new scenarios
 if aff_sec.get('target_price', 0) == 0:
     scraped_yield = intel.get("provincial_yields", {}).get(current_res_prov, 3.8)
     tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
@@ -115,7 +111,7 @@ primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 
 primary_carrying = (get_float('prop_taxes', 4200) / 12) + get_float('heat_pmt', 125)
 p_debts = get_float('car_loan') + get_float('student_loan') + get_float('cc_pmt') + (get_float('loc_balance') * 0.03)
 
-# --- 7. CORE INPUTS ---
+# --- 7. CORE INPUTS (SYNCED) ---
 st.divider()
 c_left, c_right = st.columns(2)
 
@@ -123,7 +119,7 @@ with c_left:
     st.subheader("💰 Capital Requirement")
     f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
 
-    # Dynamic Math for Max power
+    # Max Buying Power Logic
     stress_rate = max(5.25, aff_sec.get('contract_rate', 4.26) + 2.0)
     r_stress = (stress_rate / 100) / 12
     stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
@@ -254,7 +250,7 @@ st.markdown(f"""
     <p style='font-size: 1.05em; margin-bottom: 10px;'>{v_msg}</p>
     <div style='font-size: 1em;'>
         <p>• <b>The "Blind Spot" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for lifestyle expenses (food, shopping, etc).</p>
-        {'<p>• <b>Negative Carry:</b> This requires salary support of <b>${:,.0f}</b>/mo. It is a growth play, not cash flow.</p>'.format(abs(asset_net)) if is_neg_carry else ''}
+        {'<p>• <b>Negative Carry:</b> This rental requires <b>${:,.0f}</b>/mo from your salary to stay afloat. It is a growth play, not cash flow.</p>'.format(abs(asset_net)) if is_neg_carry else ''}
         {'<p>• <b>Leverage Alert:</b> Your Safety Margin is <b>{:.1f}%</b>. Below 45% is considered high-leverage for secondary homes.</p>'.format(safety_margin) if is_low_safety else ''}
     </div>
 </div>
