@@ -82,68 +82,74 @@ pages = {
 
 pg = st.navigation(pages)
 
-# --- 5. BULLETPROOF FROSTED GLASS PAYWALL ---
+# --- 5. THE "SIDEBAR INJECTION" PAYWALL (Bulletproof) ---
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
 if pg.title in pro_titles and not is_pro:
-    # We use 'st.markdown' to inject a full-screen overlay that sits ON TOP of the content
-    # The 'backdrop-filter' property does the blurring for us.
-    st.markdown(f"""
-    <style>
-        /* 1. The Overlay: Covers the screen, blurs what's behind it */
-        .paywall-overlay {{
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background-color: rgba(255, 255, 255, 0.1); /* Slight white tint */
-            backdrop-filter: blur(12px); /* THE KEY: Blurs everything behind this div */
-            -webkit-backdrop-filter: blur(12px); /* Safari support */
-            z-index: 99999; /* High enough to cover content, low enough for sidebar */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }}
+    
+    # 1. Inject CSS to heavily blur the MAIN content area
+    st.markdown("""
+        <style>
+            /* Blur the entire main content area */
+            [data-testid="stMain"] {
+                filter: blur(15px) grayscale(50%);
+                pointer-events: none; /* Block clicks on the blurred content */
+                user-select: none;    /* Block text highlighting */
+                overflow: hidden;
+            }
+            
+            /* Hide the top header to prevent clicking 'Deploy' or 'Settings' */
+            header {
+                display: none !important;
+            }
+        </style>
+    """, unsafe_allow_html=True)
 
-        /* 2. The Card: Sharp, centered, and opaque */
-        .paywall-card {{
+    # 2. Inject the Membership Card via the SIDEBAR
+    # By putting it in the sidebar, it avoids the blur filter applied to "stMain"
+    with st.sidebar:
+        st.markdown(f"""
+        <div style="
+            position: fixed; /* Force it out of the sidebar and onto the center screen */
+            top: 50%;
+            left: 55%; /* Offset slightly to account for sidebar width */
+            transform: translate(-50%, -50%);
+            z-index: 999999;
             background: white;
             padding: 40px;
             border-radius: 20px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
             text-align: center;
-            width: 450px;
+            width: 500px;
             border: 2px solid #CEB36F;
-            z-index: 100000; /* Sits on top of the blur layer */
-        }}
-        
-        /* 3. Sidebar Safety: Force sidebar to sit ABOVE the overlay so login works */
-        [data-testid="stSidebar"] {{
-            z-index: 100001 !important; 
-        }}
-    </style>
+            pointer-events: auto; /* Re-enable clicks for this card */
+        ">
+            <div style="font-size: 60px; margin-bottom: 15px;">💎</div>
+            <h2 style="color: #4A4E5A; margin: 0; font-family: sans-serif;">Unlock {pg.title.replace(' 🔒', '')}</h2>
+            
+            <p style="color: #6c757d; font-size: 1.1em; margin-top: 15px; line-height: 1.5;">
+                You've hit the limit of the Free Tier.<br>
+                This tool is restricted to <b>Pro Analysts</b>.
+            </p>
+            
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+            
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 25px;">
+                <div style="color: #4A4E5A; font-weight: bold; margin-bottom: 5px;">Pro Benefits:</div>
+                <div style="color: #6c757d; font-size: 0.9em;">✅ <b>Unlimited</b> Scenario Storage</div>
+                <div style="color: #6c757d; font-size: 0.9em;">✅ <b>Export</b> to PDF Reports</div>
+                <div style="color: #6c757d; font-size: 0.9em;">✅ <b>Advanced</b> Yield Calculators</div>
+            </div>
 
-    <div class="paywall-overlay">
-        <div class="paywall-card">
-            <div style="font-size: 50px; margin-bottom: 10px;">💎</div>
-            <h2 style="color: #4A4E5A; margin: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
-            <p style="color: #6c757d; font-size: 1.1em; margin-top: 10px;">This is a <b>Pro Analyst Feature</b></p>
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-            <div style="text-align: left; display: inline-block; color: #4A4E5A; font-size: 0.95em; line-height: 1.8;">
-                ✅ Deep-dive investment comparisons<br>
-                ✅ Advanced tax-deductibility modeling<br>
-                ✅ Save & Export unlimited scenarios
-            </div>
-            <div style="margin-top: 30px;">
-                <p style="font-size: 0.9em; color: #CEB36F; font-weight: bold;">Login via sidebar to remove the blur.</p>
-            </div>
+            <p style="font-size: 0.9em; color: #CEB36F; font-weight: bold; margin-bottom: 0;">
+                🔒 Login via Sidebar or Membership Page to unlock
+            </p>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # NOTE: We do NOT use st.stop() here. 
-    # We let the script continue running so the charts generate BEHIND the frosted glass.
+        """, unsafe_allow_html=True)
+
+    # Note: We do NOT use st.stop() here. 
+    # The script continues, rendering the charts in the background so they appear through the blur.
 
 pg.run()
+
 
