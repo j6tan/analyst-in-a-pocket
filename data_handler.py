@@ -30,13 +30,19 @@ DEFAULTS = {
 def init_session_state():
     """
     Called once on app start.
-    Sets up the 'app_db' bucket in memory for the current user.
+    Sets up the 'app_db' bucket and basic auth states.
     """
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
 
+    # NEW: Initialize authentication and pro status defaults
+    if 'is_logged_in' not in st.session_state:
+        st.session_state.is_logged_in = False
+    
+    if 'is_pro' not in st.session_state:
+        st.session_state.is_pro = False
+
     # Initialize with Defaults (Guest Mode by default)
-    # This ensures the app never crashes even if data is missing
     for category, fields in DEFAULTS.items():
         if category not in st.session_state.app_db:
             st.session_state.app_db[category] = {}
