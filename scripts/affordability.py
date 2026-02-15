@@ -101,7 +101,6 @@ if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
-# Carry-over logic from Profile
 if aff.get('rental', 0) == 0: aff['rental'] = rental_sum
 if aff.get('combined_t4', 0) == 0: aff['combined_t4'] = t4_sum
 if aff.get('combined_bonus', 0) == 0: aff['combined_bonus'] = bonus_sum
@@ -116,18 +115,14 @@ if aff.get('bank_rate', 0) == 0:
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
-# --- 6. PRE-CALCULATION FOR UI NOTES ---
-# We calculate a 'preview' of the qualified loan so the Loan Cap note is accurate
-monthly_inc_preview = (aff.get('combined_t4', 0) + aff.get('combined_bonus', 0) + (aff.get('rental', 0)*0.80)) / 12
-s_rate_preview = max(5.25, aff.get('bank_rate', 4.26) + 2.0)
-gds_preview = (monthly_inc_preview * 0.39) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12)
-tds_preview = (monthly_inc_preview * 0.44) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12) - aff.get('combined_debt', 0)
-max_pi_preview = min(gds_preview, tds_preview)
-r_mo_stress_preview = (s_rate_preview/100)/12
-if r_mo_stress_preview > 0:
-    qualified_loan_preview = custom_round_up(max_pi_preview * (1 - (1+r_mo_stress_preview)**-300) / r_mo_stress_preview)
-else:
-    qualified_loan_preview = 0.0
+# --- 6. PRE-CALCULATION FOR CAP NOTE ---
+monthly_inc_pre = (aff.get('combined_t4', 0) + aff.get('combined_bonus', 0) + (aff.get('rental', 0)*0.80)) / 12
+s_rate_pre = max(5.25, aff.get('bank_rate', 4.26) + 2.0)
+gds_pre = (monthly_inc_pre * 0.39) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12)
+tds_pre = (monthly_inc_pre * 0.44) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12) - aff.get('combined_debt', 0)
+max_pi_pre = min(gds_pre, tds_pre)
+r_mo_pre = (s_rate_pre/100)/12
+qual_loan_pre = custom_round_up(max_pi_pre * (1 - (1+r_mo_pre)**-300) / r_mo_pre) if r_mo_pre > 0 else 0.0
 
 # --- 7. HEADER ---
 st.title("Mortgage Affordability Analysis")
@@ -145,9 +140,8 @@ with uw_col1:
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
     f_dp = cloud_input("Down Payment ($)", "affordability", "down_payment", step=1000.0)
-    # MANUAL LOAN CAP WITH DYNAMIC NOTE
     loan_cap = cloud_input("Manual Loan Cap (Optional)", "affordability", "loan_cap", step=5000.0)
-    st.caption(f"Note: Your maximum qualified loan is **${qualified_loan_preview:,.0f}**")
+    st.caption(f"Note: Max Qualified Loan: **${qual_loan_pre:,.0f}**")
 with uw_col3:
     f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100.0)
     f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10.0)
@@ -175,7 +169,6 @@ with col_2:
     f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
 
 with col_3:
-    # 4-BULLET CONCISE UNDERWRITING INSIGHTS
     st.info("""
     **💡 Underwriting Insights:**
     * **T4 Income:** Qualified at **100%** of base salary.
@@ -184,7 +177,7 @@ with col_3:
     * **Liabilities:** Debts reduce room; LOCs stressed at **3% of limit**.
     """)
 
-# --- 10. CALCULATION LOGIC ---
+# --- 10. THE DASHBOARD (RELOADED) ---
 monthly_inc = total_qualifying / 12
 gds_max = (monthly_inc * 0.39) - f_heat - (f_ptax/12) - (strata*0.5)
 tds_max = (monthly_inc * 0.44) - f_heat - (f_ptax/12) - (strata*0.5) - i_debt
@@ -194,25 +187,63 @@ if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
     raw_loan = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress if r_mo_stress > 0 else max_pi_stress * 300
     
-    # Logic for manual cap
+    # Apply Cap
     qualified_loan = custom_round_up(raw_loan)
     loan_amt = min(qualified_loan, loan_cap) if loan_cap > 0 else qualified_loan
-    
-    r_mo_contract = (c_rate/100)/12
-    contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
     max_purchase = loan_amt + f_dp
     
-    # Downpayment Validation
+    # Math for display
+    r_mo_contract = (c_rate/100)/12
+    contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
+
+    # Validation check
     min_required = calculate_min_downpayment(max_purchase)
     if f_dp < (min_required - 0.99):
         st.error(f"#### 🛑 Down Payment Too Low")
-        st.markdown(f"""
-        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
-            The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.
-            Adjust your down payment or use the <b>Manual Loan Cap</b> to target a lower purchase price.
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"""<div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px;">
+            Min. required for <b>${max_purchase:,.0f}</b> is <b>${min_required:,.0f}</b>. Use the <b>Manual Loan Cap</b> to target a lower price.
+        </div>""", unsafe_allow_html=True)
         st.stop()
 
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Max Purchase", f"${max_purchase:,.0f}")
+    m2.metric("Max Loan", f"${loan_amt:,.0f}")
+    m3.metric("Monthly P&I", f"${contract_pi:,.0f}")
+    m4.metric("Stress P&I", f"${max_pi_stress:,.0f}")
+
+    r_c1, r_c2 = st.columns([2, 1.2])
+    with r_c1:
+        fig = go.Figure(go.Indicator(mode="gauge+number", value=max_purchase, gauge={'axis': {'range': [0, max_purchase*1.5]}, 'bar': {'color': PRIMARY_GOLD}}))
+        fig.update_layout(height=350, margin=dict(t=50, b=20))
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with r_c2:
+        st.subheader("⚖️ Cash-to-Close")
+        total_tax, total_rebate = calculate_ltt_and_fees(max_purchase, province, f_fthb, f_toronto)
+        total_closing = total_tax - total_rebate + 2350
+        total_cash = f_dp + total_closing
+        monthly_cost = contract_pi + (f_ptax/12) + f_heat + strata
+        
+        breakdown = [
+            {"Item": "Down Payment", "Cost": f_dp},
+            {"Item": "Land Transfer Tax", "Cost": total_tax},
+            {"Item": "FTHB Rebate", "Cost": -total_rebate},
+            {"Item": "Legal / Misc", "Cost": 2350}
+        ]
+        st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
+        
+        st.markdown(f"""
+        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
+            <p style="margin: 0; font-size: 0.8em;">TOTAL CASH TO CLOSE</p>
+            <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${total_cash:,.0f}</p>
+        </div>
+        <div style="background-color: #C0C0C0; color: white; padding: 10px; border-radius: 8px; text-align: center;">
+            <p style="margin: 0; font-size: 0.8em;">MONTHLY HOME COST</p>
+            <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${monthly_cost:,.0f}</p>
+        </div>
+        """, unsafe_allow_html=True)
+else:
+    st.error("Approval amount is $0.")
+
+show_disclaimer()
