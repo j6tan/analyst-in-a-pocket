@@ -1,11 +1,11 @@
-import streamlit st
+import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import os
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -19,7 +19,7 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL (GLOBAL PROFILE) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {})
 name1 = prof.get('p1_name') or "Primary Client"
 name2 = prof.get('p2_name') or ""
@@ -32,18 +32,16 @@ if 'buy_vs_rent' not in st.session_state.app_db:
     
 br_store = st.session_state.app_db['buy_vs_rent']
 
-# Smart Initializer: Pull rent from profile if this is a new scenario
+# Smart Initializer: Pull rent from profile if new scenario
 if br_store.get('rent', 0) == 0:
-    # Use profile rent if they are a renter, otherwise a $2,500 default
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     
     br_store.update({
         "price": 800000.0, "dp": 200000.0, "rate": 4.0, "ann_tax": 2000.0,
         "mo_maint": 500.0, "apprec": 1.5, "rent": profile_rent, "rent_inc": 2.5,
-        "stock_ret": 8.0, "years": 15
+        "stock_ret": 8.0, "years": 15.0
     })
     
-    # Push initial values to Cloud Vault
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
@@ -52,7 +50,6 @@ def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent
     loan = price - dp
     m_rate = (rate/100)/12
     n_months = 25 * 12
-    # Zero division safety
     if m_rate > 0:
         monthly_pi = loan * (m_rate * (1+m_rate)**n_months) / ((1+m_rate)**n_months - 1)
     else:
@@ -94,8 +91,9 @@ def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent
     return pd.DataFrame(data)
 
 # --- 5. HEADER & STORY ---
-st.markdown("<style>div.block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col1:
+    if os.path.exists("logo.png"): st.image("logo.png", width=140)
 with header_col2:
     st.title("Buy vs. Rent Analysis")
 
@@ -108,7 +106,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. INPUTS (SYNCED TO CLOUD) ---
+# --- 6. INPUTS ---
 col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("🏠 Homeownership Path")
@@ -124,7 +122,7 @@ with col_right:
     rent = cloud_input("Current Monthly Rent ($)", "buy_vs_rent", "rent", step=100.0)
     rent_inc = cloud_input("Annual Rent Increase (%)", "buy_vs_rent", "rent_inc", step=0.5)
     stock_ret = cloud_input("Target Stock Return (%)", "buy_vs_rent", "stock_ret", step=0.5)
-    years = cloud_input("Analysis Horizon (Years)", "buy_vs_rent", "years", step=5.0)
+    years = cloud_input("Analysis Horizon (Years)", "buy_vs_rent", "years", step=1.0)
 
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
@@ -134,7 +132,6 @@ owner_wealth, renter_wealth = df['Owner Net Wealth'].iloc[-1], df['Renter Wealth
 
 st.subheader("📊 Performance Comparison")
 v_col1, v_col2 = st.columns(2)
-
 with v_col1:
     fig_unrec = go.Figure(data=[
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
@@ -155,7 +152,6 @@ with v_col2:
 st.divider()
 st.subheader("🎯 Strategic Wealth Verdict")
 ins_col1, ins_col2 = st.columns(2)
-
 with ins_col1:
     if owner_wealth > renter_wealth:
         st.success(f"🏆 **Wealth Champion: Homeowner**\n\nOwnership builds **${(owner_wealth - renter_wealth):,.0f} more** in assets over {int(years)} years.")
@@ -168,7 +164,6 @@ with ins_col2:
     if be_year:
         st.write(f"**Break-Even Horizon:** Year {be_year}. This is when equity build-up finally overcomes the high friction costs of interest and taxes.")
     else:
-        st.write("**Growth Outlook:** Under current market settings, the 'Opportunity Cost' of the down payment prevents the home from catching up in net worth.")
+        st.write("**Growth Outlook:** Under current market settings, the home is not projected to catch up in net worth.")
 
-# --- 9. CENTRALIZED DISCLAIMER ---
 show_disclaimer()
