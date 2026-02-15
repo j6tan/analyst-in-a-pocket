@@ -82,59 +82,56 @@ pages = {
 
 pg = st.navigation(pages)
 
-# --- 5. THE "SIDEBAR INJECTION" PAYWALL (Syntax Fixed) ---
+# --- 5. THE "SIDEBAR INJECTION" PAYWALL (Formatting Fixed) ---
+import textwrap # Import this to fix indentation issues
+
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
 if pg.title in pro_titles and not is_pro:
     
-    # 1. INJECT CSS (Standard String - No f-string variables here)
+    # 1. CSS: Blur the background
     st.markdown("""
         <style>
-            /* Blur the main content */
             [data-testid="stMain"] {
                 filter: blur(15px) grayscale(50%);
                 pointer-events: none;
                 user-select: none;
                 overflow: hidden;
             }
-            /* Hide header */
             header { display: none !important; }
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. INJECT CARD HTML (Clean f-string)
-    # We put the styling inline to avoid brace conflicts
-    with st.sidebar:
-        st.markdown(f"""
+    # 2. HTML: The Membership Card (Using dedent to fix the raw text error)
+    clean_title = pg.title.replace(' 🔒', '')
+    
+    # We strip all indentation from this string so Markdown doesn't treat it as code
+    card_html = textwrap.dedent(f"""
         <div style="position: fixed; top: 50%; left: 55%; transform: translate(-50%, -50%); z-index: 999999; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); text-align: center; width: 500px; border: 2px solid #CEB36F; pointer-events: auto; font-family: sans-serif;">
             <div style="font-size: 60px; margin-bottom: 15px;">💎</div>
-            <h2 style="color: #4A4E5A; margin: 0;">Unlock {pg.title.replace(' 🔒', '')}</h2>
-            
+            <h2 style="color: #4A4E5A; margin: 0;">Unlock {clean_title}</h2>
             <p style="color: #6c757d; font-size: 1.1em; margin-top: 15px; line-height: 1.5;">
                 You've hit the limit of the Free Tier.<br>
                 This tool is restricted to <b>Pro Analysts</b>.
             </p>
-            
             <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
-            
             <div style="background-color: #f8f9fa; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 25px;">
                 <div style="color: #4A4E5A; font-weight: bold; margin-bottom: 5px;">Pro Benefits:</div>
                 <div style="color: #6c757d; font-size: 0.9em;">✅ <b>Unlimited</b> Scenario Storage</div>
                 <div style="color: #6c757d; font-size: 0.9em;">✅ <b>Export</b> to PDF Reports</div>
                 <div style="color: #6c757d; font-size: 0.9em;">✅ <b>Advanced</b> Yield Calculators</div>
             </div>
-
             <p style="font-size: 0.9em; color: #CEB36F; font-weight: bold; margin-bottom: 0;">
                 🔒 Login via Sidebar or Membership Page to unlock
             </p>
         </div>
-        """, unsafe_allow_html=True)
+    """)
 
-    # Note: We do NOT use st.stop() here so the background content still renders.
+    # 3. Inject it via Sidebar (Safe from the blur)
+    with st.sidebar:
+        st.markdown(card_html, unsafe_allow_html=True)
+
+    # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
-
-
-
-
 
