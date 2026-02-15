@@ -44,7 +44,22 @@ with st.sidebar:
                     
                     st.rerun()
                 else:
-                    st.error("Invalid Username or Password")
+                    # This is the "Authenticated" sidebar view
+                    st.success(f"Welcome, {st.session_state.username.capitalize()}")
+                    st.caption("✨ Cloud Sync Active")
+        
+                    if st.button("Logout"):
+                        # 1. Reset Auth States
+                        st.session_state.is_logged_in = False
+                        st.session_state.username = None
+                        st.session_state.is_pro = False
+            
+                        # 2. THE CRITICAL FIX: Physically delete the data bucket from RAM
+                        if 'app_db' in st.session_state:
+                            del st.session_state['app_db']
+            
+                        # 3. Refresh the app to trigger init_session_state() and load DEFAULTS
+                        st.rerun()
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
 is_pro = st.session_state.get("is_pro", False)
@@ -135,6 +150,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
