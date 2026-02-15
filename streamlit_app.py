@@ -16,19 +16,35 @@ inject_global_css()
 # --- 2. DATA INIT ---
 init_session_state()
 
-# --- 3. AUTHENTICATION SYSTEM (Sidebar) ---
+# --- 3. AUTHENTICATION SYSTEM (Multi-User Test Registry) ---
+# Define your verified test accounts
+VALID_USERS = {
+    "dori": "pass123",
+    "kevin": "pass456",
+    "analyst_test": "paid123"
+}
+
 with st.sidebar:
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
         with st.form("login_form"):
-            user = st.text_input("Username")
-            pw = st.text_input("Password", type="password")
+            user_input = st.text_input("Username").lower().strip()
+            pw_input = st.text_input("Password", type="password")
+            
             if st.form_submit_button("Login"):
-                if pw == "paid123":  # Your master test password
+                # Check if the user exists and the password matches
+                if user_input in VALID_USERS and pw_input == VALID_USERS[user_input]:
                     st.session_state.is_logged_in = True
-                    st.session_state.is_pro = True # Everyone who logs in is Pro
-                    st.session_state.username = user
+                    st.session_state.is_pro = True 
+                    st.session_state.username = user_input
+                    
+                    # IMPORTANT: Load the user-specific vault file
+                    from data_handler import load_user_data
+                    load_user_data(user_input) 
+                    
                     st.rerun()
+                else:
+                    st.error("Invalid Username or Password")
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
 is_pro = st.session_state.is_pro
@@ -119,5 +135,6 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
