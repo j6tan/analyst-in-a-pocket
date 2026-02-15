@@ -7,22 +7,20 @@ import math
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. THEME & STYLING ---
+# --- 1. THEME & UTILS ---
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
-# --- ROUNDING UTILITY ---
 def custom_round_up(n):
-    if n <= 0:
-        return 0.0
+    if n <= 0: return 0.0
     digits = int(math.log10(n)) + 1
     step = {1:10, 2:10, 3:10, 4:100, 5:100, 6:1000, 7:10000}.get(digits, 50000)
     return float(math.ceil(n / step) * step)
@@ -38,12 +36,12 @@ household = f"{name1} and {name2}" if name2 else name1
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
+        with open(path, "r") as f: return json.load(f)
     return {"rates": {"five_year_fixed_uninsured": 4.26}}
 
 intel = load_market_intel()
 
+# --- 3. CALCULATORS ---
 def calculate_ltt_and_fees(price, province_val, is_fthb, is_toronto=False):
     tax_rules = intel.get("tax_rules", {})
     if not tax_rules: return 0, 0
@@ -79,66 +77,46 @@ def calculate_min_downpayment(price):
     elif price <= 500000: return price * 0.05
     else: return (500000 * 0.05) + ((price - 500000) * 0.10)
 
-# --- 3. THE ULTIMATE SOLVER ---
 def solve_max_affordability(income_annual, debts_monthly, stress_rate, tax_rate):
     m_inc = income_annual / 12
     HEAT_FACTOR, TAX_FACTOR = 0.0002, tax_rate / 12
     ALPHA = HEAT_FACTOR + TAX_FACTOR
     r_mo = (stress_rate / 100) / 12
-    if r_mo > 0:
-        K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1)
-    else:
-        K = 1/300
+    K = (r_mo * (1 + r_mo)**300) / ((1 + r_mo)**300 - 1) if r_mo > 0 else 1/300
     budget = min(m_inc * 0.39, (m_inc * 0.44) - debts_monthly)
-    p3 = budget / (0.80 * K + ALPHA)
-    p2 = (budget - (25000 * K)) / (0.90 * K + ALPHA)
-    p1 = budget / (0.95 * K + ALPHA)
+    p3, p2, p1 = budget/(0.8*K+ALPHA), (budget-(25000*K))/(0.9*K+ALPHA), budget/(0.95*K+ALPHA)
     if p3 >= 1000000: fp, fd = p3, p3 * 0.20
-    elif p2 >= 500000: 
-        fp = min(p2, 999999) 
-        fd = 25000 + (fp - 500000) * 0.10
-    else: 
-        fp = min(p1, 499999) 
-        fd = fp * 0.05
+    elif p2 >= 500000: fp, fd = min(p2, 999999), 25000 + (min(p2, 999999) - 500000) * 0.10
+    else: fp, fd = min(p1, 499999), min(p1, 499999) * 0.05
     return fp, fd
 
-# --- 4. DATA LINKING (SUMS) ---
+# --- 4. PROFILE SUMMARIES ---
 t4_sum = float(prof.get('p1_t4', 0)) + float(prof.get('p2_t4', 0)) + float(prof.get('p1_pension', 0)) + float(prof.get('p2_pension', 0))
 bonus_sum = float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
 rental_sum = float(prof.get('inv_rental_income', 0))
 debt_sum = float(prof.get('car_loan', 0)) + float(prof.get('student_loan', 0)) + float(prof.get('cc_pmt', 0)) + (float(prof.get('loc_balance', 0)) * 0.03)
 
-# --- 5. INITIALIZE SCENARIO (THE AUTO-POPULATE FIX) ---
+# --- 5. INITIALIZE SCENARIO ---
 if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
-if aff.get('bank_rate', 0) == 0 or aff.get('combined_t4', 0) == 0:
+if aff.get('bank_rate', 0) == 0:
     TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
     tr = TAX_DEFAULTS.get(province, 0.0075)
     max_p, min_d = solve_max_affordability(t4_sum + bonus_sum + (rental_sum * 0.8), debt_sum, 6.26, tr)
-    aff['bank_rate'] = 4.26
-    aff['down_payment'] = custom_round_up(min_d + 2000)
-    aff['prop_taxes'] = custom_round_up(max_p * tr)
-    aff['heat'] = custom_round_up(max_p * 0.0002)
-    aff['combined_t4'] = t4_sum
-    aff['combined_bonus'] = bonus_sum
-    aff['combined_debt'] = debt_sum
-    # Force cloud sync
+    aff.update({'bank_rate': 4.26, 'down_payment': custom_round_up(min_d + 2000), 'prop_taxes': custom_round_up(max_p * tr), 
+                'heat': custom_round_up(max_p * 0.0002), 'combined_t4': t4_sum, 'combined_bonus': bonus_sum, 
+                'combined_debt': debt_sum, 'rental': rental_sum}) # Ensure rental is synced
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
 # --- 6. HEADER ---
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col2:
-    st.title("Mortgage Affordability Analysis")
-
-st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0;">🚀 {household}: Planning Your Move</h3>
-    <p style="margin-bottom: 0;">Mapping out the math for your next home in <b>{province}</b>.</p>
-</div>
-""", unsafe_allow_html=True)
+st.title("Mortgage Affordability Analysis")
+st.markdown(f"""<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD};">
+    <h3 style="margin-top:0;">🚀 {household}: Planning Your Move</h3>
+    <p style="margin-bottom:0;">Mapping out the math for your next home in <b>{province}</b>.</p>
+</div>""", unsafe_allow_html=True)
 
 # --- 7. UNDERWRITING ASSUMPTIONS ---
 st.subheader("⚙️ Underwriting Assumptions")
@@ -165,7 +143,7 @@ with col_1:
     st.subheader("💰 Income Summary")
     i_t4 = cloud_input("Combined T4 Income", "affordability", "combined_t4", step=1000.0)
     i_bonus = cloud_input("Total Additional Income", "affordability", "combined_bonus", step=500.0)
-    i_rental = cloud_input("Joint Rental Income", "affordability", "rental", step=100.0)
+    i_rental = cloud_input("Joint Rental Income", "affordability", "rental", step=100.0) # Corrected Link
     total_qualifying = i_t4 + i_bonus + (i_rental * 0.80)
     st.markdown(f"**Qualifying Income:** ${total_qualifying:,.0f}")
 
@@ -176,7 +154,14 @@ with col_2:
     f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
 
 with col_3:
-    st.info("**💡 Underwriting Insights:** T4 100%, Bonus 2-yr avg, Rental 80% haircut.")
+    # RESTORED FULL UNDERWRITING INSIGHTS
+    st.info("""
+    **💡 Underwriting Insights:**
+    * **T4:** Banks use **100%** of base salary.
+    * **Additional Income:** Usually a **2-year average** of Bonuses or Commissions is used.
+    * **Rental:** Typically 'haircut' to **80%** to account for vacancies and expenses.
+    * **LOC:** Stress-tested at **3%** of the total balance as a monthly payment.
+    """)
 
 # --- 9. CALCULATION LOGIC ---
 monthly_inc = total_qualifying / 12
