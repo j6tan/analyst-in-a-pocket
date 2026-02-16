@@ -6,7 +6,7 @@ import os
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -21,15 +21,14 @@ SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
 # --- 2. DATA RETRIEVAL (STRICT LINKING) ---
-# Retrieve from the main application database
 prof = st.session_state.app_db.get('profile', {}) 
 aff_sec = st.session_state.app_db.get('affordability_second', {}) 
 
-p1_name = prof.get('p1_name', 'Sarah')
-p2_name = prof.get('p2_name', 'James')
+p1_name = prof.get('p1_name', 'Client 1')
+p2_name = prof.get('p2_name', 'Client 2')
 household = f"{p1_name} & {p2_name}" if p2_name else p1_name
 
-# T4 Intelligence: Identify higher earner and their specific marginal rate
+# T4 Intelligence: Identify higher earner and their marginal rate
 p1_inc = float(prof.get('p1_t4', 0.0)) + float(prof.get('p1_bonus', 0.0))
 p2_inc = float(prof.get('p2_t4', 0.0)) + float(prof.get('p2_bonus', 0.0))
 p1_tax = float(prof.get('p1_tax_rate', 35.0))
@@ -47,7 +46,7 @@ if 'rental_vs_stock' not in st.session_state.app_db:
     st.session_state.app_db['rental_vs_stock'] = {}
 rvs_data = st.session_state.app_db['rental_vs_stock']
 
-# SURGICAL INITIALIZATION: Pulling exact keys from Affordability Secondary
+# SURGICAL INITIALIZATION: Pulling from Affordability Secondary
 if not rvs_data.get('initialized'):
     rvs_data.update({
         "price": float(aff_sec.get('target_price', 800000.0)),
@@ -112,10 +111,10 @@ with header_col2: st.title("Rental Property vs. Stock Portfolio")
 
 # --- 6. STORYTELLING ---
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">💼 {household}’s Wealth Crossroads</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        You are debating two paths: the leveraged Rental Property or a passive Stock Portfolio. This analysis uses the exact property data from your <b>Portfolio Expansion Map</b> to determine the superior wealth path.
+        You are debating two paths: the leveraged Rental Property or a passive Stock Portfolio. This analysis determines which path builds your net worth faster.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -126,7 +125,7 @@ with col1:
     st.subheader("🏠 Real Estate Asset")
     price = cloud_input("Purchase Price ($)", "rental_vs_stock", "price", step=25000.0)
     inv = cloud_input("Down Payment ($)", "rental_vs_stock", "inv", step=5000.0)
-    rate = cloud_input("Interest Rate (%)", "rental_vs_stock", "rate", step=0.1) # Renamed
+    rate = cloud_input("Interest Rate (%)", "rental_vs_stock", "rate", step=0.1)
     rent = cloud_input("Monthly Rent ($)", "rental_vs_stock", "rent", step=50.0)
     
     apprec = st.slider("Annual Appreciation (%)", 0.0, 7.0, float(rvs_data.get('apprec', 3.0)), 
@@ -151,7 +150,7 @@ with col2:
     m_tax_rate = cloud_input("Marginal Tax Rate (%)", "rental_vs_stock", "tax_rate", step=1.0)
     
     st.info(f"""
-        **🎯 Lead Taxpayer: {lead_taxpayer}** Based on your T4 profiles, holding the investment under the higher earner is recommended to maximize the value of 'Negative Carry' tax deductions.
+        **🎯 Lead Taxpayer: {lead_taxpayer}** Based on your household T4 profile, holding this asset under the higher earner is recommended to maximize the value of 'Negative Carry' tax deductions.
     """)
 
 # Execution
@@ -178,6 +177,8 @@ with res_col2:
     st.subheader("🛡️ Tax Alpha")
     st.metric("Annual T4 Tax Refund", f"${tax_saving:,.0f}", help=f"Estimated annual tax savings from deducting property losses against {lead_taxpayer}'s income.")
     st.write(f"Holding under **{lead_taxpayer}** recovers **${tax_saving:,.0f}/year** in cash from the CRA.")
+
+
 
 # --- 9. TRAJECTORY ---
 st.divider()
