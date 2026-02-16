@@ -33,7 +33,7 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">📋 Strategic Brief: {household_name} Lifestyle</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.6; margin: 0;">
-        Real estate success isn't just about what the bank approves—it's about what <b>{p1_name}</b> can actually live with. 
+        Real estate success isn't just about what the bank approves—it's about what <b>you</b> can actually live with. 
         Define your non-debt spending below to calculate your true household resilience.
     </p>
 </div>
@@ -78,7 +78,7 @@ metric_col, chart_col = st.columns([1, 2])
 with metric_col:
     st.markdown(f"""
     <div style="background-color: #E9ECEF; padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #DEE2E6;">
-        <p style="margin: 0; color: {SLATE_ACCENT}; font-size: 0.9em; font-weight: 600;">{p1_name.upper()}'S BURN RATE</p>
+        <p style="margin: 0; color: {SLATE_ACCENT}; font-size: 0.9em; font-weight: 600;">{household_name.upper()}'S BURN RATE</p>
         <h2 style="margin: 0; color: #2E2B28; font-size: 2.8em;">${total_lifestyle:,.0f}</h2>
         <p style="margin: 5px 0 0 0; color: #6C757D; font-size: 0.9em;">leaving the pocket monthly</p>
     </div>
