@@ -97,13 +97,21 @@ with chart_col:
     clean_data = {k: v for k, v in data.items() if v > 0}
     
     if clean_data:
+        # Using a sophisticated palette of Gold, Slate, Sage, and Muted Sand
         fig = go.Figure(data=[go.Pie(
             labels=list(clean_data.keys()), 
             values=list(clean_data.values()), 
             hole=.4,
-            marker=dict(colors=['#CEB36F', '#4A4E5A', '#DEE2E6', '#A52A2A', '#1B4D3E'])
+            marker=dict(colors=['#CEB36F', '#4A4E5A', '#889696', '#7D8491', '#EAE0D5']),
+            textinfo='label+percent',
+            insidetextorientation='radial'
         )])
-        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=250, showlegend=True)
+        fig.update_layout(
+            margin=dict(t=0, b=0, l=0, r=0), 
+            height=280, 
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.caption("Start entering expenses to see your household breakdown.")
