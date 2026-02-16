@@ -20,7 +20,7 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL ---
+# --- 2. DATA RETRIEVAL (STRICT LINKING) ---
 prof = st.session_state.app_db.get('profile', {}) 
 aff_sec = st.session_state.app_db.get('affordability_second', {}) 
 
@@ -96,7 +96,7 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
             ann_int += i_mo
             curr_loan -= (m_pi - i_mo)
         
-        # User Logic: Deductibles = Interest + Tax + Ins + Strata + R&M
+        # Deductibles = Interest + Tax + Ins + Strata + R&M
         tax_deductibles = ann_int + costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint']
         total_opex = costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint'] + (r_income*12*(costs['mgmt']/100))
         
@@ -178,7 +178,16 @@ comp_df = pd.DataFrame({
 }).set_index("Metric")
 st.table(comp_df)
 
-# --- 9. REFINED VERDICT ---
+# --- 9. TOTAL WEALTH METRICS ---
+st.write("")
+w1, w2 = st.columns(2)
+with w1:
+    st.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated 10-year cash flow + Net sale proceeds")
+with w2:
+    st.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated 10-year cash flow + Net sale proceeds")
+
+# --- 10. REFINED VERDICT ---
+st.write("")
 winner = "🏠 Rental Property" if re_tot > st_tot else "📈 Stock Portfolio"
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 18px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 6px solid {PRIMARY_GOLD};">
@@ -188,14 +197,5 @@ st.markdown(f"""
     </p>
 </div>
 """, unsafe_allow_html=True)
-
-# --- 10. WEALTH CHART ---
-st.divider()
-st.subheader("🏆 Total Take-Home Wealth")
-fig = go.Figure(data=[
-    go.Bar(name='Rental', x=['Rental Path'], y=[re_tot], marker_color=PRIMARY_GOLD, text=[f"${re_tot:,.0f}"], textposition='auto'),
-    go.Bar(name='Stock', x=['Stock Path'], y=[st_tot], marker_color=CHARCOAL, text=[f"${st_tot:,.0f}"], textposition='auto')
-])
-st.plotly_chart(fig, use_container_width=True)
 
 show_disclaimer()
