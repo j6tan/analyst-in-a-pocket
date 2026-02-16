@@ -12,13 +12,13 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. DATA LINKING (STRICT) ---
+# --- 1. DATA LINKING ---
 prof = st.session_state.app_db.get('profile', {})
 
 client_name1 = prof.get('p1_name', 'Client 1')
 client_name2 = prof.get('p2_name', 'Client 2')
 
-# Calculate Total Income for Tax Purposes (T4 + Bonus)
+# Calculate Total Income for Tax Purposes
 p1_income = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0))
 p2_income = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0))
 
@@ -51,8 +51,7 @@ prof_mortgage = float(prof.get('m_bal', 500000.0))
 prof_rate = float(prof.get('m_rate', 5.0))
 prof_amort = int(prof.get('m_amort', 25))
 
-# LOGIC FIX: Check if we are stuck on "Stale Defaults" (500k/5%/25yr)
-# If the current Smith data matches the generic defaults EXACTLY, but the profile has different data, we force an update.
+# LOGIC FIX: Check for Stale Defaults
 current_sm_amt = float(sm_data.get('mortgage_amt', 500000.0))
 current_sm_rate = float(sm_data.get('mortgage_rate', 5.0))
 current_sm_amort = int(sm_data.get('amortization', 25))
@@ -62,7 +61,6 @@ has_real_profile = (prof_mortgage != 500000.0 or prof_rate != 5.0)
 
 if not sm_data.get('initialized') or (is_stale_default and has_real_profile):
     
-    # Handle renting edge case (0 values)
     if prof_mortgage == 0: prof_mortgage = 500000.0
     if prof_rate == 0: prof_rate = 5.0
     if prof_amort == 0: prof_amort = 25
@@ -166,7 +164,8 @@ with st.container(border=True):
     c7, c8, c9 = st.columns(3)
     with c7:
          tax_rate = cloud_input("Marginal Tax Rate (%)", "smith_maneuver", "tax_rate", step=0.5)
-         st.caption(f"Strategy Lead: **{lead_client}** (Higher Earner)") 
+         # Updated Note: Closer and more actionable
+         st.markdown(f"<p style='font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: -10px;'>Recommend: hold the investment under <b>{lead_client}</b> for max tax benefits</p>", unsafe_allow_html=True)
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
