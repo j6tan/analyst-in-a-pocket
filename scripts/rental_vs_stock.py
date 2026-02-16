@@ -18,9 +18,9 @@ PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
-BORDER_GREY = "#DEE2E6" # Fixed the missing variable
+BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL (STRICT LINKING) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {}) 
 aff_sec = st.session_state.app_db.get('affordability_second', {}) 
 
@@ -71,9 +71,9 @@ est_annual_opex = rvs_data['prop_tax'] + (rvs_data['ins']*12) + (rvs_data['strat
 est_taxable_inc = (rvs_data['rent'] * 12) - est_annual_int - est_annual_opex
 
 if est_taxable_inc > 0:
-    rec_name, rec_rate, rec_reason = lower_name, lower_rate, "Profit Minimization (Lower Tax Bill)."
+    rec_name, rec_rate, rec_reason = lower_name, lower_rate, "Profit Minimization (Minimize Tax Owed)."
 else:
-    rec_name, rec_rate, rec_reason = higher_name, higher_rate, "Loss Maximization (Higher T4 Refund)."
+    rec_name, rec_rate, rec_reason = higher_name, higher_rate, "Loss Maximization (Maximize Tax Refund)."
 
 if not rvs_data.get('tax_set'):
     rvs_data['tax_rate'] = rec_rate
@@ -85,13 +85,11 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
     m_rate = (rate/100)/12
     n_mo = 25 * 12
     m_pi = loan * (m_rate * (1+m_rate)**n_mo) / ((1+m_rate)**n_mo - 1) if loan > 0 else 0
-    
     curr_val, curr_loan, stock_val = price, loan, inv + (price * 0.02)
     cum_re_cash, cum_st_cash = 0, 0
     data = []
     
     for y in range(1, years + 1):
-        # 1. Rental Path Logic
         ann_int = 0
         for _ in range(12):
             i_mo = curr_loan * m_rate
@@ -100,86 +98,32 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
         
         # User Logic: Deductibles = Interest + Tax + Ins + Strata + R&M
         tax_deductibles = ann_int + costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint']
-        total_cash_opex = costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint'] + (r_income*12*(costs['mgmt']/100))
-        
-        taxable_re = (r_income * 12) - tax_deductibles
-        re_tax_impact = taxable_re * (tax_rate/100) 
-        
-        net_re_cash = (r_income * 12) - (m_pi * 12) - total_cash_opex - re_tax_impact
-        cum_re_cash += net_re_cash
-        
-        # 2. Stock Path Logic
-        div_gross = stock_val * (s_div/100)
-        if acc_type == "Non-Registered":
-            st_tax_impact = div_gross * (tax_rate/100) * 0.5 # Div Tax Credit approx
-        else:
-            st_tax_impact = 0 
-            
-        net_st_cash = div_gross - st_tax_impact
-        cum_st_cash += net_st_cash
-        
-        curr_val *= (1 + apprec/100)
-        stock_val *= (1 + s_growth/100)
-        
-        data.append({
-            "Year": y, "RE_Equity": max(0, curr_val - curr_loan), "Stock_Value": stock_val, 
-            "RE_Cash": net_re_cash/12, "Stock_Cash": net_st_cash/12,
-            "RE_Tax": re_tax_impact, "ST_Tax": st_tax_impact
-        })
-
-    # Sale Proceeds - Rental
-    re_sell_costs = (curr_val * 0.035) + 2000 
-    re_cap_gain_tax = max(0, curr_val - price - re_sell_costs) * 0.5 * (tax_rate/100)
-    net_proceeds_re = curr_val - curr_loan - re_sell_costs - re_cap_gain_tax
-    final_re_wealth = net_proceeds_re + cum_re_cash
-
-    # Sale Proceeds - Stock
-    st_sell_costs = stock_val * 0.01
-    st_profit = stock_val - (inv + (price*0.02)) - st_sell_costs
-    if acc_type == "TFSA": st_tax = 0
-    elif acc_type == "RRSP": st_tax = stock_val * (tax_rate/100) 
-    else: st_tax = max(0, st_profit) * 0.5 * (tax_rate/100)
-    
-    net_proceeds_st = stock_val - st_sell_costs - st_tax
-    final_stock_wealth = net_proceeds_st + cum_st_cash
-    
-    return pd.DataFrame(data), final_re_wealth, final_stock_wealth, (re_cap_gain_tax + re_sell_fees), (st_tax + st_sell_fees) if 're_sell_fees' in locals() else (re_cap_gain_tax + re_sell_costs), (st_tax + st_sell_costs), net_proceeds_re, net_proceeds_st
-
-# Calculation Fix for Return Values
-def run_wealth_engine_fixed(price, inv, rate, apprec, r_income, costs, s_growth, s_div, years, tax_rate, acc_type):
-    loan = price - inv
-    m_rate = (rate/100)/12
-    n_mo = 25 * 12
-    m_pi = loan * (m_rate * (1+m_rate)**n_mo) / ((1+m_rate)**n_mo - 1) if loan > 0 else 0
-    curr_val, curr_loan, stock_val = price, loan, inv + (price * 0.02)
-    cum_re_cash, cum_st_cash = 0, 0
-    data = []
-    for y in range(1, years + 1):
-        ann_int = 0
-        for _ in range(12):
-            i_mo = curr_loan * m_rate
-            ann_int += i_mo
-            curr_loan -= (m_pi - i_mo)
-        tax_deductibles = ann_int + costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint']
         total_opex = costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint'] + (r_income*12*(costs['mgmt']/100))
+        
         taxable_re = (r_income * 12) - tax_deductibles
         re_tax_impact = taxable_re * (tax_rate/100)
+        
         net_re_cash = (r_income * 12) - (m_pi * 12) - total_opex - re_tax_impact
         cum_re_cash += net_re_cash
+        
         div_gross = stock_val * (s_div/100)
         st_tax_impact = div_gross * (tax_rate/100) * 0.5 if acc_type == "Non-Registered" else 0
         net_st_cash = div_gross - st_tax_impact
         cum_st_cash += net_st_cash
+        
         curr_val *= (1 + apprec/100)
         stock_val *= (1 + s_growth/100)
         data.append({"Year": y, "RE_Cash": net_re_cash/12, "Stock_Cash": net_st_cash/12, "RE_Tax": re_tax_impact, "ST_Tax": st_tax_impact, "RE_Equity": max(0, curr_val-curr_loan), "Stock_Value": stock_val})
+    
     re_sell_costs = (curr_val * 0.035) + 2000
     re_cap_gain_tax = max(0, curr_val - price - re_sell_costs) * 0.5 * (tax_rate/100)
     net_proceeds_re = curr_val - curr_loan - re_sell_costs - re_cap_gain_tax
+    
     st_sell_costs = stock_val * 0.01
     st_profit = stock_val - (inv + (price*0.02)) - st_sell_costs
     st_tax = 0 if acc_type == "TFSA" else (stock_val * (tax_rate/100) if acc_type == "RRSP" else max(0, st_profit) * 0.5 * (tax_rate/100))
     net_proceeds_st = stock_val - st_sell_costs - st_tax
+    
     return pd.DataFrame(data), (net_proceeds_re + cum_re_cash), (net_proceeds_st + cum_st_cash), (re_cap_gain_tax + re_sell_costs), (st_tax + st_sell_costs), net_proceeds_re, net_proceeds_st
 
 # --- 6. INPUTS ---
@@ -205,31 +149,43 @@ with col2:
     s_div = cloud_input("Dividend Yield (%)", "rental_vs_stock", "dividend_yield")
     years = st.select_slider("Horizon (Years)", options=[5, 10, 15, 20], value=int(rvs_data.get('years', 10)))
     tax_rate_input = cloud_input("Owner Marginal Tax Rate (%)", "rental_vs_stock", "tax_rate")
-    st.info(f"**🎯 Strategy:** Hold under **{rec_name}** to minimize tax bill / maximize refund.")
+    st.info(f"**🎯 Strategy:** Hold under **{rec_name}**.")
 
 # --- 7. EXECUTION ---
 costs = {'tax': tax_cost, 'ins': ins_cost, 'strata': strata_cost, 'maint': maint_cost, 'mgmt': mgmt_pct}
-df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine_fixed(price, inv, rate, apprec, rent, costs, s_growth, s_div, years, tax_rate_input, st_acc)
+df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine(price, inv, rate, apprec, rent, costs, s_growth, s_div, years, tax_rate_input, st_acc)
 
 # --- 8. COMPARISON TABLE ---
 st.divider()
-st.subheader(f"📊 Year {years} Side-by-Side Comparison")
+st.subheader(f"📊 Year {years} Snapshot")
 re_tax_annual = df.iloc[-1]['RE_Tax']
 st_tax_annual = df.iloc[-1]['ST_Tax']
 
 comp_df = pd.DataFrame({
-    "Metric": ["Monthly Net Cash Flow", "Annual Tax Implication", "Net Sale Proceeds (Take-Home)", "Cost to Sell (Exit Tax/Fees)"],
-    "🏠 Rental Path": [f"${df.iloc[-1]['RE_Cash']:,.0f}", f"{'-$' if re_tax_annual > 0 else '+$'}{abs(re_tax_annual):,.0f} {'Bill' if re_tax_annual > 0 else 'Refund'}", f"${re_net:,.0f}", f"-${re_leak:,.0f}"],
-    "📈 Stock Path": [f"${df.iloc[-1]['Stock_Cash']:,.0f}", f"-${st_tax_annual:,.0f} Bill" if st_tax_annual > 0 else "$0 (Tax-Sheltered)", f"${st_net:,.0f}", f"-${st_leak:,.0f}"]
+    "Metric": ["Monthly Net Cash Flow", "Annual Tax Impact", "Net Sale Proceeds (Take-Home)", "Cost to Sell (Taxes/Fees)"],
+    "🏠 Rental Path": [
+        f"${df.iloc[-1]['RE_Cash']:,.0f}", 
+        f"{'-$' if re_tax_annual > 0 else '+$'}{abs(re_tax_annual):,.0f} {'(Tax Owed)' if re_tax_annual > 0 else '(Tax Saved)'}", 
+        f"${re_net:,.0f}", 
+        f"-${re_leak:,.0f}"
+    ],
+    "📈 Stock Path": [
+        f"${df.iloc[-1]['Stock_Cash']:,.0f}", 
+        f"-${st_tax_annual:,.0f} (Tax Owed)" if st_tax_annual > 0 else "$0 (Tax-Sheltered)", 
+        f"${st_net:,.0f}", 
+        f"-${st_leak:,.0f}"
+    ]
 }).set_index("Metric")
 st.table(comp_df)
 
-# --- 9. VERDICT ---
-winner = "🏠 Rental Path" if re_tot > st_tot else "📈 Stock Path"
+# --- 9. REFINED VERDICT ---
+winner = "🏠 Rental Property" if re_tot > st_tot else "📈 Stock Portfolio"
 st.markdown(f"""
-<div style="background-color: {CHARCOAL}; padding: 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; text-align: center;">
-    <h2 style="color: {PRIMARY_GOLD}; margin-top: 0;">🏆 Strategic Verdict</h2>
-    <p style="color: white; font-size: 1.3em;">The <b>{winner}</b> generates <b>${abs(re_tot - st_tot):,.0f}</b> more in total take-home wealth.</p>
+<div style="background-color: {OFF_WHITE}; padding: 18px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 6px solid {PRIMARY_GOLD};">
+    <h3 style="color: {CHARCOAL}; margin-top: 0; margin-bottom: 8px;">🏆 Strategic Verdict</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.15em; margin-bottom: 0;">
+        The <b>{winner}</b> generates <b>${abs(re_tot - st_tot):,.0f}</b> more in total take-home wealth over {years} years.
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
