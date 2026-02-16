@@ -44,7 +44,6 @@ if 'smith_maneuver' not in st.session_state.app_db:
 sm_data = st.session_state.app_db['smith_maneuver']
 
 if not sm_data.get('initialized'):
-    # Logic: Pull from profile if available, otherwise use defaults
     init_mortgage = float(primary.get('mortgage_balance', 500000.0))
     init_rate = float(primary.get('mortgage_interest_rate', 5.0))
     init_amort = int(primary.get('remaining_amortization', 25))
@@ -53,7 +52,7 @@ if not sm_data.get('initialized'):
         "mortgage_amt": init_mortgage,
         "amortization": init_amort,
         "mortgage_rate": init_rate,
-        "loc_rate": init_rate + 1.0, # Smart Spread Logic
+        "loc_rate": init_rate + 1.0,
         "inv_return": 7.0,
         "div_yield": 5.0,
         "tax_rate": float(suggested_tax_rate),
@@ -78,7 +77,7 @@ with header_col1:
 with header_col2:
     st.title("The Smith Maneuver Strategy")
 
-# --- 5. RICH STORYTELLING ---
+# --- 5. STORYTELLING ---
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🔄 {household_names}: Turning Mortgage Interest into Tax Refunds</h3>
@@ -99,7 +98,7 @@ with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=Fal
     4.  **Income-Generating Assets:** Must have a "reasonable expectation of income" (Dividends/Rent/Interest).
     """)
 
-# --- 7. MECHANICS (THE CYCLE) ---
+# --- 7. MECHANICS ---
 st.divider()
 st.subheader("⚙️ The Mechanics: Follow the Dollar")
 st.markdown("Here is exactly what happens every single month:")
@@ -116,7 +115,6 @@ with c4:
 with c5:
     st.markdown("<div style='text-align:center; border:1px solid #333; background:#F8F9FA; padding:10px; border-radius:8px; height:100%;'><div style='font-size:2em;'>📈</div><div style='font-weight:bold; margin-top:5px;'>3. Invest</div><div style='background:#ddd; padding:5px; border-radius:5px; font-weight:bold; color:#333;'>Assets: +$1,000</div></div>", unsafe_allow_html=True)
 
-# CSS Padding added to prevent "crowding" (1mm ≈ 4px, but 15px used for standard editorial spacing)
 st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
 st.info("💡 **The Accelerator:** At the end of the year, the interest you paid on Step 2 generates a tax refund. You take that refund and apply it to Step 1 (Prepayment), which speeds up the entire cycle.")
 
@@ -151,34 +149,29 @@ with st.container(border=True):
         strategy_horizon = st.slider("Strategy Horizon (Years)", 5, 30, int(sm_data.get('strategy_horizon', 25)), step=5)
         sm_data['strategy_horizon'] = strategy_horizon
 
-# --- 9. CALCULATION ENGINE ---
+# --- 9. CALC ENGINE ---
 sim_years = max(amortization, strategy_horizon)
 n_months = sim_years * 12
 r_m = mortgage_rate / 100 / 12
 n_m_amort = amortization * 12 
 monthly_payment = mortgage_amt * (r_m * (1 + r_m)**n_m_amort) / ((1 + r_m)**n_m_amort - 1)
 
-balance, heloc_balance, portfolio, cum_tax_refund = mortgage_amt, 0.0, 0.0, 0.0
+balance, heloc_balance, portfolio = mortgage_amt, 0.0, 0.0
 if initial_lump > 0:
     heloc_balance += initial_lump
     portfolio += initial_lump
 
 base_balance = mortgage_amt
 annual_data = []
-current_year_heloc_interest = 0.0
-year_refund, current_year_borrows, year_heloc_interest_cost = 0.0, 0.0, 0.0
+current_year_heloc_interest, year_refund, current_year_borrows, year_heloc_interest_cost = 0.0, 0.0, 0.0, 0.0
 
 for month in range(1, n_months + 1):
     # Baseline
-    base_principal = 0.0
     if base_balance > 0:
-        base_int = base_balance * r_m
-        base_principal = monthly_payment - base_int
-        if base_principal > base_balance: base_principal = base_balance
-        base_balance -= base_principal
-    base_net_worth = (mortgage_amt - base_balance)
+        base_balance -= (monthly_payment - (base_balance * r_m))
+    base_net_worth = (mortgage_amt - max(0, base_balance))
 
-    # Active Strategy
+    # Active
     principal_m = 0.0
     if balance > 0:
         interest_m = balance * r_m
@@ -186,7 +179,6 @@ for month in range(1, n_months + 1):
         if principal_m > balance: principal_m = balance
         balance -= principal_m
     new_borrowing = principal_m 
-    
     interest_heloc = heloc_balance * (loc_rate / 100 / 12)
     current_year_heloc_interest += interest_heloc
     year_heloc_interest_cost += interest_heloc
@@ -199,45 +191,38 @@ for month in range(1, n_months + 1):
         else:
             portfolio += refund_amount
         current_year_heloc_interest, year_refund = 0.0, refund_amount
-        cum_tax_refund += refund_amount
 
-    current_year_borrows += new_borrowing
     heloc_balance += new_borrowing
     portfolio = (portfolio + new_borrowing) * (1 + inv_return / 100 / 12)
 
     if month % 12 == 0:
-        annual_div_income = portfolio * (div_yield / 100)
         annual_data.append({
             "Year": month // 12, "Mortgage Balance": max(0, balance), "Investment Loan": heloc_balance,
-            "Portfolio Value": portfolio, "Annual Tax Refund": year_refund, "Dividend Income": annual_div_income,
+            "Portfolio Value": portfolio, "Annual Tax Refund": year_refund, "Dividend Income": portfolio * (div_yield / 100),
             "Annual Interest Cost": year_heloc_interest_cost,
             "Net Equity (Active)": portfolio - heloc_balance + (mortgage_amt - balance),
-            "Baseline Net Worth": base_net_worth, "Baseline Mortgage": base_balance
+            "Baseline Net Worth": base_net_worth, "Baseline Mortgage": max(0, base_balance)
         })
-        year_refund, current_year_borrows, year_heloc_interest_cost = 0.0, 0.0, 0.0
+        year_refund, year_heloc_interest_cost = 0.0, 0.0
 
 df_annual = pd.DataFrame(annual_data)
 df_view = df_annual[df_annual['Year'] <= strategy_horizon].copy()
 
 # --- 10. CASH FLOW ---
-total_int_cost = df_view['Annual Interest Cost'].sum()
-total_divs = df_view['Dividend Income'].sum()
-total_refunds = df_view['Annual Tax Refund'].sum()
-net_cashflow = (total_divs + total_refunds) - total_int_cost
-
 st.divider()
 st.subheader(f"💰 Cash Flow Analysis ({strategy_horizon} Year Horizon)")
 cf1, cf2, cf3, cf4 = st.columns(4)
-cf1.metric("Total Interest Cost", f"${total_int_cost:,.0f}")
-cf2.metric("Total Dividends", f"${total_divs:,.0f}")
-cf3.metric("Total Tax Refunds", f"${total_refunds:,.0f}")
-cf4.metric("Net Cash Benefit", f"${net_cashflow:,.0f}", delta="Positive" if net_cashflow > 0 else "Negative")
+cf1.metric("Total Interest Cost", f"${df_view['Annual Interest Cost'].sum():,.0f}")
+cf2.metric("Total Dividends", f"${df_view['Dividend Income'].sum():,.0f}")
+cf3.metric("Total Tax Refunds", f"${df_view['Annual Tax Refund'].sum():,.0f}")
+net_benefit = (df_view['Dividend Income'].sum() + df_view['Annual Tax Refund'].sum()) - df_view['Annual Interest Cost'].sum()
+cf4.metric("Net Cash Benefit", f"${net_benefit:,.0f}", delta="Positive" if net_benefit > 0 else "Negative")
 
 # --- 11. TABLE ---
 st.divider()
 st.subheader(f"📅 {strategy_horizon}-Year Projection")
 display_df = df_view[['Year', 'Mortgage Balance', 'Investment Loan', 'Portfolio Value', 'Annual Tax Refund', 'Dividend Income']].copy()
-display_df.columns = ['Year', 'Bad Debt', 'Good Debt', 'Asset Value', 'Tax Refund', 'Dividend CF']
+display_df.columns = ['Year', 'Bad Debt (Mortgage)', 'Good Debt (HELOC)', 'Asset Value (Portfolio)', 'Tax Refund (Re-invested)', 'Dividend Cash Flow']
 for col in display_df.columns:
     if col != 'Year': display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 st.table(display_df)
@@ -248,43 +233,61 @@ st.subheader("📈 Strategy vs. Do Nothing")
 col_res1, col_res2 = st.columns(2)
 with col_res1:
     fig_debt = go.Figure()
-    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Active", line=dict(color=INTEREST_COLOR, width=2)))
-    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Mortgage"], name="Baseline", line=dict(color=BASELINE_BLUE, dash='dot')))
+    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Active Mortgage", line=dict(color=INTEREST_COLOR, width=2)))
+    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Mortgage"], name="Do Nothing Mortgage", line=dict(color=BASELINE_BLUE, dash='dot')))
     fig_debt.update_layout(title="Mortgage Paydown Speed", height=300, yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_debt, use_container_width=True)
 with col_res2:
     fig_wealth = go.Figure()
-    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Net Equity (Active)"], name="Active", line=dict(color=PRINCIPAL_COLOR, width=3)))
-    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Net Worth"], name="Baseline", line=dict(color=BASELINE_BLUE, dash='dot')))
-    fig_wealth.update_layout(title="Total Net Worth", height=300, yaxis=dict(tickprefix="$"))
+    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Net Equity (Active)"], name="Active Net Worth", line=dict(color=PRINCIPAL_COLOR, width=3)))
+    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Net Worth"], name="Do Nothing Net Worth", line=dict(color=BASELINE_BLUE, dash='dot')))
+    fig_wealth.update_layout(title="Total Net Worth Comparison", height=300, yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 13. STRESS TEST ---
+# --- 13. STRESS TEST (RESTORED ORIGINAL LAYOUT) ---
 st.markdown("---")
 st.subheader("⚠️ Stress Test Simulator")
+st.markdown("""
+This section models a **market crash and stagnation**. It does not change the charts above, but provides a specific "What If" analysis.
+**Scenario Logic:**
+1.  **Drop:** Market drops by X% in the specified Start Year.
+2.  **Stagnation:** Market stays flat (0% growth) for the Duration.
+3.  **Cost:** You continue to pay full interest on the HELOC during the recovery.
+""")
+
 with st.container(border=True):
     c1, c2, c3 = st.columns(3)
-    crash_drop = st.slider("Crash Magnitude (%)", 0, 50, 30, key="stress_drop")
-    crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, min(5, strategy_horizon), key="stress_start")
-    crash_duration = st.slider("Recovery Duration (Years)", 1, 10, 3, key="stress_dur")
+    with c1:
+        crash_drop = st.slider("Crash Magnitude (%)", 0, 50, 30)
+    with c2:
+        crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, 5)
+    with c3:
+        crash_duration = st.slider("Recovery Duration (Years)", 1, 10, 3)
+
     try:
         row_before = df_annual[df_annual['Year'] == crash_start].iloc[0]
-        loan_at_start, port_at_start = row_before["Investment Loan"], row_before["Portfolio Value"]
+        loan_at_start = row_before["Investment Loan"]
+        port_at_start = row_before["Portfolio Value"]
         port_after_drop = port_at_start * (1 - crash_drop / 100)
         total_stagnation_cost = (loan_at_start * (loc_rate / 100)) * crash_duration
         net_equity_at_recovery = port_after_drop - loan_at_start
+        
         st.divider()
         col_s1, col_s2, col_s3 = st.columns(3)
-        col_s1.metric("Portfolio (After Drop)", f"${port_after_drop:,.0f}", delta=f"-${port_at_start - port_after_drop:,.0f}", delta_color="inverse")
-        col_s2.metric(f"Cost to Hold ({crash_duration} yrs)", f"${total_stagnation_cost:,.0f}")
-        if net_equity_at_recovery < 0:
-            col_s3.metric("Net Equity Position", f"-${abs(net_equity_at_recovery):,.0f}", delta="UNDERWATER", delta_color="inverse")
-            st.error("🚨 Warning: Liability exceeds Assets")
-        else:
-            col_s3.metric("Net Equity Position", f"${net_equity_at_recovery:,.0f}", delta="Safe")
-            st.success("✅ Solvent (Assets > Loan)")
-    except Exception as e:
-        st.write(f"Simulation data unavailable.")
+        with col_s1:
+            st.metric("Portfolio Value (After Drop)", f"${port_after_drop:,.0f}", delta=f"-${port_at_start - port_after_drop:,.0f}", delta_color="inverse")
+            st.caption(f"Immediate impact in Year {crash_start}")
+        with col_s2:
+            st.metric(f"Cost to Hold (over {crash_duration} yrs)", f"${total_stagnation_cost:,.0f}", help="Total interest paid while waiting for market to recover.")
+            st.caption("Interest paid while market was flat")
+        with col_s3:
+            if net_equity_at_recovery < 0:
+                st.metric("Net Equity Position", f"-${abs(net_equity_at_recovery):,.0f}", delta="UNDERWATER", delta_color="inverse")
+                st.error("🚨 Warning: Liability exceeds Assets")
+            else:
+                st.metric("Net Equity Position", f"${net_equity_at_recovery:,.0f}", delta="Safe")
+                st.success("✅ Solvent (Assets > Loan)")
+    except Exception:
+        st.write(f"Simulation data unavailable for Year {crash_start}")
 
-# --- 14. DISCLAIMER ---
 show_disclaimer()
