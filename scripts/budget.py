@@ -5,7 +5,6 @@ import os
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -17,17 +16,15 @@ PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
-# Pull Personalization Data
 prof = st.session_state.app_db.get('profile', {})
 p1_name = prof.get('p1_name', 'Primary Client')
 p2_name = prof.get('p2_name', '')
 household_name = f"{p1_name} & {p2_name}" if p2_name else p1_name
 
-# --- 2. INITIALIZATION ---
 if 'budget' not in st.session_state.app_db:
     st.session_state.app_db['budget'] = {}
 
-# --- 3. PERSONALIZED HEADER ---
+# --- 2. PERSONALIZED HEADER ---
 st.title("🥑 The Lifestyle Burn Rate")
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
@@ -39,7 +36,17 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. RELATABLE INPUT COLUMNS ---
+# --- 3. THE "PRO TIP" BOX ---
+st.info(f"""
+**💡 Pro Tip for High-Income Earners:** Banks qualify you based on your 'Ability to Pay Debt.' They don't account for private school, travel, or fine dining. 
+A high T4 income might get you approved for two properties, but without an accurate budget, 
+the second property might force a significant reduction in your quality of life. 
+**Be honest here—this is for your eyes only.**
+""")
+
+
+
+# --- 4. INPUT COLUMNS ---
 col1, col2 = st.columns(2)
 
 with col1:
@@ -65,11 +72,10 @@ with col2:
     car_ins_maint = cloud_input("Insurance & Maintenance ($)", "budget", "car_ins_maint", step=25.0)
     misc = cloud_input("The 'Anything Else' Buffer ($)", "budget", "misc", step=50.0)
 
-# --- 5. CALCULATIONS ---
+# --- 5. CALCULATIONS & CHART ---
 total_lifestyle = (groceries + dining + childcare + pets + gas_transit + 
                    car_ins_maint + utilities + shopping + entertainment + health + misc)
 
-# --- 6. VISUALIZATION & IMPACT ---
 st.divider()
 st.subheader("📊 Monthly Lifestyle Snapshot")
 
@@ -83,35 +89,13 @@ with metric_col:
         <p style="margin: 5px 0 0 0; color: #6C757D; font-size: 0.9em;">leaving the pocket monthly</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    st.info(f"💡 This budget represents your **Lifestyle Threshold**. Your investment strategy will now account for this to ensure you aren't 'House Poor'.")
 
 with chart_col:
-    data = {
-        "Essentials": groceries + utilities + health,
-        "Family/Pets": childcare + pets,
-        "Fun & Shopping": dining + shopping + entertainment,
-        "Transport": gas_transit + car_ins_maint,
-        "Buffer": misc
-    }
+    data = {"Essentials": groceries + utilities + health, "Family/Pets": childcare + pets, "Fun/Shopping": dining + shopping + entertainment, "Transport": gas_transit + car_ins_maint, "Buffer": misc}
     clean_data = {k: v for k, v in data.items() if v > 0}
-    
     if clean_data:
-        # Using a sophisticated palette of Gold, Slate, Sage, and Muted Sand
-        fig = go.Figure(data=[go.Pie(
-            labels=list(clean_data.keys()), 
-            values=list(clean_data.values()), 
-            hole=.4,
-            marker=dict(colors=['#CEB36F', '#4A4E5A', '#889696', '#7D8491', '#EAE0D5']),
-            textinfo='label+percent',
-            insidetextorientation='radial'
-        )])
-        fig.update_layout(
-            margin=dict(t=0, b=0, l=0, r=0), 
-            height=280, 
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
-        )
+        fig = go.Figure(data=[go.Pie(labels=list(clean_data.keys()), values=list(clean_data.values()), hole=.4, marker=dict(colors=['#CEB36F', '#4A4E5A', '#889696', '#7D8491', '#EAE0D5']))])
+        fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=280, showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.caption("Start entering expenses to see your household breakdown.")
