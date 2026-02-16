@@ -181,16 +181,19 @@ is_lifestyle_deficit = true_net < 0
 # Visual Styling Logic
 if is_unsustainable:
     v_status, v_color, v_bg = "❌ Critical Risk: Financial Overexposure", "#dc2626", "#FEF2F2"
-    v_insight = "Your fixed debt obligations exceed your income. Lenders will likely reject this application."
+    v_insight = "Fixed debts exceed income. Lender rejection is highly likely."
 elif is_lifestyle_deficit:
     v_status, v_color, v_bg = "⚠️ Lifestyle Risk: House Poor Warning", "#ca8a04", "#FFFBEB"
-    v_insight = "You qualify for the loan, but you cannot afford your current lifestyle. You will need to cut $ " + f"{abs(true_net):,.0f}" + "/mo in personal spending to stay afloat."
+    v_insight = f"Bank approved, but you must cut ${abs(true_net):,.0f}/mo from personal spending to avoid a deficit."
 elif is_neg_carry:
     v_status, v_color, v_bg = "🟡 Strategic Play: Negative Carry", "#4A4E5A", "#F8F9FA"
-    v_insight = "This is a 'Growth over Cashflow' play. You are paying for the privilege of owning this asset."
+    v_insight = "Asset loses cash monthly. This is a pure growth play requiring personal subsidy."
 else:
     v_status, v_color, v_bg = "✅ Wealth Accelerator: High Resilience", "#16a34a", "#F0FDF4"
-    v_insight = "This acquisition is a 'Green Zone' move. It fits within your income, debt, and lifestyle targets."
+    v_insight = "Acquisition fits comfortably within income, debt, and lifestyle targets."
+
+# Expense Ratio Color Logic
+ratio_text_color = "#dc2626" if household_expense_ratio > 80 else "#16a34a"
 
 # Render Verdict Box
 st.markdown(f"""
@@ -202,43 +205,42 @@ st.markdown(f"""
         <div>
             <p style='margin: 0; font-size: 0.85em; color: #666;'>TRUE NET POSITION</p>
             <p style='margin: 0; font-size: 1.4em; font-weight: bold; color: {'#dc2626' if true_net < 0 else '#16a34a'};'>${true_net:,.0f}<small>/mo</small></p>
-            <p style='margin: 5px 0; font-size: 0.8em;'>This is your actual "take home" after all debts AND lifestyle costs.</p>
+            <p style='margin: 5px 0; font-size: 0.8em; color: #666;'>Actual 'take home' after all debts and lifestyle costs.</p>
         </div>
         <div>
             <p style='margin: 0; font-size: 0.85em; color: #666;'>TOTAL EXPENSE RATIO</p>
-            <p style='margin: 0; font-size: 1.4em; font-weight: bold;'>{household_expense_ratio:.1f}%</p>
-            <p style='margin: 5px 0; font-size: 0.8em;'>{ "High Risk: Above 80%" if household_expense_ratio > 80 else "Healthy: Below 80%"}</p>
+            <p style='margin: 0; font-size: 1.4em; font-weight: bold; color: {ratio_text_color};'>{household_expense_ratio:.1f}%</p>
+            <p style='margin: 5px 0; font-size: 0.85em; font-weight: 600; color: {ratio_text_color};'>
+                { "High Risk: Above 80%" if household_expense_ratio > 80 else "Healthy: Below 80%"}
+            </p>
+            <p style='margin: 0; font-size: 0.8em; color: #6C757D;'>Ideal range: 50% - 70%</p>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 11. STRATEGIC INSIGHTS & STRESS TEST ---
+# --- 12. CONCISE INSIGHTS & STRESS TEST ---
 st.write("")
 col_s1, col_s2 = st.columns(2)
 
 with col_s1:
     st.markdown("### 💡 Strategic Insights")
     if is_lifestyle_deficit:
-        st.error(f"**Lifestyle Trade-off:** To sustain this, you must cut **${abs(true_net)*12:,.0f}/year** from personal spending. Ensure the equity growth outweighs this quality-of-life reduction.")
-    
+        st.error(f"**Trade-off:** Must cut **${abs(true_net)*12:,.0f}/yr** from lifestyle to sustain equity growth.")
     if is_neg_carry:
-        st.warning("**Growth Requirement:** This asset loses cash monthly. You need **~3.5% annual appreciation** just to break even on the 'carry' cost.")
-    
+        st.warning("**Growth Play:** Requires **~3.5% annual appreciation** to offset monthly carry losses.")
     if not is_lifestyle_deficit and not is_unsustainable:
-        st.success("**Capital Efficiency:** You have high resilience. Consider shorter amortization to build equity faster or look for a slightly higher-value asset.")
+        st.success("**High Resilience:** Consider shortening amortization to accelerate equity build.")
 
 with col_s2:
-    st.markdown("### 🛡️ Stress Test Scenarios")
-    # Liquidity Calculation
+    st.markdown("### 🛡️ Stress Test")
     job_loss_months = (f_dp / (lifestyle_spend + primary_mtg + primary_carrying + new_p_i + total_opex_mo)) if f_dp > 0 else 0
-    st.write(f"**Liquidity Buffer:** Your current Down Payment could float both homes and lifestyle for **{job_loss_months:.1f} months** if income hits zero.")
+    st.write(f"**Liquidity:** Capital can float all costs for **{job_loss_months:.1f} months** if income hits zero.")
     
-    # Rate Shock
     rate_shock = (target_loan * 0.02 / 12)
-    st.write(f"**Rate Shock:** A 2% rate increase at renewal would reduce your monthly True Net by **${rate_shock:,.0f}**.")
+    st.write(f"**Rate Shock:** A +2% rate spike reduces monthly net by **${rate_shock:,.0f}**.")
+    
+    st.caption("⚠️ *Note: All surpluses are pre-lifestyle. Accuracy depends on your 'Monthly Budget' inputs.*")
 
-    # Added Note
-    st.caption("⚠️ *Note: All surpluses shown are pre-lifestyle. Your ability to save depends on the accuracy of your Budget Tool inputs.*")
 show_disclaimer()
 
