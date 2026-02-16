@@ -163,14 +163,16 @@ with st.container(border=True):
 
     c7, c8, c9 = st.columns(3)
     with c7:
-         tax_rate = cloud_input("Marginal Tax Rate (%)", "smith_maneuver", "tax_rate", step=0.5)
-         # Updated Note: Closer and more actionable
-         st.markdown(f"<p style='font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: -10px;'>Recommend: hold the investment under <b>{lead_client}</b> for max tax benefits</p>", unsafe_allow_html=True)
+         # ADDED ASTERISK TO LABEL
+         tax_rate = cloud_input("Marginal Tax Rate (%)*", "smith_maneuver", "tax_rate", step=0.5)
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
         strategy_horizon = st.slider("Strategy Horizon (Years)", 5, 30, int(sm_data.get('strategy_horizon', 25)), step=5)
         sm_data['strategy_horizon'] = strategy_horizon
+    
+    # MOVED NOTE TO BOTTOM OF CONTAINER
+    st.caption(f"Note: its recommended to hold the investment property/stock under **{lead_client}**'s name to achieve the maximum tax benefits.")
 
 # --- 9. CALC ENGINE ---
 sim_years = max(amortization, strategy_horizon)
