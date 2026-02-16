@@ -270,28 +270,51 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 11. STRATEGIC VERDICT ---
+# ... [Keep everything above Section 11 exactly the same] ...
+
+# --- 11. STRATEGIC VERDICT (WITH LIFESTYLE BUDGET INTEGRATION) ---
 st.subheader("🎯 Strategic Verdict")
+
+# 1. Pull Lifestyle Budget
+lifestyle_spend = st.session_state.app_db.get('budget', {}).get('total_monthly', 0.0)
+true_net_position = overall_cash_flow - lifestyle_spend
+
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
-is_unsustainable = overall_cash_flow < 0
+is_unsustainable_bank = overall_cash_flow < 0
+is_lifestyle_deficit = true_net_position < 0
 
-v_html = [f"<div style='background-color: {'#FEF2F2' if is_unsustainable else '#FFFBEB' if (is_neg_carry or is_low_safety) else '#F0FDF4'}; padding: 20px; border-radius: 10px; border: 1.5px solid {'#dc2626' if is_unsustainable else '#ca8a04' if (is_neg_carry or is_low_safety) else '#16a34a'}; color: {SLATE_ACCENT};'>"]
-if is_unsustainable:
-    v_html.append(f"<h4 style='color: #dc2626; margin-top: 0;'>❌ Unsustainable Move</h4><p>Total monthly obligations exceed your current net income inflow.</p>")
-elif is_neg_carry or is_low_safety:
-    v_html.append(f"<h4 style='color: #ca8a04; margin-top: 0;'>⚠️ Speculative Move</h4><p>Acquisition is viable on paper but carries significant lifestyle opportunity costs.</p>")
+# Determine Verdict Status
+if is_unsustainable_bank:
+    v_status, v_color, v_bg = "❌ Unsustainable Move (Bank Reject)", "#dc2626", "#FEF2F2"
+    v_msg = "Total debt obligations exceed your income. You cannot qualify for this loan."
+elif is_lifestyle_deficit:
+    v_status, v_color, v_bg = "⚠️ Lifestyle Deficit (House Poor)", "#ca8a04", "#FFFBEB"
+    v_msg = f"Bank Approved, but <b>Real Life Denied</b>. After your ${lifestyle_spend:,.0f} lifestyle budget, you are <b>${true_net_position:,.0f}</b> in the red every month."
+elif is_neg_carry:
+    v_status, v_color, v_bg = "⚠️ Speculative Move (Negative Carry)", "#ca8a04", "#FFFBEB"
+    v_msg = "You can afford it, but the asset loses money monthly. You are subsidizing it with your salary."
 else:
-    v_html.append(f"<h4 style='color: #16a34a; margin-top: 0;'>✅ Strategically Sound</h4><p>Your household ecosystem shows strong resilience for this acquisition.</p>")
+    v_status, v_color, v_bg = "✅ Strategically Sound", "#16a34a", "#F0FDF4"
+    v_msg = "Your household ecosystem is strong. You cover all debts + lifestyle and still have a surplus."
 
-v_html.append("<div style='font-size: 1em;'>")
-v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses such as food, utilities, shopping, childcare, etc.</p>")
-if is_neg_carry:
-    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
-if is_low_safety:
-    v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>")
+v_html = [f"<div style='background-color: {v_bg}; padding: 20px; border-radius: 10px; border: 1.5px solid {v_color}; color: {SLATE_ACCENT};'>"]
+v_html.append(f"<h4 style='color: {v_color}; margin-top: 0;'>{v_status}</h4>")
+v_html.append(f"<p style='margin-bottom: 10px; font-size: 1.1em;'>{v_msg}</p>")
+
+v_html.append("<div style='font-size: 0.95em; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 10px;'>")
+
+# Show the Math
+v_html.append(f"<p style='margin: 5px 0;'><b>1. Bank Surplus:</b> ${overall_cash_flow:,.0f} (Income - Debts)</p>")
+if lifestyle_spend > 0:
+    v_html.append(f"<p style='margin: 5px 0;'><b>2. Lifestyle Burn:</b> -${lifestyle_spend:,.0f} (Food, Kids, Living)</p>")
+    v_html.append(f"<p style='margin: 5px 0; font-size: 1.1em;'><b>3. True Net Position:</b> <b style='color: {'#dc2626' if true_net_position < 0 else '#16a34a'};'>${true_net_position:,.0f} / mo</b></p>")
+else:
+    v_html.append(f"<p style='margin: 5px 0; color: #666;'><i>(No budget data found. Go to 'Monthly Budget' to define your lifestyle expenses.)</i></p>")
+
 v_html.append("</div></div>")
 
 st.markdown("".join(v_html), unsafe_allow_html=True)
 
 show_disclaimer()
+
