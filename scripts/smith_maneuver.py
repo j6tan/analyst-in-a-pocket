@@ -12,8 +12,7 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. DATA LINKING (CORRECTED KEYS) ---
-# We now pull directly from the 'profile' keys defined in profile.py
+# --- 1. DATA LINKING (STRICT) ---
 prof = st.session_state.app_db.get('profile', {})
 
 client_name1 = prof.get('p1_name', 'Client 1')
@@ -40,7 +39,6 @@ def estimate_marginal_rate(income):
     elif income > 55000: return 29.0
     else: return 20.0
 
-# Auto-calculate suggested rate
 suggested_tax_rate = estimate_marginal_rate(lead_income)
 
 # --- 2. PERSISTENCE & INITIALIZATION ---
@@ -48,23 +46,32 @@ if 'smith_maneuver' not in st.session_state.app_db:
     st.session_state.app_db['smith_maneuver'] = {}
 sm_data = st.session_state.app_db['smith_maneuver']
 
-if not sm_data.get('initialized'):
-    # PULL FROM PROFILE KEYS (m_bal, m_rate, m_amort)
-    # Default to 0 or standard values if keys missing
-    init_mortgage = float(prof.get('m_bal', 500000.0))
-    init_rate = float(prof.get('m_rate', 5.0))
-    init_amort = int(prof.get('m_amort', 25))
+# FETCH PROFILE DATA
+prof_mortgage = float(prof.get('m_bal', 500000.0))
+prof_rate = float(prof.get('m_rate', 5.0))
+prof_amort = int(prof.get('m_amort', 25))
+
+# LOGIC FIX: Check if we are stuck on "Stale Defaults" (500k/5%/25yr)
+# If the current Smith data matches the generic defaults EXACTLY, but the profile has different data, we force an update.
+current_sm_amt = float(sm_data.get('mortgage_amt', 500000.0))
+current_sm_rate = float(sm_data.get('mortgage_rate', 5.0))
+current_sm_amort = int(sm_data.get('amortization', 25))
+
+is_stale_default = (current_sm_amt == 500000.0 and current_sm_rate == 5.0 and current_sm_amort == 25)
+has_real_profile = (prof_mortgage != 500000.0 or prof_rate != 5.0)
+
+if not sm_data.get('initialized') or (is_stale_default and has_real_profile):
     
-    # Handle case where user might be renting (values might be 0)
-    if init_mortgage == 0: init_mortgage = 500000.0
-    if init_rate == 0: init_rate = 5.0
-    if init_amort == 0: init_amort = 25
+    # Handle renting edge case (0 values)
+    if prof_mortgage == 0: prof_mortgage = 500000.0
+    if prof_rate == 0: prof_rate = 5.0
+    if prof_amort == 0: prof_amort = 25
 
     sm_data.update({
-        "mortgage_amt": init_mortgage,
-        "amortization": init_amort,
-        "mortgage_rate": init_rate,
-        "loc_rate": init_rate + 1.0, # Assumes Prime + spread
+        "mortgage_amt": prof_mortgage,
+        "amortization": prof_amort,
+        "mortgage_rate": prof_rate,
+        "loc_rate": prof_rate + 1.0, 
         "inv_return": 7.0,
         "div_yield": 5.0,
         "tax_rate": float(suggested_tax_rate),
@@ -100,7 +107,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. CHECKLIST (RESTORED ORIGINAL TEXT) ---
+# --- 6. CHECKLIST ---
 with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=False):
     st.markdown("""
     To execute this strategy legally and effectively, you must meet these criteria:
@@ -261,7 +268,7 @@ with col_res2:
     fig_wealth.update_layout(title="Total Net Worth", height=300, yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 13. STRESS TEST (ORIGINAL LAYOUT) ---
+# --- 13. STRESS TEST ---
 st.markdown("---")
 st.subheader("⚠️ Stress Test Simulator")
 st.markdown("""
