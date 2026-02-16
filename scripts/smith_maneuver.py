@@ -151,7 +151,10 @@ with st.container(border=True):
     with c1:
         mortgage_amt = cloud_input("Mortgage Balance ($)", "smith_maneuver", "mortgage_amt", step=10000.0)
     with c2:
-        amortization = st.slider("Amortization (Years)", 10, 30, int(sm_data.get('amortization', 25)), key="sm:amort", on_change=sync_widget, args=("sm:amort", "smith_maneuver", "amortization"))
+        # FIX: Removed callback args that were causing the crash.
+        # Direct state assignment used instead.
+        amortization = st.slider("Amortization (Years)", 10, 30, int(sm_data.get('amortization', 25)))
+        sm_data['amortization'] = amortization
     with c3:
         mortgage_rate = cloud_input("Mortgage Rate (%)", "smith_maneuver", "mortgage_rate", step=0.1)
 
@@ -171,8 +174,9 @@ with st.container(border=True):
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
-        # FIX: Swapped select_slider for slider to prevent callback TypeError
-        strategy_horizon = st.slider("Strategy Horizon (Years)", 5, 30, int(sm_data.get('strategy_horizon', 25)), step=5, key="sm:horizon", on_change=sync_widget, args=("sm:horizon", "smith_maneuver", "strategy_horizon"))
+        # FIX: Swapped select_slider for standard slider and removed callback args to prevent crash
+        strategy_horizon = st.slider("Strategy Horizon (Years)", 5, 30, int(sm_data.get('strategy_horizon', 25)), step=5)
+        sm_data['strategy_horizon'] = strategy_horizon
 
 # --- 9. CALCULATION ENGINE (BASE CASE) ---
 sim_years = max(amortization, strategy_horizon)
