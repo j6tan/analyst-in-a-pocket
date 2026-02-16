@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import os
 from style_utils import inject_global_css
+from data_handler import cloud_input, sync_widget, supabase
 
 # 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
@@ -12,7 +13,7 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 1. DATA LINKING ---
-prof = st.session_state.get('user_profile', {})
+prof = st.session_state.app_db.get('profile', {}) 
 client_name1 = prof.get('p1_name', 'Client 1')
 client_name2 = prof.get('p2_name', 'Client 2')
 p1_income = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0))
@@ -37,7 +38,26 @@ def estimate_marginal_rate(income):
 
 suggested_tax_rate = estimate_marginal_rate(high_income)
 
-# --- 2. THEME & COLORS ---
+# --- 2. PERSISTENCE & INITIALIZATION ---
+if 'smith_maneuver' not in st.session_state.app_db:
+    st.session_state.app_db['smith_maneuver'] = {}
+sm_data = st.session_state.app_db['smith_maneuver']
+
+if not sm_data.get('initialized'):
+    sm_data.update({
+        "mortgage_amt": 500000.0,
+        "amortization": 25,
+        "mortgage_rate": 5.0,
+        "loc_rate": 6.0,
+        "inv_return": 7.0,
+        "div_yield": 5.0,
+        "tax_rate": float(suggested_tax_rate),
+        "initial_lump": 0.0,
+        "strategy_horizon": 25,
+        "initialized": True
+    })
+
+# --- 3. THEME & COLORS ---
 PRINCIPAL_COLOR = "#CEB36F" 
 INTEREST_COLOR = "#2E2B28"  
 OFF_WHITE = "#F8F9FA"
@@ -47,14 +67,14 @@ PRIMARY_GOLD = "#CEB36F"
 RISK_RED = "#D9534F"
 BASELINE_BLUE = "#1f77b4"
 
-# --- 3. HEADER ---
+# --- 4. HEADER ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
 with header_col2:
     st.title("The Smith Maneuver Strategy")
 
-# --- 4. RICH STORYTELLING ---
+# --- 5. RICH STORYTELLING ---
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">🔄 {household_names}: Turning Mortgage Interest into Tax Refunds</h3>
@@ -65,7 +85,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. DETAILED PREREQUISITES ---
+# --- 6. DETAILED PREREQUISITES ---
 with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=False):
     st.markdown("""
     To execute this strategy legally and effectively, you must meet these criteria:
@@ -79,7 +99,7 @@ with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=Fal
         You must invest in assets with a "reasonable expectation of income" (Dividends, Rent, or Interest). Pure capital gains stocks do not qualify for interest deductibility.
     """)
 
-# --- 6. MECHANICS (THE CYCLE) ---
+# --- 7. MECHANICS (THE CYCLE) ---
 st.divider()
 st.subheader("⚙️ The Mechanics: Follow the Dollar")
 st.markdown("Here is exactly what happens every single month:")
@@ -122,38 +142,38 @@ st.info("💡 **The Accelerator:** At the end of the year, the interest you paid
 
 st.divider()
 
-# --- 7. INPUTS ---
+# --- 8. INPUTS (CLOUD PERSISTENCE ENABLED) ---
 with st.container(border=True):
     st.markdown("### 📝 Configure Your Scenario")
     
     # Row 1: Mortgage
     c1, c2, c3 = st.columns(3)
     with c1:
-        mortgage_amt = st.number_input("Mortgage Balance ($)", value=500000.0, step=10000.0)
+        mortgage_amt = cloud_input("Mortgage Balance ($)", "smith_maneuver", "mortgage_amt", step=10000.0)
     with c2:
-        amortization = st.slider("Amortization (Years)", 10, 30, 25)
+        amortization = st.slider("Amortization (Years)", 10, 30, int(sm_data.get('amortization', 25)), key="sm:amort", on_change=sync_widget, args=("sm:amort", "smith_maneuver", "amortization"))
     with c3:
-        mortgage_rate = st.number_input("Mortgage Rate (%)", value=5.0, step=0.1)
+        mortgage_rate = cloud_input("Mortgage Rate (%)", "smith_maneuver", "mortgage_rate", step=0.1)
 
     # Row 2: Investment Strategy
     c4, c5, c6 = st.columns(3)
     with c4:
-        loc_rate = st.number_input("HELOC Rate (%)", value=6.0, step=0.1)
+        loc_rate = cloud_input("HELOC Rate (%)", "smith_maneuver", "loc_rate", step=0.1)
     with c5:
-        inv_return = st.number_input("Total Return (%)", value=7.0, step=0.1)
+        inv_return = cloud_input("Total Return (%)", "smith_maneuver", "inv_return", step=0.1)
     with c6:
-        div_yield = st.number_input("Dividend Yield (%)", value=5.0, step=0.1)
+        div_yield = cloud_input("Dividend Yield (%)", "smith_maneuver", "div_yield", step=0.1)
 
     # Row 3: Tax & Horizon
     c7, c8, c9 = st.columns(3)
     with c7:
-         tax_rate = st.number_input("Marginal Tax Rate (%)", value=suggested_tax_rate, step=0.5)
+         tax_rate = cloud_input("Marginal Tax Rate (%)", "smith_maneuver", "tax_rate", step=0.5)
     with c8:
-        initial_lump = st.number_input("Initial HELOC Room ($)", value=0.0, step=5000.0)
+        initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
-        strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=25)
+        strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=int(sm_data.get('strategy_horizon', 25)), key="sm:horizon", on_change=sync_widget, args=("sm:horizon", "smith_maneuver", "strategy_horizon"))
 
-# --- 8. CALCULATION ENGINE (BASE CASE) ---
+# --- 9. CALCULATION ENGINE (BASE CASE) ---
 sim_years = max(amortization, strategy_horizon)
 n_months = sim_years * 12
 
@@ -251,7 +271,7 @@ for month in range(1, n_months + 1):
 df_annual = pd.DataFrame(annual_data)
 df_view = df_annual[df_annual['Year'] <= strategy_horizon].copy()
 
-# --- 9. CASH FLOW ANALYSIS ---
+# --- 10. CASH FLOW ANALYSIS ---
 total_int_cost = df_view['Annual Interest Cost'].sum()
 total_divs = df_view['Dividend Income'].sum()
 total_refunds = df_view['Annual Tax Refund'].sum()
@@ -272,7 +292,7 @@ with cf4:
 
 st.caption("**Note on Dividends:** This model assumes Dividends are used to help pay the HELOC interest.")
 
-# --- 10. TABLE ---
+# --- 11. TABLE ---
 st.divider()
 st.subheader(f"📅 {strategy_horizon}-Year Projection")
 
@@ -285,7 +305,7 @@ for col in display_df.columns:
 
 st.table(display_df)
 
-# --- 11. CHARTS ---
+# --- 12. CHARTS ---
 st.divider()
 st.subheader("📈 Strategy vs. Do Nothing")
 
@@ -313,7 +333,7 @@ with col_res2:
     fig_wealth.update_layout(title="Total Net Worth Comparison", height=300, margin=dict(t=30, b=0), yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 12. STRESS TEST SIMULATOR (WITH DURATION) ---
+# --- 13. STRESS TEST SIMULATOR (WITH DURATION) ---
 st.markdown("---")
 st.subheader("⚠️ Stress Test Simulator")
 st.markdown("""
@@ -327,11 +347,11 @@ This section models a **market crash and stagnation**. It does not change the ch
 with st.container(border=True):
     c1, c2, c3 = st.columns(3)
     with c1:
-        crash_drop = st.slider("Crash Magnitude (%)", 0, 50, 30)
+        crash_drop = st.slider("Crash Magnitude (%)", 0, 50, 30, key="stress_drop")
     with c2:
-        crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, 5)
+        crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, 5, key="stress_start")
     with c3:
-        crash_duration = st.slider("Recovery Duration (Years)", 1, 10, 3)
+        crash_duration = st.slider("Recovery Duration (Years)", 1, 10, 3, key="stress_dur")
 
     try:
         # 1. Get State BEFORE Crash
@@ -376,7 +396,3 @@ with st.container(border=True):
 
     except Exception as e:
         st.write(f"Simulation data unavailable for Year {crash_start}")
-
-
-
-
