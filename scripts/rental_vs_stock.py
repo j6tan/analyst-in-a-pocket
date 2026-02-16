@@ -6,7 +6,7 @@ import os
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject Style
+# 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -20,40 +20,49 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL (HOUSEHOLD & AFFORDABILITY) ---
-prof = st.session_state.app_db.get('profile', {})
-asset = st.session_state.app_db.get('target_asset', {}) 
+# --- 2. DATA RETRIEVAL (STRICT LINKING) ---
+# Retrieve from the main application database
+prof = st.session_state.app_db.get('profile', {}) 
+aff_sec = st.session_state.app_db.get('affordability_second', {}) 
 
-p1_name = prof.get('p1_name', 'Client 1')
-p2_name = prof.get('p2_name', 'Client 2')
+p1_name = prof.get('p1_name', 'Sarah')
+p2_name = prof.get('p2_name', 'James')
 household = f"{p1_name} & {p2_name}" if p2_name else p1_name
 
-# T4 Intelligence: Identify higher earner for tax efficiency
-p1_inc = float(prof.get('p1_inc', 0.0))
-p2_inc = float(prof.get('p2_inc', 0.0))
-lead_taxpayer = p1_name if p1_inc >= p2_inc else p2_name
-lead_tax_rate = float(prof.get('p1_tax_rate', 35.0)) if p1_inc >= p2_inc else float(prof.get('p2_tax_rate', 35.0))
+# T4 Intelligence: Identify higher earner and their specific marginal rate
+p1_inc = float(prof.get('p1_t4', 0.0)) + float(prof.get('p1_bonus', 0.0))
+p2_inc = float(prof.get('p2_t4', 0.0)) + float(prof.get('p2_bonus', 0.0))
+p1_tax = float(prof.get('p1_tax_rate', 35.0))
+p2_tax = float(prof.get('p2_tax_rate', 35.0))
+
+if p1_inc >= p2_inc:
+    lead_taxpayer = p1_name
+    default_tax_rate = p1_tax
+else:
+    lead_taxpayer = p2_name
+    default_tax_rate = p2_tax
 
 # --- 3. PERSISTENCE INITIALIZATION ---
 if 'rental_vs_stock' not in st.session_state.app_db:
     st.session_state.app_db['rental_vs_stock'] = {}
 rvs_data = st.session_state.app_db['rental_vs_stock']
 
+# SURGICAL INITIALIZATION: Pulling exact keys from Affordability Secondary
 if not rvs_data.get('initialized'):
     rvs_data.update({
-        "price": float(asset.get('target_price', 800000.0)),
-        "inv": float(asset.get('target_dp', 200000.0)),
-        "rate": float(asset.get('interest_rate', 4.5)),
-        "rent": float(asset.get('monthly_rent', 3200.0)),
+        "price": float(aff_sec.get('target_price', 800000.0)),
+        "inv": float(aff_sec.get('down_payment', 200000.0)),
+        "rate": float(aff_sec.get('contract_rate', 4.5)),
+        "rent": float(aff_sec.get('manual_rent', 3200.0)),
+        "tax_rate": default_tax_rate,
         "apprec": 3.0,
         "alt_ret": 7.0,
         "years": 10,
-        "tax_rate": lead_tax_rate,
-        "prop_tax": 3200.0,
-        "ins": 125.0,
-        "strata": 450.0,
-        "maint": 2000.0,
-        "mgmt": 0,
+        "prop_tax": float(aff_sec.get('annual_prop_tax', 3200.0)),
+        "ins": float(aff_sec.get('insurance_mo', 125.0)),
+        "strata": float(aff_sec.get('strata_mo', 450.0)),
+        "maint": float(aff_sec.get('rm_mo', 200.0)) * 12,
+        "mgmt": float(aff_sec.get('mgmt_pct', 0.0)),
         "initialized": True
     })
 
@@ -65,16 +74,16 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, alt_return, yea
     m_denom = ((1+m_rate)**n_months - 1)
     monthly_pi = loan * (m_rate * (1+m_rate)**n_months) / m_denom if m_denom != 0 else (loan / n_months)
     
-    curr_val, curr_loan, curr_rent = price, loan, r_income
-    stock_portfolio = inv + (price * 0.02) 
-    stock_contributions = stock_portfolio
-    
-    # Calculate Year 1 "Paper Loss" for Tax Metric
+    # Tax Savings Calculation: (Interest + OpEx - Rent) * Marginal Rate
     annual_int = loan * (rate/100)
     annual_opex = costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['rm'] + (r_income*12*(costs['mgmt']/100))
     annual_rent = r_income * 12
     paper_loss = max(0, (annual_int + annual_opex) - annual_rent)
     annual_tax_saving = paper_loss * (tax_rate/100)
+    
+    curr_val, curr_loan = price, loan
+    stock_portfolio = inv + (price * 0.02) 
+    stock_contributions = stock_portfolio
     
     data = []
     for y in range(1, years + 1):
@@ -103,11 +112,10 @@ with header_col2: st.title("Rental Property vs. Stock Portfolio")
 
 # --- 6. STORYTELLING ---
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">💼 {p1_name} & {p2_name}’s Wealth Crossroads</h3>
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">💼 {household}’s Wealth Crossroads</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        You are debating two paths: the leveraged Rental Property or a passive Stock Portfolio. 
-        This tool pulls from your <b>Affordability Tool</b> to show you which choice wins long-term.
+        You are debating two paths: the leveraged Rental Property or a passive Stock Portfolio. This analysis uses the exact property data from your <b>Portfolio Expansion Map</b> to determine the superior wealth path.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -118,18 +126,18 @@ with col1:
     st.subheader("🏠 Real Estate Asset")
     price = cloud_input("Purchase Price ($)", "rental_vs_stock", "price", step=25000.0)
     inv = cloud_input("Down Payment ($)", "rental_vs_stock", "inv", step=5000.0)
-    rate = cloud_input("Interest Rate (%)", "rental_vs_stock", "rate", step=0.1)
+    rate = cloud_input("Interest Rate (%)", "rental_vs_stock", "rate", step=0.1) # Renamed
     rent = cloud_input("Monthly Rent ($)", "rental_vs_stock", "rent", step=50.0)
     
     apprec = st.slider("Annual Appreciation (%)", 0.0, 7.0, float(rvs_data.get('apprec', 3.0)), 
                        key="rental_vs_stock:apprec", on_change=sync_widget, args=("rental_vs_stock:apprec",))
 
     with st.expander("🛠️ Property Operating Costs"):
-        tax = cloud_input("Annual Property Tax ($)", "rental_vs_stock", "prop_tax", step=100.0)
-        ins = cloud_input("Monthly Insurance ($)", "rental_vs_stock", "ins", step=10.0)
-        strata = cloud_input("Monthly Strata ($)", "rental_vs_stock", "strata", step=10.0)
-        rm = cloud_input("Annual Maintenance ($)", "rental_vs_stock", "maint", step=100.0)
-        mgmt = st.slider("Mgmt Fee (%)", 0, 10, int(rvs_data.get('mgmt', 0)),
+        tax_cost = cloud_input("Annual Property Tax ($)", "rental_vs_stock", "prop_tax", step=100.0)
+        ins_cost = cloud_input("Monthly Insurance ($)", "rental_vs_stock", "ins", step=10.0)
+        strata_cost = cloud_input("Monthly Strata ($)", "rental_vs_stock", "strata", step=10.0)
+        maint_cost = cloud_input("Annual Maintenance ($)", "rental_vs_stock", "maint", step=100.0)
+        mgmt_pct = st.slider("Mgmt Fee (%)", 0, 10, int(rvs_data.get('mgmt', 0)),
                          key="rental_vs_stock:mgmt", on_change=sync_widget, args=("rental_vs_stock:mgmt",))
 
 with col2:
@@ -139,54 +147,39 @@ with col2:
                              value=int(rvs_data.get('years', 10)),
                              key="rental_vs_stock:years", on_change=sync_widget, args=("rental_vs_stock:years",))
     
-    st.subheader("⚖️ Tax Efficiency")
+    st.subheader("⚖️ Tax Strategy")
     m_tax_rate = cloud_input("Marginal Tax Rate (%)", "rental_vs_stock", "tax_rate", step=1.0)
     
     st.info(f"""
-        **🎯 Lead Taxpayer: {lead_taxpayer}** By holding this asset under the higher T4 earner, you can use property expenses to shelter high-bracket income.
+        **🎯 Lead Taxpayer: {lead_taxpayer}** Based on your T4 profiles, holding the investment under the higher earner is recommended to maximize the value of 'Negative Carry' tax deductions.
     """)
 
 # Execution
 df, re_wealth, stock_wealth, re_tax, stock_tax, re_costs, tax_saving = run_wealth_engine(
     price, inv, rate, apprec, rent, 
-    {'tax': tax, 'ins': ins, 'strata': strata, 'rm': rm, 'mgmt': mgmt},
+    {'tax': tax_cost, 'ins': ins_cost, 'strata': strata_cost, 'rm': maint_cost, 'mgmt': mgmt_pct},
     alt_ret, years, m_tax_rate
 )
 
-# --- 8. RESULTS & TAX METRIC ---
+# --- 8. RESULTS & TAX ALPHA ---
 st.divider()
 res_col1, res_col2 = st.columns([2, 1])
 
 with res_col1:
     st.subheader("📊 Final Wealth (After Tax & Debt)")
     fig_wealth = go.Figure(data=[
-        go.Bar(name='Rental (Net)', x=['Rental Path'], y=[re_wealth], marker_color=PRIMARY_GOLD, text=[f"${re_wealth:,.0f}"], textposition='auto'),
-        go.Bar(name='Stocks (Net)', x=['Stock Path'], y=[stock_wealth], marker_color=CHARCOAL, text=[f"${stock_wealth:,.0f}"], textposition='auto')
+        go.Bar(name='Rental Path', x=['Rental Path'], y=[re_wealth], marker_color=PRIMARY_GOLD, text=[f"${re_wealth:,.0f}"], textposition='auto'),
+        go.Bar(name='Stock Path', x=['Stock Path'], y=[stock_wealth], marker_color=CHARCOAL, text=[f"${stock_wealth:,.0f}"], textposition='auto')
     ])
-    fig_wealth.update_layout(yaxis=dict(tickformat="$,.0f"), height=400, template="plotly_white", margin=dict(t=10, b=10))
+    fig_wealth.update_layout(yaxis=dict(tickformat="$,.0f"), height=400, template="plotly_white")
     st.plotly_chart(fig_wealth, use_container_width=True)
 
 with res_col2:
     st.subheader("🛡️ Tax Alpha")
-    st.metric("Annual T4 Tax Saving", f"${tax_saving:,.0f}", help=f"Estimated annual tax refund generated by offsetting {lead_taxpayer}'s income with rental 'paper losses'.")
-    st.write(f"This strategy recovers **${tax_saving:,.0f}** in cash every year from the CRA.")
+    st.metric("Annual T4 Tax Refund", f"${tax_saving:,.0f}", help=f"Estimated annual tax savings from deducting property losses against {lead_taxpayer}'s income.")
+    st.write(f"Holding under **{lead_taxpayer}** recovers **${tax_saving:,.0f}/year** in cash from the CRA.")
 
-
-
-# --- 9. INSIGHTS ---
-st.divider()
-st.subheader("🎯 Strategic Analyst Insight")
-insight_col1, insight_col2 = st.columns(2)
-
-with insight_col1:
-    diff = abs(re_wealth - stock_wealth)
-    winner = "Rental Property" if re_wealth > stock_wealth else "Stock Portfolio"
-    st.success(f"**The Verdict:** The **{winner}** is the superior path by **${diff:,.0f}**.")
-
-with insight_col2:
-    st.info(f"**Holding Strategy:** Holding under **{lead_taxpayer}** converts property expenses into immediate tax refunds, effectively lowering your true 'Monthly Carry' cost.")
-
-# --- 10. TRAJECTORY ---
+# --- 9. TRAJECTORY ---
 st.divider()
 st.subheader("📈 Pre-Tax Wealth Trajectory")
 fig_traj = go.Figure()
