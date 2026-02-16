@@ -12,12 +12,14 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. DATA LINKING (STRICT) ---
+# --- 1. DATA LINKING (CORRECTED KEYS) ---
+# We now pull directly from the 'profile' keys defined in profile.py
 prof = st.session_state.app_db.get('profile', {})
-primary = st.session_state.app_db.get('primary_residence', {})
 
 client_name1 = prof.get('p1_name', 'Client 1')
 client_name2 = prof.get('p2_name', 'Client 2')
+
+# Calculate Total Income for Tax Purposes (T4 + Bonus)
 p1_income = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0))
 p2_income = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0))
 
@@ -38,6 +40,7 @@ def estimate_marginal_rate(income):
     elif income > 55000: return 29.0
     else: return 20.0
 
+# Auto-calculate suggested rate
 suggested_tax_rate = estimate_marginal_rate(lead_income)
 
 # --- 2. PERSISTENCE & INITIALIZATION ---
@@ -45,21 +48,26 @@ if 'smith_maneuver' not in st.session_state.app_db:
     st.session_state.app_db['smith_maneuver'] = {}
 sm_data = st.session_state.app_db['smith_maneuver']
 
-# STRICT INITIALIZATION FROM PROFILE
 if not sm_data.get('initialized'):
-    # defaults from Primary Residence Profile
-    def_mortgage = float(primary.get('mortgage_balance', 500000.0))
-    def_rate = float(primary.get('mortgage_interest_rate', 5.0))
-    def_amort = int(primary.get('remaining_amortization', 25))
+    # PULL FROM PROFILE KEYS (m_bal, m_rate, m_amort)
+    # Default to 0 or standard values if keys missing
+    init_mortgage = float(prof.get('m_bal', 500000.0))
+    init_rate = float(prof.get('m_rate', 5.0))
+    init_amort = int(prof.get('m_amort', 25))
     
+    # Handle case where user might be renting (values might be 0)
+    if init_mortgage == 0: init_mortgage = 500000.0
+    if init_rate == 0: init_rate = 5.0
+    if init_amort == 0: init_amort = 25
+
     sm_data.update({
-        "mortgage_amt": def_mortgage,
-        "amortization": def_amort,
-        "mortgage_rate": def_rate,
-        "loc_rate": def_rate + 1.0, # Assumes Prime + 0.5% or similar spread
+        "mortgage_amt": init_mortgage,
+        "amortization": init_amort,
+        "mortgage_rate": init_rate,
+        "loc_rate": init_rate + 1.0, # Assumes Prime + spread
         "inv_return": 7.0,
         "div_yield": 5.0,
-        "tax_rate": float(suggested_tax_rate), # Auto-calculated from T4
+        "tax_rate": float(suggested_tax_rate),
         "initial_lump": 0.0,
         "strategy_horizon": 25,
         "initialized": True
@@ -92,14 +100,18 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. CHECKLIST ---
+# --- 6. CHECKLIST (RESTORED ORIGINAL TEXT) ---
 with st.expander("✅ Checklist: Are you ready for this strategy?", expanded=False):
     st.markdown("""
     To execute this strategy legally and effectively, you must meet these criteria:
-    1.  **Readvanceable Mortgage:** You need a HELOC that automatically increases limit as principal is paid.
-    2.  **Positive Principal Paydown:** Your monthly payment must actually reduce the principal.
-    3.  **Non-Registered Account:** Interest is only deductible in taxable accounts.
-    4.  **Income-Generating Assets:** Must have a "reasonable expectation of income" (Dividends/Rent/Interest).
+    1.  **Readvanceable Mortgage:**
+        You need a HELOC that automatically increases limit as principal is paid (e.g., RBC Homeline, Scotia STEP).
+    2.  **Positive Principal Paydown:**
+        Your monthly payment must actually reduce the principal (interest-only mortgages don't work for the conversion).
+    3.  **Non-Registered Account:**
+        You cannot invest in RRSP/TFSA. To deduct interest, the account must be taxable.
+    4.  **Income-Generating Assets:**
+        You must invest in assets with a "reasonable expectation of income" (Dividends, Rent, or Interest). Pure capital gains stocks do not qualify for interest deductibility.
     """)
 
 # --- 7. MECHANICS ---
@@ -147,7 +159,7 @@ with st.container(border=True):
     c7, c8, c9 = st.columns(3)
     with c7:
          tax_rate = cloud_input("Marginal Tax Rate (%)", "smith_maneuver", "tax_rate", step=0.5)
-         st.caption(f"Strategy Lead: **{lead_client}** (Higher Earner)") # New Concise Note
+         st.caption(f"Strategy Lead: **{lead_client}** (Higher Earner)") 
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
@@ -227,7 +239,7 @@ cf4.metric("Net Cash Benefit", f"${net_benefit:,.0f}", delta="Positive" if net_b
 st.divider()
 st.subheader(f"📅 {strategy_horizon}-Year Projection")
 display_df = df_view[['Year', 'Mortgage Balance', 'Investment Loan', 'Portfolio Value', 'Annual Tax Refund', 'Dividend Income']].copy()
-display_df.columns = ['Year', 'Bad Debt', 'Good Debt', 'Asset Value', 'Tax Refund', 'Dividend CF']
+display_df.columns = ['Year', 'Bad Debt (Mortgage)', 'Good Debt (HELOC)', 'Asset Value (Portfolio)', 'Tax Refund (Re-invested)', 'Dividend Cash Flow']
 for col in display_df.columns:
     if col != 'Year': display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 st.table(display_df)
