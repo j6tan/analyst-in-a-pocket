@@ -84,6 +84,7 @@ pages = {
     "Overview": [
         st.Page("home.py", title="Home Dashboard", icon="🏠", default=True),
         st.Page("scripts/profile.py", title="Client Profile", icon="👤"),
+        st.Page("scripts/budget.py", title="Monthly Budget", icon="🥑"), # ADD THIS LINE
     ],
     "Foundations & Budgeting":[
         st.Page("scripts/affordability.py", title="Simple Affordability", icon="🤔"),
@@ -155,6 +156,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
