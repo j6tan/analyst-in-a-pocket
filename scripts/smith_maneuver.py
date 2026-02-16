@@ -12,22 +12,24 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. DATA LINKING ---
+# --- 1. DATA LINKING (STRICT) ---
 prof = st.session_state.app_db.get('profile', {})
 primary = st.session_state.app_db.get('primary_residence', {})
 
 client_name1 = prof.get('p1_name', 'Client 1')
 client_name2 = prof.get('p2_name', 'Client 2')
 p1_income = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0))
-p2_income = float(prof.get('p2_t4', 0))
+p2_income = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0))
 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# Determine Lead Taxpayer
-if p1_income > p2_income:
-    high_income = p1_income
+# Determine Strategy Lead (Higher Earner)
+if p1_income >= p2_income:
+    lead_client = client_name1
+    lead_income = p1_income
 else:
-    high_income = p2_income
+    lead_client = client_name2
+    lead_income = p2_income
 
 def estimate_marginal_rate(income):
     if income > 240000: return 53.5
@@ -36,26 +38,28 @@ def estimate_marginal_rate(income):
     elif income > 55000: return 29.0
     else: return 20.0
 
-suggested_tax_rate = estimate_marginal_rate(high_income)
+suggested_tax_rate = estimate_marginal_rate(lead_income)
 
 # --- 2. PERSISTENCE & INITIALIZATION ---
 if 'smith_maneuver' not in st.session_state.app_db:
     st.session_state.app_db['smith_maneuver'] = {}
 sm_data = st.session_state.app_db['smith_maneuver']
 
+# STRICT INITIALIZATION FROM PROFILE
 if not sm_data.get('initialized'):
-    init_mortgage = float(primary.get('mortgage_balance', 500000.0))
-    init_rate = float(primary.get('mortgage_interest_rate', 5.0))
-    init_amort = int(primary.get('remaining_amortization', 25))
+    # defaults from Primary Residence Profile
+    def_mortgage = float(primary.get('mortgage_balance', 500000.0))
+    def_rate = float(primary.get('mortgage_interest_rate', 5.0))
+    def_amort = int(primary.get('remaining_amortization', 25))
     
     sm_data.update({
-        "mortgage_amt": init_mortgage,
-        "amortization": init_amort,
-        "mortgage_rate": init_rate,
-        "loc_rate": init_rate + 1.0,
+        "mortgage_amt": def_mortgage,
+        "amortization": def_amort,
+        "mortgage_rate": def_rate,
+        "loc_rate": def_rate + 1.0, # Assumes Prime + 0.5% or similar spread
         "inv_return": 7.0,
         "div_yield": 5.0,
-        "tax_rate": float(suggested_tax_rate),
+        "tax_rate": float(suggested_tax_rate), # Auto-calculated from T4
         "initial_lump": 0.0,
         "strategy_horizon": 25,
         "initialized": True
@@ -143,6 +147,7 @@ with st.container(border=True):
     c7, c8, c9 = st.columns(3)
     with c7:
          tax_rate = cloud_input("Marginal Tax Rate (%)", "smith_maneuver", "tax_rate", step=0.5)
+         st.caption(f"Strategy Lead: **{lead_client}** (Higher Earner)") # New Concise Note
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
@@ -222,7 +227,7 @@ cf4.metric("Net Cash Benefit", f"${net_benefit:,.0f}", delta="Positive" if net_b
 st.divider()
 st.subheader(f"📅 {strategy_horizon}-Year Projection")
 display_df = df_view[['Year', 'Mortgage Balance', 'Investment Loan', 'Portfolio Value', 'Annual Tax Refund', 'Dividend Income']].copy()
-display_df.columns = ['Year', 'Bad Debt (Mortgage)', 'Good Debt (HELOC)', 'Asset Value (Portfolio)', 'Tax Refund (Re-invested)', 'Dividend Cash Flow']
+display_df.columns = ['Year', 'Bad Debt', 'Good Debt', 'Asset Value', 'Tax Refund', 'Dividend CF']
 for col in display_df.columns:
     if col != 'Year': display_df[col] = display_df[col].apply(lambda x: f"${x:,.0f}")
 st.table(display_df)
@@ -233,18 +238,18 @@ st.subheader("📈 Strategy vs. Do Nothing")
 col_res1, col_res2 = st.columns(2)
 with col_res1:
     fig_debt = go.Figure()
-    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Active Mortgage", line=dict(color=INTEREST_COLOR, width=2)))
-    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Mortgage"], name="Do Nothing Mortgage", line=dict(color=BASELINE_BLUE, dash='dot')))
+    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Mortgage Balance"], name="Active", line=dict(color=INTEREST_COLOR, width=2)))
+    fig_debt.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Mortgage"], name="Baseline", line=dict(color=BASELINE_BLUE, dash='dot')))
     fig_debt.update_layout(title="Mortgage Paydown Speed", height=300, yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_debt, use_container_width=True)
 with col_res2:
     fig_wealth = go.Figure()
-    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Net Equity (Active)"], name="Active Net Worth", line=dict(color=PRINCIPAL_COLOR, width=3)))
-    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Net Worth"], name="Do Nothing Net Worth", line=dict(color=BASELINE_BLUE, dash='dot')))
-    fig_wealth.update_layout(title="Total Net Worth Comparison", height=300, yaxis=dict(tickprefix="$"))
+    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Net Equity (Active)"], name="Active", line=dict(color=PRINCIPAL_COLOR, width=3)))
+    fig_wealth.add_trace(go.Scatter(x=df_view["Year"], y=df_view["Baseline Net Worth"], name="Baseline", line=dict(color=BASELINE_BLUE, dash='dot')))
+    fig_wealth.update_layout(title="Total Net Worth", height=300, yaxis=dict(tickprefix="$"))
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 13. STRESS TEST (RESTORED ORIGINAL LAYOUT) ---
+# --- 13. STRESS TEST (ORIGINAL LAYOUT) ---
 st.markdown("---")
 st.subheader("⚠️ Stress Test Simulator")
 st.markdown("""
