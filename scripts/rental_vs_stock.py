@@ -46,7 +46,7 @@ if not rvs_data.get('initialized'):
         "rate": float(aff_sec.get('contract_rate', 4.5)),
         "rent": float(aff_sec.get('manual_rent', 3200.0)),
         "apprec": 3.0,
-        "stock_growth": 5.0,
+        "stock_total_return": 7.0,
         "dividend_yield": 2.0,
         "years": 10,
         "prop_tax": float(aff_sec.get('annual_prop_tax', 3200.0)),
@@ -58,29 +58,36 @@ if not rvs_data.get('initialized'):
         "initialized": True
     })
 
-# --- 4. PAGE HEADER & STORYTELLING BOX ---
+# --- 4. PAGE HEADER ---
 st.title("Rental Property vs. Stock Portfolio")
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">💼 {household}’s Wealth Crossroads</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        After analyzing your options, you are debating two paths: the leveraged Rental Property or a passive Stock Portfolio. This analysis compares the long-term wealth outcomes including taxes, closing costs, and monthly cash flow.
+        This tool compares the long-term wealth outcomes of your target rental property against a stock portfolio. 
+        Calculations include net-of-tax cash flow, mortgage paydown, and the actual cost to sell in Year {rvs_data.get('years', 10)}.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. CALCULATION ENGINE ---
-def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div, years, tax_rate, acc_type):
+# --- 5. CALCULATION ENGINE (REFINED STOCK MATH) ---
+def run_wealth_engine(price, inv, rate, apprec, r_income, costs, total_return, s_div, years, tax_rate, acc_type):
     loan = price - inv
     m_rate = (rate/100)/12
     n_mo = 25 * 12
     m_pi = loan * (m_rate * (1+m_rate)**n_mo) / ((1+m_rate)**n_mo - 1) if loan > 0 else 0
+    
+    # Stock Math: Price Growth = Total Return - Dividend Yield
+    # This ensures 8% total return is consistent regardless of the split
+    price_growth = (total_return - s_div) / 100
+    
     curr_val, curr_loan, stock_val = price, loan, inv + (price * 0.02)
     cum_re_cash, cum_st_cash = 0, 0
     data = []
     
     for y in range(1, years + 1):
+        # Rental Math
         ann_int = 0
         for _ in range(12):
             i_mo = curr_loan * m_rate
@@ -89,20 +96,25 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
         
         tax_deductibles = ann_int + costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint']
         total_opex = costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint'] + (r_income*12*(costs['mgmt']/100))
-        
         taxable_re = (r_income * 12) - tax_deductibles
         re_tax_impact = taxable_re * (tax_rate/100)
         net_re_cash = (r_income * 12) - (m_pi * 12) - total_opex - re_tax_impact
         cum_re_cash += net_re_cash
         
+        # Stock Math
         div_gross = stock_val * (s_div/100)
         st_tax_impact = div_gross * (tax_rate/100) * 0.5 if acc_type == "Non-Registered" else 0
         net_st_cash = div_gross - st_tax_impact
         cum_st_cash += net_st_cash
         
         curr_val *= (1 + apprec/100)
-        stock_val *= (1 + s_growth/100)
-        data.append({"Year": y, "RE_Cash": net_re_cash/12, "Stock_Cash": net_st_cash/12, "RE_Tax": re_tax_impact, "ST_Tax": st_tax_impact, "RE_Equity": max(0, curr_val-curr_loan), "Stock_Value": stock_val})
+        stock_val *= (1 + price_growth) # Only compounds by price growth component
+        
+        data.append({
+            "Year": y, "RE_Cash": net_re_cash/12, "Stock_Cash": net_st_cash/12, 
+            "RE_Tax": re_tax_impact, "ST_Tax": st_tax_impact, 
+            "RE_Equity": max(0, curr_val-curr_loan), "Stock_Value": stock_val
+        })
     
     re_sell_costs = (curr_val * 0.035) + 2000
     re_cap_gain_tax = max(0, curr_val - price - re_sell_costs) * 0.5 * (tax_rate/100)
@@ -110,7 +122,9 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
     
     st_sell_costs = stock_val * 0.01
     st_profit = stock_val - (inv + (price*0.02)) - st_sell_costs
-    st_tax = 0 if acc_type == "TFSA" else (stock_val * (tax_rate/100) if acc_type == "RRSP" else max(0, st_profit) * 0.5 * (tax_rate/100))
+    if acc_type == "TFSA": st_tax = 0
+    elif acc_type == "RRSP": st_tax = stock_val * (tax_rate/100) 
+    else: st_tax = max(0, st_profit) * 0.5 * (tax_rate/100)
     net_proceeds_st = stock_val - st_sell_costs - st_tax
     
     return pd.DataFrame(data), (net_proceeds_re + cum_re_cash), (net_proceeds_st + cum_st_cash), (re_cap_gain_tax + re_sell_costs), (st_tax + st_sell_costs), net_proceeds_re, net_proceeds_st
@@ -134,29 +148,30 @@ with col1:
 with col2:
     st.subheader("📈 Stock Portfolio")
     st_acc = st.selectbox("Account Type", ["Non-Registered", "TFSA", "RRSP"], index=["Non-Registered", "TFSA", "RRSP"].index(rvs_data.get('stock_account', "Non-Registered")))
-    s_growth = cloud_input("Total Return (%)", "rental_vs_stock", "stock_growth") 
+    s_total_return = cloud_input("Total Return (%)", "rental_vs_stock", "stock_total_return") 
     s_div = cloud_input("Dividend Yield (%)", "rental_vs_stock", "dividend_yield")
     years = st.select_slider("Horizon (Years)", options=[5, 10, 15, 20], value=int(rvs_data.get('years', 10)))
     
+    # TAX RADIO TOGGLE
     tax_options = {f"{p1_name} ({p1_tax}%)": p1_tax, f"{p2_name} ({p2_tax}%)": p2_tax}
     selected_tax_label = st.radio("Select Owner Marginal Tax Rate", list(tax_options.keys()), horizontal=True)
     tax_rate_input = tax_options[selected_tax_label]
     
     st.markdown(f"""
-    <div style="background-color: #f1f3f5; padding: 10px 15px; border-radius: 8px; font-size: 0.9em; color: {SLATE_ACCENT};">
-        <b>💡 Tax Strategy:</b><br>
-        • Select <b>Higher %</b> if the property has negative cash flow (Maximize Refund).<br>
-        • Select <b>Lower %</b> if the property is profitable (Minimize Tax Bill).
+    <div style="background-color: #f1f3f5; padding: 12px; border-radius: 8px; font-size: 0.85em; color: #555; border: 1px solid #ddd;">
+        <b>⚖️ Tax Strategy Guide:</b><br>
+        • Select the <b>Higher %</b> client if the property has <i>negative</i> cash flow (Maximize your T4 refund).<br>
+        • Select the <b>Lower %</b> client if the property is <i>profitable</i> (Minimize your annual tax bill).
     </div>
     """, unsafe_allow_html=True)
 
 # --- 7. EXECUTION ---
 costs = {'tax': tax_cost, 'ins': ins_cost, 'strata': strata_cost, 'maint': maint_cost, 'mgmt': mgmt_pct}
-df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine(price, inv, rate, apprec, rent, costs, s_growth, s_div, years, tax_rate_input, st_acc)
+df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine(price, inv, rate, apprec, rent, costs, s_total_return, s_div, years, tax_rate_input, st_acc)
 
 # --- 8. COMPARISON TABLE ---
 st.divider()
-st.subheader(f"📊 Year {years} Snapshot")
+st.subheader(f"📊 Year {years} Comparison Snapshot")
 re_tax_annual = df.iloc[-1]['RE_Tax']
 st_tax_annual = df.iloc[-1]['ST_Tax']
 
@@ -180,19 +195,17 @@ st.table(comp_df)
 # --- 9. WEALTH OUTCOME METRICS ---
 st.write("")
 w1, w2 = st.columns(2)
-with w1:
-    st.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
-with w2:
-    st.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
+w1.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
+w2.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
 
-# --- 10. REFINED VERDICT ---
+# --- 10. REFINED STRATEGIC VERDICT ---
 st.write("")
 winner = "🏠 Rental Property" if re_tot > st_tot else "📈 Stock Portfolio"
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 18px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 6px solid {PRIMARY_GOLD};">
-    <h3 style="color: {CHARCOAL}; margin-top: 0; margin-bottom: 8px;">🏆 Strategic Verdict</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.15em; margin-bottom: 0;">
-        The <b>{winner}</b> generates <b>${abs(re_tot - st_tot):,.0f}</b> more in total take-home wealth over {years} years.
+    <h3 style="color: {CHARCOAL}; margin-top: 0; margin-bottom: 8px; font-size: 1.2em;">🏆 Strategic Verdict</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; margin-bottom: 0;">
+        Based on these parameters, the <b>{winner}</b> generates <b>${abs(re_tot - st_tot):,.0f}</b> more in total take-home wealth over {years} years.
     </p>
 </div>
 """, unsafe_allow_html=True)
