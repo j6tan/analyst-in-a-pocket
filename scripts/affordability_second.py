@@ -75,7 +75,7 @@ if aff_sec.get('target_price', 0) == 0:
         "mgmt_pct": 5.0,
         "is_vanc": False
     })
-    # Save defaults immediately
+    # Save defaults
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
@@ -116,19 +116,19 @@ with ts_col2:
                              on_change=sync_widget, args=("affordability_second:use_case",))
     is_rental = True if use_case == "Rental Property" else False
 
-# --- 6. CORE CALCULATION PREP ---
+# --- 6. HOUSEHOLD FINANCIALS ---
 def get_f(k, d=0.0):
     try: return float(prof.get(k, d))
     except: return d
 
-m_inc = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + (get_f('inv_rental_income') * 0.80)) / 12
+m_inc_base = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + (get_f('inv_rental_income') * 0.80)) / 12
 m_bal = get_f('m_bal')
 m_rate_p = (get_f('m_rate', 4.0) / 100) / 12
 primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 0
 primary_carrying = (get_f('prop_taxes', 4200) / 12) + get_f('heat_pmt', 125)
 p_debts = get_f('car_loan') + get_f('student_loan') + get_f('cc_pmt') + (get_f('loc_balance') * 0.03)
 
-# --- 7. INPUTS & LIVE MAX POWER CALC ---
+# --- 7. CORE INPUTS & LIVE MAX POWER CALC ---
 st.divider()
 c_left, c_right = st.columns(2)
 
@@ -141,33 +141,46 @@ with c_left:
     # 2. Purchase Price Input
     f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
 
-    # --- INSTANT CALCULATION BLOCK ---
-    # We fetch Rate, Rent, and Tax from state (aff_sec) so they are available BEFORE their widgets are rendered below.
-    # This ensures the calculation updates immediately when the script reruns.
+    # --- INSTANT MAX POWER CALCULATION ---
+    # We fetch these directly from the DB so they are available BEFORE their widgets render
     calc_rate = float(aff_sec.get('contract_rate', 4.26))
     calc_rent = float(aff_sec.get('manual_rent', 0.0))
     calc_tax = float(aff_sec.get('annual_prop_tax', 0.0))
 
-    # Stress Test Math
+    # Stress Test Payment Factor (per $1 of loan)
     stress_rate = max(5.25, calc_rate + 2.0)
     r_stress = (stress_rate / 100) / 12
-    stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1) if r_stress > 0 else 1/300
+    k_stress = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1) if r_stress > 0 else 1/300
     
-    rent_offset = (calc_rent * 0.50) if is_rental else 0 # Conservative 50% add-back
+    # Correct Income Logic: Add 50% of Rent to Gross Income, THEN apply TDS
+    rent_addback = (calc_rent * 0.50) if is_rental else 0
+    total_gross_income = m_inc_base + rent_addback
     
-    # Allowable Debt Service (Income Test)
-    qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (calc_tax / 12) - 150
-    max_by_income = (qual_room / stress_k) + f_dp if qual_room > 0 else f_dp
+    max_allowable_debt_service = total_gross_income * 0.44
     
-    # Down Payment Test (20% Rule)
-    max_by_dp = f_dp / 0.20
+    # Deduct existing obligations + new property tax/heat
+    new_prop_basic_carry = (calc_tax / 12) + 150 # $150 buffer for heat/strata in qualification
+    available_for_mtg = max_allowable_debt_service - primary_mtg - primary_carrying - p_debts - new_prop_basic_carry
     
-    # STRICT "LOWER OF" LOGIC
-    max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
-    limit_reason = "Income (TDS)" if max_by_income < max_by_dp else "20% Down Payment Rule"
+    if available_for_mtg > 0:
+        max_loan_income = available_for_mtg / k_stress
+        max_price_income = max_loan_income + f_dp
+    else:
+        max_price_income = f_dp # Can only buy what you have in cash if no room for loan
+        
+    # Down Payment Cap
+    max_price_dp = f_dp / 0.20
+    
+    # THE VERDICT: LOWER OF
+    max_buying_power = custom_round_up(min(max_price_income, max_price_dp))
+    
+    if max_price_income < max_price_dp:
+        limit_reason = "Income Qualification (GDS/TDS)"
+    else:
+        limit_reason = "20% Down Payment Rule"
     # -------------------------------
 
-    # 3. DISPLAY MAX POWER BOX (Right under Purchase Price)
+    # 3. DISPLAY MAX POWER BOX (Below Price, Above Rate)
     st.markdown(f"""
         <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-top: 10px; margin-bottom: 20px;">
             <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
