@@ -53,13 +53,12 @@ if 'affordability_second' not in st.session_state.app_db:
 
 aff_sec = st.session_state.app_db['affordability_second']
 
-# --- INITIALIZE DEFAULTS (Fixing the 0.0 issue) ---
+# --- INITIALIZE DEFAULTS (Prevent 0.0 startup) ---
 if aff_sec.get('target_price', 0) == 0:
     scraped_yield = intel.get("provincial_yields", {}).get(current_res_prov, 3.8)
     def_price = 600000.0
     def_rent = (def_price * (scraped_yield/100)) / 12
-    tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
-    def_tax_rate = tax_rate_lookup.get(current_res_prov, 0.0075)
+    def_tax_rate = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}.get(current_res_prov, 0.0075)
     
     aff_sec.update({
         "down_payment": 200000.0,
@@ -76,6 +75,7 @@ if aff_sec.get('target_price', 0) == 0:
         "mgmt_pct": 5.0,
         "is_vanc": False
     })
+    # Save defaults immediately
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
@@ -128,42 +128,46 @@ primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 
 primary_carrying = (get_f('prop_taxes', 4200) / 12) + get_f('heat_pmt', 125)
 p_debts = get_f('car_loan') + get_f('student_loan') + get_f('cc_pmt') + (get_f('loc_balance') * 0.03)
 
-# --- 7. CORE INPUTS & LIVE MAX POWER CALC ---
+# --- 7. INPUTS & LIVE MAX POWER CALC ---
 st.divider()
 c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
+    
+    # 1. Down Payment Input
     f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
     
-    # --- LIVE MAX QUALIFYING POWER CALCULATION ---
-    # We must grab rate/rent NOW (even though they are inputted below) to calc max power live
-    curr_rate = aff_sec.get('contract_rate', 4.26)
-    curr_rent = aff_sec.get('manual_rent', 0.0)
-    curr_tax = aff_sec.get('annual_prop_tax', 0.0)
-    
-    stress_rate = max(5.25, curr_rate + 2.0)
+    # 2. Purchase Price Input
+    f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
+
+    # --- INSTANT CALCULATION BLOCK ---
+    # We fetch Rate, Rent, and Tax from state (aff_sec) so they are available BEFORE their widgets are rendered below.
+    # This ensures the calculation updates immediately when the script reruns.
+    calc_rate = float(aff_sec.get('contract_rate', 4.26))
+    calc_rent = float(aff_sec.get('manual_rent', 0.0))
+    calc_tax = float(aff_sec.get('annual_prop_tax', 0.0))
+
+    # Stress Test Math
+    stress_rate = max(5.25, calc_rate + 2.0)
     r_stress = (stress_rate / 100) / 12
     stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1) if r_stress > 0 else 1/300
     
-    rent_offset = (curr_rent * 0.50) if is_rental else 0 # Conservative 50% add-back for qualification estimate
+    rent_offset = (calc_rent * 0.50) if is_rental else 0 # Conservative 50% add-back
     
-    # Allowable Debt Service (GDS/TDS proxy)
-    # Total monthly income * 44% TDS limit - Existing Obligations - New Property Tax/Heat Buffer
-    qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (curr_tax / 12) - 150 
-    
+    # Allowable Debt Service (Income Test)
+    qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (calc_tax / 12) - 150
     max_by_income = (qual_room / stress_k) + f_dp if qual_room > 0 else f_dp
+    
+    # Down Payment Test (20% Rule)
     max_by_dp = f_dp / 0.20
     
-    # STRICT MINIMUM CHECK
+    # STRICT "LOWER OF" LOGIC
     max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
     limit_reason = "Income (TDS)" if max_by_income < max_by_dp else "20% Down Payment Rule"
-    
-    # --- END LIVE CALC ---
+    # -------------------------------
 
-    f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
-    
-    # DISPLAY MAX POWER BOX HERE (Under Purchase Price, as requested)
+    # 3. DISPLAY MAX POWER BOX (Right under Purchase Price)
     st.markdown(f"""
         <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-top: 10px; margin-bottom: 20px;">
             <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
@@ -172,9 +176,12 @@ with c_left:
         </div>
     """, unsafe_allow_html=True)
 
+    # 4. Rate Input
     f_rate = cloud_input("Mortgage Contract Rate (%)", "affordability_second", "contract_rate", step=0.1)
     
     scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
+    
+    # 5. Rent Input
     if is_rental:
         f_rent = cloud_input("Monthly Projected Rent ($)", "affordability_second", "manual_rent")
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
