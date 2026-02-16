@@ -40,16 +40,13 @@ if aff_price == 0:
 
 aff_amort = int(aff_store.get('amortization', 25))
 
-# Retrieve Default Rate (Prioritize Affordability Page)
+# Retrieve Default Rate
 def get_default_rate():
-    # 1. Try fetching from Affordability inputs
     if 'affordability' in st.session_state.app_db:
         aff = st.session_state.app_db['affordability']
-        # 'contract_rate' is usually the user input, 'bank_rate' is stress test
         if aff.get('contract_rate'): return float(aff['contract_rate'])
         if aff.get('bank_rate'): return float(aff['bank_rate'])
     
-    # 2. Fallback to market_intel.json
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
         try:
@@ -62,9 +59,8 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
-# Initialization Logic: Check if we need to seed data
+# Initialization Logic
 if not ms_data.get('initialized'):
-    # Use Affordability data if available, otherwise defaults
     init_price = aff_price if aff_price > 0 else 800000.0
     init_down = aff_down if aff_down > 0 else 160000.0
     init_amort = aff_amort if aff_price > 0 else 25
@@ -87,20 +83,30 @@ if "scenarios" not in store:
         {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
     ]
 
-# --- 3. HELPER: CLOUD SYNC ---
+# --- 3. HELPER: CLOUD SYNC (FORCE SAVE) ---
 def trigger_cloud_save():
-    try:
-        if st.session_state.get('user'):
-             supabase.table('user_data').update({'data': st.session_state.app_db}).eq('user_id', st.session_state.user.id).execute()
-    except:
-        pass 
+    # 1. Update the local session state 'app_db' first
+    st.session_state.app_db['mortgage_scenario'] = store
+    
+    # 2. Force write to Supabase
+    if st.session_state.get('user'):
+        try:
+            supabase.table('user_data').update({
+                'data': st.session_state.app_db
+            }).eq('user_id', st.session_state.user.id).execute()
+            # Optional: feedback for debugging
+            # st.toast("✅ Saved to Cloud", icon="☁️") 
+        except Exception as e:
+            st.error(f"Save Failed: {e}")
 
 # --- 4. CALLBACK: UPDATE STORE ---
 def update_ms_store():
+    # Capture Inputs
     if "ms_price" in st.session_state: store['price'] = st.session_state.ms_price
     if "ms_down" in st.session_state: store['down'] = st.session_state.ms_down
     if "w_amort" in st.session_state: store['amort'] = st.session_state.w_amort
 
+    # Capture Scenarios
     for i in range(len(store['scenarios'])):
         s = store['scenarios'][i]
         s['label'] = st.session_state.get(f"n{i}", s['label'])
@@ -110,6 +116,7 @@ def update_ms_store():
         s['extra'] = st.session_state.get(f"ex{i}", s['extra'])
         s['lump'] = st.session_state.get(f"ls{i}", s['lump'])
     
+    # TRIGGER SAVE
     trigger_cloud_save()
 
 if 'num_options' not in st.session_state:
@@ -392,5 +399,5 @@ with tabs[3]:
     } for r in results])
     st.table(table_df)
 
-# --- 12. LEGAL DISCLAIMER (UPDATED) ---
+# --- 12. LEGAL DISCLAIMER ---
 show_disclaimer()
