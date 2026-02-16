@@ -213,25 +213,32 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
-
-# Add Contextual Strategy Bullets
+# --- 11. STRATEGIC INSIGHTS & STRESS TEST ---
 st.write("")
 col_s1, col_s2 = st.columns(2)
 
 with col_s1:
     st.markdown("### 💡 Strategic Insights")
     if is_lifestyle_deficit:
-        st.write(f"**The Opportunity Cost:** To make this work, your annual travel or shopping budget must decrease by **${abs(true_net)*12:,.0f}**. Is the real estate equity worth the lifestyle trade-off?")
+        st.error(f"**Lifestyle Trade-off:** To sustain this, you must cut **${abs(true_net)*12:,.0f}/year** from personal spending. Ensure the equity growth outweighs this quality-of-life reduction.")
+    
     if is_neg_carry:
-        st.write("**The Appreciation Requirement:** Since this loses cash, you need at least **3.5% annual appreciation** just to break even on the monthly carry. Ensure this is a high-growth location.")
+        st.warning("**Growth Requirement:** This asset loses cash monthly. You need **~3.5% annual appreciation** just to break even on the 'carry' cost.")
+    
     if not is_lifestyle_deficit and not is_unsustainable:
-        st.write("**Capital Efficiency:** You have high resilience. Consider using a shorter amortization or a larger loan to maximize your tax-deductible interest if this is an investment.")
+        st.success("**Capital Efficiency:** You have high resilience. Consider shorter amortization to build equity faster or look for a slightly higher-value asset.")
 
 with col_s2:
     st.markdown("### 🛡️ Stress Test Scenarios")
+    # Liquidity Calculation
     job_loss_months = (f_dp / (lifestyle_spend + primary_mtg + primary_carrying + new_p_i + total_opex_mo)) if f_dp > 0 else 0
-    st.write(f"**Liquidity Buffer:** If household income hit zero tomorrow, your current Down Payment capital could float both properties for **{job_loss_months:.1f} months**.")
-    st.write(f"**Interest Rate Shock:** If rates rise another 2% at renewal, your True Net Position would drop by approx. **${(target_loan * 0.02 / 12):,.0f}/mo**.")
+    st.write(f"**Liquidity Buffer:** Your current Down Payment could float both homes and lifestyle for **{job_loss_months:.1f} months** if income hits zero.")
+    
+    # Rate Shock
+    rate_shock = (target_loan * 0.02 / 12)
+    st.write(f"**Rate Shock:** A 2% rate increase at renewal would reduce your monthly True Net by **${rate_shock:,.0f}**.")
 
+    # Added Note
+    st.caption("⚠️ *Note: All surpluses shown are pre-lifestyle. Your ability to save depends on the accuracy of your Budget Tool inputs.*")
 show_disclaimer()
+
