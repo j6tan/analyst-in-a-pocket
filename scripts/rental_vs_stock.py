@@ -20,25 +20,18 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL (STRICT LINKING) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {}) 
 aff_sec = st.session_state.app_db.get('affordability_second', {}) 
 
 p1_name = prof.get('p1_name', 'Client 1')
 p2_name = prof.get('p2_name', 'Client 2')
 
-# T4 Intelligence
+# T4 Income & Tax Rates
 p1_inc = float(prof.get('p1_t4', 0.0)) + float(prof.get('p1_bonus', 0.0))
 p2_inc = float(prof.get('p2_t4', 0.0)) + float(prof.get('p2_bonus', 0.0))
 p1_tax = float(prof.get('p1_tax_rate', 35.0))
 p2_tax = float(prof.get('p2_tax_rate', 35.0))
-
-if p1_inc >= p2_inc:
-    higher_name, higher_rate = p1_name, p1_tax
-    lower_name, lower_rate = p2_name, p2_tax
-else:
-    higher_name, higher_rate = p2_name, p2_tax
-    lower_name, lower_rate = p1_name, p1_tax
 
 # --- 3. PERSISTENCE & INITIALIZATION ---
 if 'rental_vs_stock' not in st.session_state.app_db:
@@ -64,22 +57,7 @@ if not rvs_data.get('initialized'):
         "initialized": True
     })
 
-# --- 4. DYNAMIC TAX RECOMMENDATION ---
-est_loan = rvs_data['price'] - rvs_data['inv']
-est_annual_int = est_loan * (rvs_data['rate']/100)
-est_annual_opex = rvs_data['prop_tax'] + (rvs_data['ins']*12) + (rvs_data['strata']*12) + rvs_data['maint']
-est_taxable_inc = (rvs_data['rent'] * 12) - est_annual_int - est_annual_opex
-
-if est_taxable_inc > 0:
-    rec_name, rec_rate, rec_reason = lower_name, lower_rate, "Profit Minimization (Minimize Tax Owed)."
-else:
-    rec_name, rec_rate, rec_reason = higher_name, higher_rate, "Loss Maximization (Maximize Tax Refund)."
-
-if not rvs_data.get('tax_set'):
-    rvs_data['tax_rate'] = rec_rate
-    rvs_data['tax_set'] = True
-
-# --- 5. CALCULATION ENGINE ---
+# --- 4. CALCULATION ENGINE ---
 def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div, years, tax_rate, acc_type):
     loan = price - inv
     m_rate = (rate/100)/12
@@ -96,13 +74,11 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
             ann_int += i_mo
             curr_loan -= (m_pi - i_mo)
         
-        # Deductibles = Interest + Tax + Ins + Strata + R&M
         tax_deductibles = ann_int + costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint']
         total_opex = costs['tax'] + (costs['ins']*12) + (costs['strata']*12) + costs['maint'] + (r_income*12*(costs['mgmt']/100))
         
         taxable_re = (r_income * 12) - tax_deductibles
         re_tax_impact = taxable_re * (tax_rate/100)
-        
         net_re_cash = (r_income * 12) - (m_pi * 12) - total_opex - re_tax_impact
         cum_re_cash += net_re_cash
         
@@ -126,7 +102,7 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
     
     return pd.DataFrame(data), (net_proceeds_re + cum_re_cash), (net_proceeds_st + cum_st_cash), (re_cap_gain_tax + re_sell_costs), (st_tax + st_sell_costs), net_proceeds_re, net_proceeds_st
 
-# --- 6. INPUTS ---
+# --- 5. INPUTS ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("🏠 Real Estate Asset")
@@ -145,17 +121,31 @@ with col1:
 with col2:
     st.subheader("📈 Stock Portfolio")
     st_acc = st.selectbox("Account Type", ["Non-Registered", "TFSA", "RRSP"], index=["Non-Registered", "TFSA", "RRSP"].index(rvs_data.get('stock_account', "Non-Registered")))
-    s_growth = cloud_input("Price Growth (%)", "rental_vs_stock", "stock_growth")
+    s_growth = cloud_input("Total Return (%)", "rental_vs_stock", "stock_growth") # Renamed
     s_div = cloud_input("Dividend Yield (%)", "rental_vs_stock", "dividend_yield")
     years = st.select_slider("Horizon (Years)", options=[5, 10, 15, 20], value=int(rvs_data.get('years', 10)))
-    tax_rate_input = cloud_input("Owner Marginal Tax Rate (%)", "rental_vs_stock", "tax_rate")
-    st.info(f"**🎯 Strategy:** Hold under **{rec_name}**.")
+    
+    # NEW: Marginal Tax Rate Radio Selection
+    tax_options = {
+        f"{p1_name} ({p1_tax}%)": p1_tax,
+        f"{p2_name} ({p2_tax}%)": p2_tax
+    }
+    selected_tax_label = st.radio("Select Owner Marginal Tax Rate", list(tax_options.keys()), horizontal=True)
+    tax_rate_input = tax_options[selected_tax_label]
+    
+    st.markdown(f"""
+    <div style="background-color: #f1f3f5; padding: 10px 15px; border-radius: 8px; font-size: 0.9em; color: {SLATE_ACCENT};">
+        <b>💡 Tax Strategy:</b><br>
+        • Select <b>Higher %</b> if the property has negative cash flow (Maximize Refund).<br>
+        • Select <b>Lower %</b> if the property is profitable (Minimize Tax Bill).
+    </div>
+    """, unsafe_allow_html=True)
 
-# --- 7. EXECUTION ---
+# --- 6. EXECUTION ---
 costs = {'tax': tax_cost, 'ins': ins_cost, 'strata': strata_cost, 'maint': maint_cost, 'mgmt': mgmt_pct}
 df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine(price, inv, rate, apprec, rent, costs, s_growth, s_div, years, tax_rate_input, st_acc)
 
-# --- 8. COMPARISON TABLE ---
+# --- 7. COMPARISON TABLE ---
 st.divider()
 st.subheader(f"📊 Year {years} Snapshot")
 re_tax_annual = df.iloc[-1]['RE_Tax']
@@ -178,15 +168,13 @@ comp_df = pd.DataFrame({
 }).set_index("Metric")
 st.table(comp_df)
 
-# --- 9. TOTAL WEALTH METRICS ---
+# --- 8. WEALTH METRICS ---
 st.write("")
 w1, w2 = st.columns(2)
-with w1:
-    st.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated 10-year cash flow + Net sale proceeds")
-with w2:
-    st.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated 10-year cash flow + Net sale proceeds")
+w1.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
+w2.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
 
-# --- 10. REFINED VERDICT ---
+# --- 9. VERDICT ---
 st.write("")
 winner = "🏠 Rental Property" if re_tot > st_tot else "📈 Stock Portfolio"
 st.markdown(f"""
