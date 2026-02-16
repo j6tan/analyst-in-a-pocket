@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import os
 import json
-from style_utils import inject_global_css, show_disclaimer # Updated Import
+from style_utils import inject_global_css, show_disclaimer 
 from data_handler import supabase 
 
 # 1. Inject the Wealthsimple-inspired Editorial CSS
@@ -26,17 +26,30 @@ if 'mortgage_scenario' not in st.session_state.app_db:
 ms_data = st.session_state.app_db['mortgage_scenario']
 
 # Retrieve Affordability Data (Robust Sync)
-# Checking 'affordability' table as requested
 aff_store = st.session_state.app_db.get('affordability', {}) 
-aff_price = float(aff_store.get('max_purchase', 0.0))
-aff_down = float(aff_store.get('down_payment', 0.0))
-aff_amort = int(aff_store.get('amortization', 25)) # Default to 25 if missing
 
-# Retrieve Default Rate
+# Logic Fix: If 'max_purchase' key is missing, calculate it from components
+aff_down = float(aff_store.get('down_payment', 0.0))
+aff_price = float(aff_store.get('max_purchase', 0.0))
+
+if aff_price == 0:
+    # Fallback: Price = Loan Cap + Down Payment
+    loan_cap = float(aff_store.get('loan_cap', 0.0))
+    if loan_cap > 0:
+        aff_price = loan_cap + aff_down
+
+aff_amort = int(aff_store.get('amortization', 25))
+
+# Retrieve Default Rate (Prioritize Affordability Page)
 def get_default_rate():
+    # 1. Try fetching from Affordability inputs
     if 'affordability' in st.session_state.app_db:
-        return float(st.session_state.app_db['affordability'].get('contract_rate', 4.49))
+        aff = st.session_state.app_db['affordability']
+        # 'contract_rate' is usually the user input, 'bank_rate' is stress test
+        if aff.get('contract_rate'): return float(aff['contract_rate'])
+        if aff.get('bank_rate'): return float(aff['bank_rate'])
     
+    # 2. Fallback to market_intel.json
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
         try:
