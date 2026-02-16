@@ -34,7 +34,6 @@ def custom_round_up(n):
     return float(math.ceil(n / step) * step)
 
 # --- 2. DATA RETRIEVAL ---
-# Changed: Pull from app_db['profile'] instead of 'user_profile'
 prof = st.session_state.app_db.get('profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Primary Client')
@@ -54,15 +53,11 @@ if 'affordability_second' not in st.session_state.app_db:
 
 aff_sec = st.session_state.app_db['affordability_second']
 
-# --- FIX: INITIALIZE DEFAULTS IF EMPTY ---
-# This ensures inputs don't show 0.0 when first loaded
+# --- INITIALIZE DEFAULTS (Fixing the 0.0 issue) ---
 if aff_sec.get('target_price', 0) == 0:
     scraped_yield = intel.get("provincial_yields", {}).get(current_res_prov, 3.8)
-    # Default assumptions from your original logic
     def_price = 600000.0
     def_rent = (def_price * (scraped_yield/100)) / 12
-    
-    # Calculate default tax based on province
     tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
     def_tax_rate = tax_rate_lookup.get(current_res_prov, 0.0075)
     
@@ -81,10 +76,8 @@ if aff_sec.get('target_price', 0) == 0:
         "mgmt_pct": 5.0,
         "is_vanc": False
     })
-    # Save these defaults to Supabase immediately
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
-
 
 # --- 4. TITLE & STORYBOX ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -108,7 +101,6 @@ st.markdown(f"""
 ts_col1, ts_col2 = st.columns(2)
 with ts_col1:
     prov_options = ["BC", "Alberta", "Ontario", "Manitoba", "Quebec", "Saskatchewan", "Nova Scotia", "New Brunswick"]
-    # Sync Logic: Use session state value, default to profile province
     curr_prov = aff_sec.get('asset_province', current_res_prov)
     if curr_prov not in prov_options: curr_prov = "BC"
     
@@ -129,7 +121,6 @@ def get_f(k, d=0.0):
     try: return float(prof.get(k, d))
     except: return d
 
-# Read Income/Debt from Profile (Standardized keys)
 m_inc = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + (get_f('inv_rental_income') * 0.80)) / 12
 m_bal = get_f('m_bal')
 m_rate_p = (get_f('m_rate', 4.0) / 100) / 12
@@ -137,15 +128,50 @@ primary_mtg = (m_bal * m_rate_p) / (1 - (1 + m_rate_p)**-300) if m_bal > 0 else 
 primary_carrying = (get_f('prop_taxes', 4200) / 12) + get_f('heat_pmt', 125)
 p_debts = get_f('car_loan') + get_f('student_loan') + get_f('cc_pmt') + (get_f('loc_balance') * 0.03)
 
-# --- 7. CORE INPUTS ---
+# --- 7. CORE INPUTS & LIVE MAX POWER CALC ---
 st.divider()
 c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
-    # Using cloud_input to replace st.number_input
     f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
+    
+    # --- LIVE MAX QUALIFYING POWER CALCULATION ---
+    # We must grab rate/rent NOW (even though they are inputted below) to calc max power live
+    curr_rate = aff_sec.get('contract_rate', 4.26)
+    curr_rent = aff_sec.get('manual_rent', 0.0)
+    curr_tax = aff_sec.get('annual_prop_tax', 0.0)
+    
+    stress_rate = max(5.25, curr_rate + 2.0)
+    r_stress = (stress_rate / 100) / 12
+    stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1) if r_stress > 0 else 1/300
+    
+    rent_offset = (curr_rent * 0.50) if is_rental else 0 # Conservative 50% add-back for qualification estimate
+    
+    # Allowable Debt Service (GDS/TDS proxy)
+    # Total monthly income * 44% TDS limit - Existing Obligations - New Property Tax/Heat Buffer
+    qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (curr_tax / 12) - 150 
+    
+    max_by_income = (qual_room / stress_k) + f_dp if qual_room > 0 else f_dp
+    max_by_dp = f_dp / 0.20
+    
+    # STRICT MINIMUM CHECK
+    max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
+    limit_reason = "Income (TDS)" if max_by_income < max_by_dp else "20% Down Payment Rule"
+    
+    # --- END LIVE CALC ---
+
     f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
+    
+    # DISPLAY MAX POWER BOX HERE (Under Purchase Price, as requested)
+    st.markdown(f"""
+        <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-top: 10px; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
+            <p style="margin: 0; font-size: 1.4em; color: {SLATE_ACCENT}; font-weight: 800;">${max_buying_power:,.0f}</p>
+            <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Limited by: <b>{limit_reason}</b></p>
+        </div>
+    """, unsafe_allow_html=True)
+
     f_rate = cloud_input("Mortgage Contract Rate (%)", "affordability_second", "contract_rate", step=0.1)
     
     scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
@@ -167,52 +193,13 @@ with c_right:
     if asset_province == "BC" and not is_rental:
         st.markdown("---")
         spec_tax = f_price * 0.005
-        # Manual sync for Checkbox
-        vanc_check = st.checkbox("Property in Vancouver?", 
-                                 value=aff_sec.get('is_vanc', False),
-                                 key="affordability_second:is_vanc",
-                                 on_change=sync_widget, args=("affordability_second:is_vanc",))
+        vanc_check = st.checkbox("Property in Vancouver?", value=aff_sec.get('is_vanc', False), key="affordability_second:is_vanc", on_change=sync_widget, args=("affordability_second:is_vanc",))
         vanc_empty_tax = f_price * 0.03 if vanc_check else 0
         st.warning(f"🌲 BC Specifics: Spec Tax: ${spec_tax:,.0f} | Empty Home Tax: ${vanc_empty_tax:,.0f}")
         bc_extra = (spec_tax + vanc_empty_tax) / 12
 
-    # Manual sync for Slider
-    if is_rental:
-        mgmt_pct = st.slider("Property Management Fee %", 0.0, 12.0, 
-                             float(aff_sec.get('mgmt_pct', 5.0)),
-                             key="affordability_second:mgmt_pct",
-                             on_change=sync_widget, args=("affordability_second:mgmt_pct",))
-        mgmt_fee = (f_rent * (mgmt_pct / 100))
-    else:
-        mgmt_fee = 0
-    
+    mgmt_fee = (f_rent * (st.slider("Property Management Fee %", 0.0, 12.0, float(aff_sec.get('mgmt_pct', 5.0)), key="affordability_second:mgmt_pct", on_change=sync_widget, args=("affordability_second:mgmt_pct",)) / 100)) if is_rental else 0
     total_opex_mo = (f_tax / 12) + f_strata + f_ins + f_rm + bc_extra + mgmt_fee
-
-# --- 8. LIVE QUALIFYING POWER BOX (RESTORED TO ORIGINAL LOCATION) ---
-stress_rate = max(5.25, f_rate + 2.0)
-r_stress = (stress_rate / 100) / 12
-# Safety check for zero rate
-if r_stress > 0:
-    stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
-else:
-    stress_k = 1/300
-
-rent_offset = (f_rent * 0.80) if is_rental else 0
-
-qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (f_tax / 12)
-max_by_income = (qual_room / stress_k) + f_dp if qual_room > 0 else f_dp
-max_by_dp = f_dp / 0.20
-
-max_buying_power = custom_round_up(min(max_by_income, max_by_dp))
-limit_reason = "Income Test" if max_by_income < max_by_dp else "20% Down Payment rule"
-
-st.markdown(f"""
-    <div style="background-color: #E9ECEF; padding: 12px; border-radius: 8px; border: 1px solid #DEE2E6; margin-top: 20px;">
-        <p style="margin: 0; font-size: 0.8em; color: {SLATE_ACCENT}; font-weight: bold;">Max Qualified Buying Power</p>
-        <p style="margin: 0; font-size: 1.4em; color: {SLATE_ACCENT}; font-weight: 800;">${max_buying_power:,.0f}</p>
-        <p style="margin: 0; font-size: 0.75em; color: #6C757D; line-height: 1.2;">Note: Max power limited by <b>{limit_reason}</b>.</p>
-    </div>
-""", unsafe_allow_html=True)
 
 # --- 9. ANALYSIS ---
 target_loan = max(0, f_price - f_dp)
@@ -263,7 +250,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 11. STRATEGIC VERDICT (RESTORED HTML & LOGIC) ---
+# --- 11. STRATEGIC VERDICT ---
 st.subheader("🎯 Strategic Verdict")
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
@@ -279,13 +266,10 @@ else:
 
 v_html.append("<div style='font-size: 1em;'>")
 v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses such as food, utilities, shopping, childcare, etc.</p>")
-
 if is_neg_carry:
     v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
-
 if is_low_safety:
     v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>")
-
 v_html.append("</div></div>")
 
 st.markdown("".join(v_html), unsafe_allow_html=True)
