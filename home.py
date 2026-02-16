@@ -42,14 +42,23 @@ def render_tool_card(title, description, page_path, is_pro=False):
 
 # --- 4. TIER 1: FOUNDATIONS (FREE) ---
 st.subheader("🏠 Foundations & Budgeting")
-f_c1, f_c2 = st.columns(2)
+f_c1, f_c2, f_c3 = st.columns(3) # Changed to 3 columns to include Budget
+
 with f_c1:
+    render_tool_card(
+        "Monthly Budget", 
+        "Define your lifestyle burn rate (Food, Kids, Transport) for accurate planning.", 
+        "scripts/budget.py"
+    )
+
+with f_c2:
     render_tool_card(
         "Affordability Primary", 
         "Check your maximum mortgage qualification based on T4 income.", 
         "scripts/affordability.py"
     )
-with f_c2:
+
+with f_c3:
     render_tool_card(
         "Buy vs Rent", 
         "The classic wealth-building comparison for Canadians.", 
