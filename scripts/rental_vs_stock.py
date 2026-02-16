@@ -20,12 +20,13 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL ---
+# --- 2. DATA RETRIEVAL (STRICT LINKING) ---
 prof = st.session_state.app_db.get('profile', {}) 
 aff_sec = st.session_state.app_db.get('affordability_second', {}) 
 
 p1_name = prof.get('p1_name', 'Client 1')
 p2_name = prof.get('p2_name', 'Client 2')
+household = f"{p1_name} & {p2_name}" if p2_name else p1_name
 
 # T4 Income & Tax Rates
 p1_inc = float(prof.get('p1_t4', 0.0)) + float(prof.get('p1_bonus', 0.0))
@@ -57,7 +58,19 @@ if not rvs_data.get('initialized'):
         "initialized": True
     })
 
-# --- 4. CALCULATION ENGINE ---
+# --- 4. PAGE HEADER & STORYTELLING BOX ---
+st.title("Rental Property vs. Stock Portfolio")
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">💼 {household}’s Wealth Crossroads</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        After analyzing your options, you are debating two paths: the leveraged Rental Property or a passive Stock Portfolio. This analysis compares the long-term wealth outcomes including taxes, closing costs, and monthly cash flow.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 5. CALCULATION ENGINE ---
 def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div, years, tax_rate, acc_type):
     loan = price - inv
     m_rate = (rate/100)/12
@@ -102,7 +115,7 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, s_growth, s_div
     
     return pd.DataFrame(data), (net_proceeds_re + cum_re_cash), (net_proceeds_st + cum_st_cash), (re_cap_gain_tax + re_sell_costs), (st_tax + st_sell_costs), net_proceeds_re, net_proceeds_st
 
-# --- 5. INPUTS ---
+# --- 6. INPUTS ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("🏠 Real Estate Asset")
@@ -121,15 +134,11 @@ with col1:
 with col2:
     st.subheader("📈 Stock Portfolio")
     st_acc = st.selectbox("Account Type", ["Non-Registered", "TFSA", "RRSP"], index=["Non-Registered", "TFSA", "RRSP"].index(rvs_data.get('stock_account', "Non-Registered")))
-    s_growth = cloud_input("Total Return (%)", "rental_vs_stock", "stock_growth") # Renamed
+    s_growth = cloud_input("Total Return (%)", "rental_vs_stock", "stock_growth") 
     s_div = cloud_input("Dividend Yield (%)", "rental_vs_stock", "dividend_yield")
     years = st.select_slider("Horizon (Years)", options=[5, 10, 15, 20], value=int(rvs_data.get('years', 10)))
     
-    # NEW: Marginal Tax Rate Radio Selection
-    tax_options = {
-        f"{p1_name} ({p1_tax}%)": p1_tax,
-        f"{p2_name} ({p2_tax}%)": p2_tax
-    }
+    tax_options = {f"{p1_name} ({p1_tax}%)": p1_tax, f"{p2_name} ({p2_tax}%)": p2_tax}
     selected_tax_label = st.radio("Select Owner Marginal Tax Rate", list(tax_options.keys()), horizontal=True)
     tax_rate_input = tax_options[selected_tax_label]
     
@@ -141,11 +150,11 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-# --- 6. EXECUTION ---
+# --- 7. EXECUTION ---
 costs = {'tax': tax_cost, 'ins': ins_cost, 'strata': strata_cost, 'maint': maint_cost, 'mgmt': mgmt_pct}
 df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine(price, inv, rate, apprec, rent, costs, s_growth, s_div, years, tax_rate_input, st_acc)
 
-# --- 7. COMPARISON TABLE ---
+# --- 8. COMPARISON TABLE ---
 st.divider()
 st.subheader(f"📊 Year {years} Snapshot")
 re_tax_annual = df.iloc[-1]['RE_Tax']
@@ -168,13 +177,15 @@ comp_df = pd.DataFrame({
 }).set_index("Metric")
 st.table(comp_df)
 
-# --- 8. WEALTH METRICS ---
+# --- 9. WEALTH OUTCOME METRICS ---
 st.write("")
 w1, w2 = st.columns(2)
-w1.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
-w2.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
+with w1:
+    st.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
+with w2:
+    st.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}", help="Accumulated cash flow + Net sale proceeds")
 
-# --- 9. VERDICT ---
+# --- 10. REFINED VERDICT ---
 st.write("")
 winner = "🏠 Rental Property" if re_tot > st_tot else "📈 Stock Portfolio"
 st.markdown(f"""
