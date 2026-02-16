@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 import os
 import json
 from style_utils import inject_global_css
+from data_handler import supabase # Import for persistence
 
 # 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
@@ -19,35 +20,24 @@ client_name1 = prof.get('p1_name', 'Dori')
 client_name2 = prof.get('p2_name', 'Kevin') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# --- 1. DATA LINKING (Robust Sync) ---
-aff_store = st.session_state.get('aff_final', {})
+# --- 2. PERSISTENCE & INITIALIZATION ---
+# Access the persistent dictionary from App DB
+if 'mortgage_scenario' not in st.session_state.app_db:
+    st.session_state.app_db['mortgage_scenario'] = {}
+ms_data = st.session_state.app_db['mortgage_scenario']
 
-# 1. Define the values coming from the Affordability page
-# We use 0 as a check to see if calculations have been run yet
+# Retrieve Affordability Data (Robust Sync)
+aff_store = st.session_state.app_db.get('affordability', {}) # Updated to match app_db key pattern
 aff_price = float(aff_store.get('max_purchase', 0.0))
 aff_down = float(aff_store.get('down_payment', 0.0))
 
-# 2. Initialization & Sync Logic
-# If the user has NEVER been here, or if the Affordability results changed...
-if "ms_price" not in st.session_state or (aff_price > 0 and st.session_state.get('last_synced_price') != aff_price):
-    # If affordability has data, use it. Otherwise, use a healthy default.
-    st.session_state.ms_price = aff_price if aff_price > 0 else 800000.0
-    st.session_state.ms_down = aff_down if aff_down > 0 else 160000.0
-    # Update the sync marker
-    st.session_state.last_synced_price = aff_price
-        
-# 3. Final fallback: If for some reason state is still empty, set a hard default
-if "ms_price" not in st.session_state or st.session_state.ms_price == 0:
-    st.session_state.ms_price = 800000.0
-    st.session_state.ms_down = 160000.0
-
-# Retrieve rate from Affordability Store (SAFE VERSION)
+# Retrieve Default Rate
 def get_default_rate():
-    if 'aff_final' in st.session_state:
-        # Correctly use the key you checked for: aff_final
-        return st.session_state.aff_final.get('contract_rate', 4.49)
+    # Try affordability first
+    if 'affordability' in st.session_state.app_db:
+        return float(st.session_state.app_db['affordability'].get('contract_rate', 4.49))
     
-    # Fallback to file (with crash protection)
+    # Fallback to file
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
         try:
@@ -60,58 +50,68 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
-# --- 2. ROUNDING LOGIC ---
-def smart_round_price(price):
-    if price >= 1000000:
-        return float(round(price, -4))
-    else:
-        return float(round(price, -3))
-
-# --- 3. PERSISTENCE INITIALIZATION (SHADOW STORE) ---
-if 'scen_store' not in st.session_state:
-    # Pull the initialized values from Section 1
-    p_val = st.session_state.get('ms_price', 800000.0)
-    d_val = st.session_state.get('ms_down', 160000.0)
-    a_val = st.session_state.get('w_amort', 25)
+# Initialization Logic: Check if we need to seed data
+if not ms_data.get('initialized'):
+    # Use Affordability data if available, otherwise defaults
+    init_price = aff_price if aff_price > 0 else 800000.0
+    init_down = aff_down if aff_down > 0 else 160000.0
     
-    st.session_state.scen_store = {
-        "price": float(p_val),
-        "down": float(d_val),
-        "amort": int(a_val),
-        "scenarios": [] 
-    }
-    st.session_state.scen_store["scenarios"] = [
-        {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False},
-        {"label": "Accelerated Bi-Weekly", "rate": global_rate_default, "freq": "Accelerated Bi-weekly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
+    ms_data.update({
+        "price": init_price,
+        "down": init_down,
+        "amort": 25,
+        "scenarios": [
+            {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False},
+            {"label": "Accelerated Bi-Weekly", "rate": global_rate_default, "freq": "Accelerated Bi-weekly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
+        ],
+        "initialized": True
+    })
+
+# "store" now points directly to the persistent DB object
+store = ms_data
+
+# Ensure scenarios exist (double check against corruption)
+if "scenarios" not in store:
+    store["scenarios"] = [
+        {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
     ]
 
-store = st.session_state.scen_store
+# --- 3. HELPER: CLOUD SYNC ---
+def trigger_cloud_save():
+    # This helper simulates the save behavior. 
+    # In a full app, we might call data_handler.update_record or similar.
+    # For now, modifying st.session_state.app_db is the first step.
+    # If explicit save is needed immediately:
+    try:
+        if st.session_state.get('user'):
+             supabase.table('user_data').update({'data': st.session_state.app_db}).eq('user_id', st.session_state.user.id).execute()
+    except:
+        pass # Fail silently if not logged in or offline, data persists in session
 
-# --- 3. UPDATED SYNC CALLBACK ---
+# --- 4. CALLBACK: UPDATE STORE ---
 def update_ms_store():
-    st.session_state.scen_store['price'] = st.session_state.ms_price
-    st.session_state.scen_store['down'] = st.session_state.ms_down
-    st.session_state.scen_store['amort'] = st.session_state.w_amort
+    # 1. Update Global Inputs from Session State Widgets
+    # We check if the key exists before updating to avoid errors on first run
+    if "ms_price" in st.session_state: store['price'] = st.session_state.ms_price
+    if "ms_down" in st.session_state: store['down'] = st.session_state.ms_down
+    if "w_amort" in st.session_state: store['amort'] = st.session_state.w_amort
 
-    # 2. Sync the dynamic scenarios list
-    # We loop through current options and save their specific widget keys
-    for i in range(st.session_state.num_options):
-        s = st.session_state.scen_store['scenarios'][i]
+    # 2. Update Dynamic Scenarios from Session State Widgets
+    for i in range(len(store['scenarios'])):
+        s = store['scenarios'][i]
         s['label'] = st.session_state.get(f"n{i}", s['label'])
         s['rate'] = st.session_state.get(f"r{i}", s['rate'])
         s['freq'] = st.session_state.get(f"f{i}", s['freq'])
         s['strat'] = st.session_state.get(f"s{i}", s['strat'])
-        s['extra'] = st.session_state.get(f"ex{i}", s['extra']) # Added .get()
-        s['lump'] = st.session_state.get(f"ls{i}", s['lump'])   # Added .get()
-        
-        # Save sub-inputs if they exist in session state
-        if f"ex{i}" in st.session_state: s['extra'] = st.session_state[f"ex{i}"]
-        if f"ls{i}" in st.session_state: s['lump'] = st.session_state[f"ls{i}"]
+        s['extra'] = st.session_state.get(f"ex{i}", s['extra'])
+        s['lump'] = st.session_state.get(f"ls{i}", s['lump'])
+    
+    trigger_cloud_save()
 
 if 'num_options' not in st.session_state:
     st.session_state.num_options = len(store['scenarios'])
 
-# --- 4. STATE MANAGEMENT HELPERS ---
+# --- 5. STATE MANAGEMENT HELPERS ---
 def add_option():
     if st.session_state.num_options < 5:
         st.session_state.num_options += 1
@@ -124,11 +124,13 @@ def add_option():
             "lump": 0.0, 
             "double": False
         })
+        trigger_cloud_save()
 
 def remove_option():
     if st.session_state.num_options > 1:
         st.session_state.num_options -= 1
         store['scenarios'].pop()
+        trigger_cloud_save()
 
 # --- COLOR PALETTE ---
 SCENARIO_COLORS = ["#CEB36F", "#706262", "#2E2B28", "#C0A385", "#E7E7E7"]
@@ -139,7 +141,7 @@ SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 PRIMARY_GOLD = "#CEB36F"
 
-# --- 5. CORE ENGINE ---
+# --- 6. CORE ENGINE ---
 def calculate_min_downpayment(price):
     if price >= 1000000: return price * 0.20
     elif price <= 500000: return price * 0.05
@@ -212,12 +214,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. GLOBAL SETTINGS (MOVED TO MAIN PAGE) ---
-def update_ms_store():
-    st.session_state.scen_store['price'] = st.session_state.ms_price
-    st.session_state.scen_store['down'] = st.session_state.ms_down
-    st.session_state.scen_store['amort'] = st.session_state.w_amort
-
+# --- 8. GLOBAL SETTINGS ---
 with st.container(border=True):
     st.markdown("### 🏠 Property & Mortgage Details")
     
@@ -225,10 +222,10 @@ with st.container(border=True):
     col_i1, col_i2, col_i3 = st.columns(3)
     
     with col_i1:
-        # We use the key="ms_price" and the callback. 
-        # Streamlit handles the 'stickiness' via the key.
+        # Initial value comes from STORE, update triggers CALLBACK
         price = st.number_input(
             "Purchase Price ($)", 
+            value=float(store.get('price', 800000.0)),
             step=5000.0, 
             key="ms_price", 
             on_change=update_ms_store
@@ -237,21 +234,22 @@ with st.container(border=True):
     with col_i2:
         down = st.number_input(
             "Down Payment ($)", 
+            value=float(store.get('down', 160000.0)),
             step=5000.0, 
             key="ms_down", 
             on_change=update_ms_store
         )
         
     with col_i3:
-        # We use the store's value to ensure the slider doesn't jump
         amort = st.slider(
             "Amortization (Years)", 
             5, 30, 
+            value=int(store.get('amort', 25)),
             key="w_amort", 
             on_change=update_ms_store
         )
 
-    # --- LOGIC & CALCULATIONS (Preserved Exactly) ---
+    # --- LOGIC & CALCULATIONS ---
     min_down_req = calculate_min_downpayment(price)
     is_valid = down >= min_down_req
     base_loan = price - down
@@ -259,7 +257,7 @@ with st.container(border=True):
     cmhc_p = get_cmhc_premium_rate(ltv) * base_loan
     final_loan = base_loan + cmhc_p
     
-    # --- COMPACT SEPARATOR (Replaces st.divider for less whitespace) ---
+    # --- COMPACT SEPARATOR ---
     st.markdown("<div style='margin: 10px 0; border-top: 1px solid #f0f0f0;'></div>", unsafe_allow_html=True)
     
     # Metrics Row
@@ -280,19 +278,22 @@ if not is_valid:
     st.info(f"👉 Minimum Required: **${min_down_req:,.0f}**")
     st.stop()
         
-# --- 8. SCENARIO GRID ---
+# --- 9. SCENARIO GRID ---
 total_cols = st.session_state.num_options
 main_cols = st.columns([3] * total_cols + [1]) 
 results = []
+
+# Ensure store list matches desired count
 while len(store['scenarios']) < total_cols:
     add_option()
+while len(store['scenarios']) > total_cols:
+    store['scenarios'].pop()
 
 for i in range(total_cols):
     s_data = store['scenarios'][i]
     with main_cols[i]:
         st.markdown(f"### Option {chr(65+i)}")
         
-        # We just capture the widget values; the callback saves them to the store
         name = st.text_input("Label", value=s_data['label'], key=f"n{i}", on_change=update_ms_store)
         rate = st.number_input("Rate %", value=float(s_data['rate']), step=0.01, key=f"r{i}", on_change=update_ms_store)
         
@@ -312,7 +313,6 @@ for i in range(total_cols):
         elif strat == "Double Up": 
             db = True
         
-        # The math still uses the local variables (rate, freq, etc.)
         res = simulate_mortgage(final_loan, rate, amort, freq, ex, ls, db)
         res['Name'] = name
         results.append(res)
@@ -325,7 +325,7 @@ with main_cols[-1]:
 
 st.divider()
 
-# --- 9. DYNAMIC RECOMMENDATION ---
+# --- 10. DYNAMIC RECOMMENDATION ---
 best_int_scenario = min(results, key=lambda x: x['Total_Life_Int'])
 total_savings = results[0]['Total_Life_Int'] - best_int_scenario['Total_Life_Int']
 
@@ -337,7 +337,7 @@ else:
 
 st.divider()
 
-# --- 10. STYLE HELPER ---
+# --- 11. STYLE HELPER ---
 def apply_style(fig, title_text):
     fig.update_layout(
         template="plotly_white",
@@ -348,13 +348,12 @@ def apply_style(fig, title_text):
     )
     return fig
 
-# --- 11. ANALYSIS TABS ---
+# --- 12. ANALYSIS TABS ---
 tabs = st.tabs(["📉 Balance Projection", "💰 Monthly Cash-Out", "📊 5-Year Progress", "📑 Summary Table"])
 
 with tabs[0]:
     fig1 = go.Figure()
     for i, r in enumerate(results): 
-        # Check if History is empty to avoid the 'Year' KeyError
         if not r['History'].empty:
             fig1.add_trace(go.Scatter(
                 x=r['History']['Year'], 
@@ -373,7 +372,6 @@ with tabs[1]:
 with tabs[2]:
     stack_list = []
     for r in results:
-        # Use Term_Prin and Term_Int which are calculated inside simulate_mortgage
         stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Prin'], "Type": "Equity Built"})
         stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Int'], "Type": "Interest Paid"})
     
@@ -396,7 +394,7 @@ with tabs[3]:
     } for r in results])
     st.table(table_df)
 
-# --- 12. LEGAL DISCLAIMER ---
+# --- 13. LEGAL DISCLAIMER ---
 st.markdown("---")
 st.markdown("""
 <div style='background-color: #f8f9fa; padding: 16px 20px; border-radius: 5px; border: 1px solid #dee2e6;'>
@@ -408,20 +406,3 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 st.caption("Analyst in a Pocket | Strategic Debt Management & Equity Planning")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
