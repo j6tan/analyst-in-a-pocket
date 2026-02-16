@@ -6,7 +6,7 @@ import math
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -34,6 +34,7 @@ def custom_round_up(n):
     return float(math.ceil(n / step) * step)
 
 # --- 2. DATA RETRIEVAL ---
+# Changed: Pull from app_db['profile'] instead of 'user_profile'
 prof = st.session_state.app_db.get('profile', {})
 current_res_prov = prof.get('province', 'BC')
 p1_name = prof.get('p1_name', 'Primary Client')
@@ -50,7 +51,40 @@ intel = load_market_intel()
 # --- 3. PERSISTENCE & INITIALIZATION ---
 if 'affordability_second' not in st.session_state.app_db:
     st.session_state.app_db['affordability_second'] = {}
+
 aff_sec = st.session_state.app_db['affordability_second']
+
+# --- FIX: INITIALIZE DEFAULTS IF EMPTY ---
+# This ensures inputs don't show 0.0 when first loaded
+if aff_sec.get('target_price', 0) == 0:
+    scraped_yield = intel.get("provincial_yields", {}).get(current_res_prov, 3.8)
+    # Default assumptions from your original logic
+    def_price = 600000.0
+    def_rent = (def_price * (scraped_yield/100)) / 12
+    
+    # Calculate default tax based on province
+    tax_rate_lookup = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
+    def_tax_rate = tax_rate_lookup.get(current_res_prov, 0.0075)
+    
+    aff_sec.update({
+        "down_payment": 200000.0,
+        "target_price": def_price,
+        "contract_rate": 4.26,
+        "manual_rent": def_rent,
+        "vacancy_months": 1.0,
+        "annual_prop_tax": def_price * def_tax_rate,
+        "strata_mo": 400.0,
+        "insurance_mo": 100.0,
+        "rm_mo": 150.0,
+        "asset_province": current_res_prov,
+        "use_case": "Rental Property",
+        "mgmt_pct": 5.0,
+        "is_vanc": False
+    })
+    # Save these defaults to Supabase immediately
+    if st.session_state.get("is_logged_in"):
+        supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
+
 
 # --- 4. TITLE & STORYBOX ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
@@ -74,13 +108,20 @@ st.markdown(f"""
 ts_col1, ts_col2 = st.columns(2)
 with ts_col1:
     prov_options = ["BC", "Alberta", "Ontario", "Manitoba", "Quebec", "Saskatchewan", "Nova Scotia", "New Brunswick"]
+    # Sync Logic: Use session state value, default to profile province
+    curr_prov = aff_sec.get('asset_province', current_res_prov)
+    if curr_prov not in prov_options: curr_prov = "BC"
+    
     asset_province = st.selectbox("Asset Location (Province):", options=prov_options, 
-                                  index=prov_options.index(aff_sec.get('asset_province', current_res_prov)), 
-                                  key="affordability_second:asset_province", on_change=sync_widget, args=("affordability_second:asset_province",))
+                                  index=prov_options.index(curr_prov),
+                                  key="affordability_second:asset_province",
+                                  on_change=sync_widget, args=("affordability_second:asset_province",))
+
 with ts_col2:
     use_case = st.selectbox("Use of the Second Home:", ["Rental Property", "Family Vacation Home"],
                              index=0 if aff_sec.get('use_case') == "Rental Property" else 1,
-                             key="affordability_second:use_case", on_change=sync_widget, args=("affordability_second:use_case",))
+                             key="affordability_second:use_case",
+                             on_change=sync_widget, args=("affordability_second:use_case",))
     is_rental = True if use_case == "Rental Property" else False
 
 # --- 6. CORE CALCULATION PREP ---
@@ -88,6 +129,7 @@ def get_f(k, d=0.0):
     try: return float(prof.get(k, d))
     except: return d
 
+# Read Income/Debt from Profile (Standardized keys)
 m_inc = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + (get_f('inv_rental_income') * 0.80)) / 12
 m_bal = get_f('m_bal')
 m_rate_p = (get_f('m_rate', 4.0) / 100) / 12
@@ -101,6 +143,7 @@ c_left, c_right = st.columns(2)
 
 with c_left:
     st.subheader("💰 Capital Requirement")
+    # Using cloud_input to replace st.number_input
     f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
     f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
     f_rate = cloud_input("Mortgage Contract Rate (%)", "affordability_second", "contract_rate", step=0.1)
@@ -124,18 +167,36 @@ with c_right:
     if asset_province == "BC" and not is_rental:
         st.markdown("---")
         spec_tax = f_price * 0.005
-        vanc_check = st.checkbox("Property in Vancouver?", value=aff_sec.get('is_vanc', False), key="affordability_second:is_vanc", on_change=sync_widget, args=("affordability_second:is_vanc",))
+        # Manual sync for Checkbox
+        vanc_check = st.checkbox("Property in Vancouver?", 
+                                 value=aff_sec.get('is_vanc', False),
+                                 key="affordability_second:is_vanc",
+                                 on_change=sync_widget, args=("affordability_second:is_vanc",))
         vanc_empty_tax = f_price * 0.03 if vanc_check else 0
         st.warning(f"🌲 BC Specifics: Spec Tax: ${spec_tax:,.0f} | Empty Home Tax: ${vanc_empty_tax:,.0f}")
         bc_extra = (spec_tax + vanc_empty_tax) / 12
 
-    mgmt_fee = (f_rent * (st.slider("Property Management Fee %", 0.0, 12.0, float(aff_sec.get('mgmt_pct', 5.0)), key="affordability_second:mgmt_pct", on_change=sync_widget, args=("affordability_second:mgmt_pct",)) / 100)) if is_rental else 0
+    # Manual sync for Slider
+    if is_rental:
+        mgmt_pct = st.slider("Property Management Fee %", 0.0, 12.0, 
+                             float(aff_sec.get('mgmt_pct', 5.0)),
+                             key="affordability_second:mgmt_pct",
+                             on_change=sync_widget, args=("affordability_second:mgmt_pct",))
+        mgmt_fee = (f_rent * (mgmt_pct / 100))
+    else:
+        mgmt_fee = 0
+    
     total_opex_mo = (f_tax / 12) + f_strata + f_ins + f_rm + bc_extra + mgmt_fee
 
-# --- 8. LIVE QUALIFYING POWER BOX (RESTORED EXACTLY AS DESIGNED) ---
+# --- 8. LIVE QUALIFYING POWER BOX (RESTORED TO ORIGINAL LOCATION) ---
 stress_rate = max(5.25, f_rate + 2.0)
 r_stress = (stress_rate / 100) / 12
-stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
+# Safety check for zero rate
+if r_stress > 0:
+    stress_k = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1)
+else:
+    stress_k = 1/300
+
 rent_offset = (f_rent * 0.80) if is_rental else 0
 
 qual_room = (m_inc * 0.44) + rent_offset - primary_mtg - primary_carrying - p_debts - (f_tax / 12)
@@ -156,7 +217,11 @@ st.markdown(f"""
 # --- 9. ANALYSIS ---
 target_loan = max(0, f_price - f_dp)
 r_contract = (f_rate / 100) / 12
-new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) if target_loan > 0 else 0
+if r_contract > 0:
+    new_p_i = (target_loan * r_contract) / (1 - (1 + r_contract)**-300) 
+else:
+    new_p_i = target_loan / 300 if target_loan > 0 else 0
+
 realized_rent = (f_rent * (12 - f_vacancy)) / 12 if is_rental else 0
 asset_net = realized_rent - total_opex_mo - new_p_i
 net_h_inc = (get_f('p1_t4') + get_f('p1_bonus') + get_f('p2_t4') + get_f('p2_bonus') + get_f('inv_rental_income')) * 0.75 / 12
@@ -198,7 +263,7 @@ with m4:
     st.markdown(f"<b style='font-size: 0.85em;'>Overall Cash Flow</b>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='margin-top: 0;'>${overall_cash_flow:,.0f}</h3>", unsafe_allow_html=True)
 
-# --- 11. STRATEGIC VERDICT (RESTORED EXACTLY) ---
+# --- 11. STRATEGIC VERDICT (RESTORED HTML & LOGIC) ---
 st.subheader("🎯 Strategic Verdict")
 is_neg_carry = is_rental and asset_net < 0
 is_low_safety = not is_rental and safety_margin < 45
@@ -213,11 +278,14 @@ else:
     v_html.append(f"<h4 style='color: #16a34a; margin-top: 0;'>✅ Strategically Sound</h4><p>Your household ecosystem shows strong resilience for this acquisition.</p>")
 
 v_html.append("<div style='font-size: 1em;'>")
-v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for lifestyle expenses.</p>")
+v_html.append(f"<p style='margin: 5px 0;'>• <b>The \"Blind Spot\" Warning:</b> The overall cash flow of <b>${overall_cash_flow:,.0f}</b> does not account for non-household expenses such as food, utilities, shopping, childcare, etc.</p>")
+
 if is_neg_carry:
-    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary support.</p>")
+    v_html.append(f"<p style='margin: 5px 0;'>• <b>Negative Carry:</b> This rental requires <b>${abs(asset_net):,.0f}</b>/mo from your salary to stay afloat. This is a capital growth play, not a cash flow play.</p>")
+
 if is_low_safety:
     v_html.append(f"<p style='margin: 5px 0;'>• <b>Leverage Alert:</b> Your Safety Margin is <b>{safety_margin:.1f}%</b>. Thresholds below 45% (pre-lifestyle) are considered high-leverage for secondary homes.</p>")
+
 v_html.append("</div></div>")
 
 st.markdown("".join(v_html), unsafe_allow_html=True)
