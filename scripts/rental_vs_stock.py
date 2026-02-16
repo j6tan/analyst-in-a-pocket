@@ -25,6 +25,7 @@ aff_sec = st.session_state.app_db.get('affordability_second', {})
 
 p1_name = prof.get('p1_name', 'Client 1')
 p2_name = prof.get('p2_name', 'Client 2')
+household = f"{p1_name} & {p2_name}" if p2_name else p1_name
 p1_tax = float(prof.get('p1_tax_rate', 35.0))
 p2_tax = float(prof.get('p2_tax_rate', 35.0))
 
@@ -52,7 +53,19 @@ if not rvs_data.get('initialized'):
         "initialized": True
     })
 
-# --- 4. CALCULATION ENGINE ---
+# --- 4. PAGE HEADER & STORYTELLING BOX ---
+st.title("Rental Property vs. Stock Portfolio")
+
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">💼 {household}’s Wealth Crossroads</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Deciding between real estate and the stock market is about more than just appreciation. This head-to-head comparison accounts for the hidden impact of taxes, operating expenses, and the power of reinvesting dividends to find your true wealth winner.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 5. CALCULATION ENGINE ---
 def run_wealth_engine(price, inv, rate, apprec, r_income, costs, total_return, s_div, years, tax_rate, acc_type):
     loan = price - inv
     m_rate = (rate/100)/12
@@ -65,7 +78,7 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, total_return, s
     data = []
     
     for y in range(1, years + 1):
-        # Rental Math
+        # Rental Path
         ann_int = 0
         for _ in range(12):
             i_mo = curr_loan * m_rate
@@ -79,7 +92,7 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, total_return, s
         net_re_cash = (r_income * 12) - (m_pi * 12) - total_cash_opex - re_tax_impact
         cum_re_cash += net_re_cash
         
-        # Stock Math
+        # Stock Path (Reinvestment)
         div_gross = stock_val * (s_div/100)
         if acc_type == "Non-Registered":
             st_tax_impact = div_gross * (tax_rate/100) * 0.5 
@@ -92,24 +105,24 @@ def run_wealth_engine(price, inv, rate, apprec, r_income, costs, total_return, s
         data.append({"Year": y, "RE_Cash": net_re_cash/12, "RE_Tax": re_tax_impact, "ST_Tax": st_tax_impact, "ST_Div_Mo": div_gross/12})
         curr_val *= (1 + apprec/100)
 
-    # Sale Day
+    # Sale Day Logic
     re_sell_costs = (curr_val * 0.035) + 2000
     re_cap_gain_tax = max(0, curr_val - price - re_sell_costs) * 0.5 * (tax_rate/100)
     net_proceeds_re = curr_val - curr_loan - re_sell_costs - re_cap_gain_tax
     
     st_sell_costs = stock_val * 0.01
     if acc_type == "TFSA":
-        st_tax = 0 # 100% Tax Free
+        st_tax = 0 
     elif acc_type == "RRSP":
-        st_tax = stock_val * (tax_rate/100) # Taxed as income on withdrawal
+        st_tax = stock_val * (tax_rate/100) 
     else:
         st_profit = stock_val - (inv + (price * 0.02)) - st_sell_costs
-        st_tax = max(0, st_profit) * 0.5 * (tax_rate/100) # Capital Gains 50%
+        st_tax = max(0, st_profit) * 0.5 * (tax_rate/100) 
         
     net_proceeds_st = stock_val - st_sell_costs - st_tax
     return pd.DataFrame(data), (net_proceeds_re + cum_re_cash), net_proceeds_st, (re_cap_gain_tax + re_sell_costs), (st_tax + st_sell_costs), net_proceeds_re, net_proceeds_st
 
-# --- 5. INPUTS ---
+# --- 6. INPUTS ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("🏠 Real Estate Asset")
@@ -136,7 +149,7 @@ with col2:
     tax_options = {f"{p1_name} ({p1_tax}%)": p1_tax, f"{p2_name} ({p2_tax}%)": p2_tax}
     tax_rate_input = tax_options[st.radio("Select Owner Marginal Tax Rate", list(tax_options.keys()), horizontal=True)]
 
-# --- 6. SNAPSHOT ---
+# --- 7. SNAPSHOT ---
 costs = {'tax': tax_cost, 'ins': ins_cost, 'strata': strata_cost, 'maint': maint_cost, 'mgmt': mgmt_pct}
 df, re_tot, st_tot, re_leak, st_leak, re_net, st_net = run_wealth_engine(price, inv, rate, apprec, rent, costs, s_total_return, s_div, years, tax_rate_input, st_acc)
 
@@ -152,7 +165,7 @@ comp_df = pd.DataFrame({
 }).set_index("Metric")
 st.table(comp_df)
 
-# --- 7. VERDICT ---
+# --- 8. VERDICT ---
 w1, w2 = st.columns(2)
 w1.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}")
 w2.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}")
