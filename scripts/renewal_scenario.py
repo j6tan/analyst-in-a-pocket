@@ -75,7 +75,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("💰 Mortgage Details")
     m_bal = cloud_input("Current Mortgage Balance ($)", "renewal_analysis", "mortgage_bal", step=5000.0)
-    m_amort = cloud_input("Remaining Amortization (Years)", "renewal_analysis", "remaining_amort", step=1)
+    m_amort = cloud_input("Remaining Amortization (Years)", "renewal_analysis", "remaining_amort", step=1.0)
     
     # Handle Selectbox persistence for Term
     term_options = [1,2,3,4,5]
@@ -181,3 +181,4 @@ with tab3:
     st.plotly_chart(fig_int, use_container_width=True)
 
 show_disclaimer()
+
