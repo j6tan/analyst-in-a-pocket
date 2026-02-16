@@ -30,7 +30,7 @@ def load_market_intel():
     return {"rates": {"five_year_variable": 5.50, "five_year_fixed_uninsured": 4.26}}
 
 intel = load_market_intel()
-prof = st.session_state.app_db.get('profile', {}) # Link to main app_db
+prof = st.session_state.app_db.get('profile', {}) 
 name1 = prof.get('p1_name', 'Client')
 name2 = prof.get('p2_name', '')
 household = f"{name1} & {name2}" if name2 else name1
@@ -68,7 +68,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. INPUTS (LAYOUT RESTORED) ---
+# --- 5. INPUTS (EXACT ORIGINAL LAYOUT) ---
 col1, col2 = st.columns(2)
 
 with col1:
@@ -96,7 +96,7 @@ term_months = int(ren_data['term_yrs'] * 12)
 fixed_mo_rate = (fixed_rate / 100) / 12
 pmt_fixed = (m_bal * fixed_mo_rate) / (1 - (1 + fixed_mo_rate)**-(m_amort * 12))
 
-# Variable Path Simulation
+# Variable Path Simulation (Linear path to Target Rate)
 var_rates = []
 start_v = curr_var_rate / 100
 end_v = target_var_rate / 100
@@ -110,7 +110,7 @@ for m in range(term_months):
         current_v = end_v
     var_rates.append(max(0.005, current_v))
 
-# Amortization Table
+# Amortization Simulation
 v_bal, f_bal = m_bal, m_bal
 v_int_total, f_int_total = 0, 0
 data_rows = []
@@ -122,7 +122,7 @@ for m in range(1, term_months + 1):
     f_bal -= f_prin
     f_int_total += f_int
     
-    # Variable Path (Payment recalculated monthly)
+    # Variable Path (Payment recalculated each month)
     v_mo_rate = var_rates[m-1] / 12
     pmt_var = (v_bal * v_mo_rate) / (1 - (1 + v_mo_rate)**-((m_amort * 12) - m + 1))
     v_int = v_bal * v_mo_rate
@@ -134,7 +134,9 @@ for m in range(1, term_months + 1):
         "Month": m,
         "V_Rate": var_rates[m-1] * 100,
         "V_Pmt": pmt_var,
+        "V_Int": v_int,
         "F_Pmt": pmt_fixed,
+        "F_Int": f_int,
         "Cum_V_Int": v_int_total,
         "Cum_F_Int": f_int_total
     })
@@ -146,6 +148,8 @@ savings = f_int_total - v_int_total
 st.divider()
 st.subheader(f"📊 The Verdict: {ren_data['term_yrs']}-Year Horizon")
 
+
+
 v1, v2, v3 = st.columns(3)
 with v1:
     st.metric("Total Fixed Interest", f"${f_int_total:,.0f}")
@@ -156,7 +160,7 @@ with v2:
 with v3:
     st.metric("Final Variable Rate", f"{target_var_rate:.2f}%")
 
-# --- 8. VISUAL ANALYSIS ---
+# --- 8. VISUAL ANALYSIS (FIXED TICK CONFIGURATION) ---
 tab1, tab2, tab3 = st.tabs(["Rate Trajectory", "Payment Comparison", "Interest Burn"])
 
 with tab1:
