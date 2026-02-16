@@ -1,5 +1,5 @@
 import streamlit as st
-import pd
+import pandas as pd # Correct
 import plotly.graph_objects as go
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
