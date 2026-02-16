@@ -21,7 +21,7 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL (DYNAMIC LINKING) ---
+# --- 2. DATA RETRIEVAL ---
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
@@ -35,18 +35,18 @@ name1 = prof.get('p1_name', 'Client')
 name2 = prof.get('p2_name', '')
 household = f"{name1} & {name2}" if name2 else name1
 
-# --- 3. PERSISTENCE INITIALIZATION (RESCUED MAPPING) ---
+# --- 3. PERSISTENCE & INITIALIZATION (SYNCED TO PROFILE) ---
 if "renewal_analysis" not in st.session_state.app_db:
     st.session_state.app_db['renewal_analysis'] = {}
 
 ren_store = st.session_state.app_db['renewal_analysis']
 
-# INITIALIZE WITH PROFILE DATA IF EMPTY
+# FORCE RE-SYNC FROM PROFILE IF VALUES ARE MISSING OR ZERO
 if not ren_store.get('initialized'):
     ren_store.update({
         "balance": float(prof.get('m_bal', 500000.0)),
         "amort": float(prof.get('m_amort', 25.0)),
-        "fixed_quote": float(prof.get('m_rate', 0.0)) if float(prof.get('m_rate', 0.0)) > 0 else float(intel['rates'].get('five_year_fixed_uninsured', 4.79)),
+        "fixed_quote": float(prof.get('m_rate', 4.79)) if float(prof.get('m_rate', 0)) > 0 else float(intel['rates'].get('five_year_fixed_uninsured', 4.79)),
         "var_start": float(intel['rates'].get('five_year_variable', 5.50)),
         "target_rate": 3.00,
         "months_to_reach": 12,
@@ -75,11 +75,10 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. CALCULATION ENGINE (REPLICATED EXACTLY) ---
+# --- 6. CALCULATION ENGINE ---
 def simulate_renewal_v3(balance, amort_rem, fixed_rate, var_start, target_rate, months_to_reach):
     months = 60 # 5-Year Term
     f_periodic = (fixed_rate / 100) / 12
-    # Guard against ZeroDivision
     f_denom = ((1 + f_periodic)**(amort_rem*12) - 1)
     f_pmt = balance * (f_periodic * (1 + f_periodic)**(amort_rem*12)) / f_denom if f_denom != 0 else (balance / 12)
     
@@ -111,12 +110,13 @@ def simulate_renewal_v3(balance, amort_rem, fixed_rate, var_start, target_rate, 
         })
     return history
 
-# --- 7. INPUTS (RETAINING ORIGINAL STRUCTURE WITH CLOUD_INPUT) ---
+# --- 7. INPUTS (SYNCED TO PROFILE & RENAMED) ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("🏦 Current Mortgage")
-    balance = cloud_input("Remaining Balance ($)", "renewal_analysis", "balance", step=1000.0)
-    amort = cloud_input("Remaining Amortization (Years)", "renewal_analysis", "amort", step=1.0)
+    # RENAMED LABELS & PROFILE DEFAULTS
+    balance = cloud_input("Remaining Mortgage Balance ($)", "renewal_analysis", "balance", step=1000.0) 
+    amort = cloud_input("Remaining Am ($)", "renewal_analysis", "amort", step=1.0) 
     fixed_quote = cloud_input("Fixed Rate Quote (%)", "renewal_analysis", "fixed_quote", step=0.01)
 
 with col2:
