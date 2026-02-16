@@ -171,7 +171,8 @@ with st.container(border=True):
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
-        strategy_horizon = st.select_slider("Strategy Horizon (Years)", options=[5, 10, 15, 20, 25, 30], value=int(sm_data.get('strategy_horizon', 25)), key="sm:horizon", on_change=sync_widget, args=("sm:horizon", "smith_maneuver", "strategy_horizon"))
+        # FIX: Swapped select_slider for slider to prevent callback TypeError
+        strategy_horizon = st.slider("Strategy Horizon (Years)", 5, 30, int(sm_data.get('strategy_horizon', 25)), step=5, key="sm:horizon", on_change=sync_widget, args=("sm:horizon", "smith_maneuver", "strategy_horizon"))
 
 # --- 9. CALCULATION ENGINE (BASE CASE) ---
 sim_years = max(amortization, strategy_horizon)
@@ -349,7 +350,7 @@ with st.container(border=True):
     with c1:
         crash_drop = st.slider("Crash Magnitude (%)", 0, 50, 30, key="stress_drop")
     with c2:
-        crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, 5, key="stress_start")
+        crash_start = st.slider("Crash Starts (Year)", 1, strategy_horizon, min(5, strategy_horizon), key="stress_start")
     with c3:
         crash_duration = st.slider("Recovery Duration (Years)", 1, 10, 3, key="stress_dur")
 
