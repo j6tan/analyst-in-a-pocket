@@ -135,49 +135,49 @@ c_left, c_right = st.columns(2)
 with c_left:
     st.subheader("💰 Capital Requirement")
     
-    # 1. Down Payment Input
+    # 1. Down Payment
     f_dp = cloud_input("Available Down Payment ($)", "affordability_second", "down_payment", step=5000.0)
     
-    # 2. Purchase Price Input
+    # 2. Purchase Price
     f_price = cloud_input("Purchase Price ($)", "affordability_second", "target_price", step=5000.0)
 
     # --- INSTANT MAX POWER CALCULATION ---
-    # We fetch these directly from the DB so they are available BEFORE their widgets render
+    # Fetch LIVE values from session state to ensure instant reactivity
     calc_rate = float(aff_sec.get('contract_rate', 4.26))
     calc_rent = float(aff_sec.get('manual_rent', 0.0))
     calc_tax = float(aff_sec.get('annual_prop_tax', 0.0))
 
-    # Stress Test Payment Factor (per $1 of loan)
+    # Stress Test
     stress_rate = max(5.25, calc_rate + 2.0)
     r_stress = (stress_rate / 100) / 12
     k_stress = (r_stress * (1 + r_stress)**300) / ((1 + r_stress)**300 - 1) if r_stress > 0 else 1/300
     
-    # Correct Income Logic: Add 50% of Rent to Gross Income, THEN apply TDS
+    # Income Test (Adding 50% Rental Income to Gross, then checking 44% TDS)
     rent_addback = (calc_rent * 0.50) if is_rental else 0
-    total_gross_income = m_inc_base + rent_addback
+    gross_income_proxy = m_inc_base + rent_addback
+    max_servicing_capacity = gross_income_proxy * 0.44
     
-    max_allowable_debt_service = total_gross_income * 0.44
+    # Deduct obligations
+    new_prop_carry_buffer = (calc_tax / 12) + 150 # Tax + Heat/Strata buffer
+    available_payment = max_servicing_capacity - primary_mtg - primary_carrying - p_debts - new_prop_carry_buffer
     
-    # Deduct existing obligations + new property tax/heat
-    new_prop_basic_carry = (calc_tax / 12) + 150 # $150 buffer for heat/strata in qualification
-    available_for_mtg = max_allowable_debt_service - primary_mtg - primary_carrying - p_debts - new_prop_basic_carry
-    
-    if available_for_mtg > 0:
-        max_loan_income = available_for_mtg / k_stress
+    if available_payment > 0:
+        max_loan_income = available_payment / k_stress
         max_price_income = max_loan_income + f_dp
     else:
-        max_price_income = f_dp # Can only buy what you have in cash if no room for loan
+        max_price_income = f_dp
         
-    # Down Payment Cap
+    # Down Payment Cap (20% Rule)
     max_price_dp = f_dp / 0.20
     
-    # THE VERDICT: LOWER OF
+    # Verdict
     max_buying_power = custom_round_up(min(max_price_income, max_price_dp))
     
     if max_price_income < max_price_dp:
-        limit_reason = "Income Qualification (GDS/TDS)"
+        limit_reason = "Income (TDS Limit)"
     else:
-        limit_reason = "20% Down Payment Rule"
+        # Show the user what their income *could* support to prove rent is being counted
+        limit_reason = f"20% Down Payment (Income supports ${max_price_income/1000000:.1f}M)"
     # -------------------------------
 
     # 3. DISPLAY MAX POWER BOX (Below Price, Above Rate)
@@ -189,12 +189,12 @@ with c_left:
         </div>
     """, unsafe_allow_html=True)
 
-    # 4. Rate Input
+    # 4. Rate
     f_rate = cloud_input("Mortgage Contract Rate (%)", "affordability_second", "contract_rate", step=0.1)
     
     scraped_yield = intel.get("provincial_yields", {}).get(asset_province, 3.8)
     
-    # 5. Rent Input
+    # 5. Rent
     if is_rental:
         f_rent = cloud_input("Monthly Projected Rent ($)", "affordability_second", "manual_rent")
         st.caption(f"💡 {asset_province} Yield Guide: {scraped_yield}%")
