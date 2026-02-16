@@ -7,7 +7,7 @@ import json
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject Style
+# 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -21,151 +21,160 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-# --- 2. DATA RETRIEVAL ---
+# --- 2. DATA RETRIEVAL (DYNAMIC LINKING) ---
 def load_market_intel():
     path = os.path.join("data", "market_intel.json")
     if os.path.exists(path):
-        with open(path, "r") as f: return json.load(f)
-    return {"rates": {"five_year_variable": 5.50, "five_year_fixed_uninsured": 4.26}}
+        with open(path, "r") as f:
+            return json.load(f)
+    return {"rates": {"five_year_variable": 5.50, "five_year_fixed_uninsured": 4.79}}
 
 intel = load_market_intel()
 prof = st.session_state.app_db.get('profile', {})
-household = f"{prof.get('p1_name', 'Client')} & {prof.get('p2_name', '')}".strip(" & ")
+name1 = prof.get('p1_name', 'Client')
+name2 = prof.get('p2_name', '')
+household = f"{name1} & {name2}" if name2 else name1
 
-# --- 3. PERSISTENCE & INITIALIZATION ---
-if 'renewal_analysis' not in st.session_state.app_db:
+# --- 3. PERSISTENCE INITIALIZATION (RESCUED MAPPING) ---
+if "renewal_analysis" not in st.session_state.app_db:
     st.session_state.app_db['renewal_analysis'] = {}
-ren_data = st.session_state.app_db['renewal_analysis']
 
-if 'initialized' not in ren_data:
-    ren_data.update({
-        "m_bal": float(prof.get('m_bal', 500000.0)),
-        "m_amort": float(prof.get('m_amort', 25.0)),
-        "fixed_rate": float(intel['rates'].get('five_year_fixed_uninsured', 4.26)),
-        "curr_var_rate": float(intel['rates'].get('five_year_variable', 5.50)),
-        "target_var_rate": 3.00,  # Updated Default
-        "months_to_target": 12.0, # Updated Default
-        "term_yrs": 5,
+ren_store = st.session_state.app_db['renewal_analysis']
+
+# INITIALIZE WITH PROFILE DATA IF EMPTY
+if not ren_store.get('initialized'):
+    ren_store.update({
+        "balance": float(prof.get('m_bal', 500000.0)),
+        "amort": float(prof.get('m_amort', 25.0)),
+        "fixed_quote": float(prof.get('m_rate', 0.0)) if float(prof.get('m_rate', 0.0)) > 0 else float(intel['rates'].get('five_year_fixed_uninsured', 4.79)),
+        "var_start": float(intel['rates'].get('five_year_variable', 5.50)),
+        "target_rate": 3.00,
+        "months_to_reach": 12,
         "initialized": True
     })
 
-# --- 4. HEADER & GUIDE ---
-st.title("The Renewal Dilemma")
+# --- 4. PAGE HEADER ---
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col1:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=140)
+with header_col2:
+    st.title("Renewal Strategy: Fixed vs. Variable")
+
+# --- 5. STORYTELLING SECTION ---
+name1_only = name1.split()[0]
+name2_only = name2.split()[0] if name2 else "the market"
+
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0;">📋 Strategic Brief: {household}</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; margin-bottom: 5px;">
-        <b>How to compare:</b> Input your bank's <b>Fixed Rate</b> offer in Column 1. 
-        In Column 2, define where you think the <b>Variable Rate</b> is heading.
-    </p>
-    <p style="font-size: 0.95em; color: #6c757d; font-style: italic;">
-        Example: If you expect the rate to drop to 3% over the next 12 months, set Target to 3.0 and Months to 12.
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-top: 0px; margin-bottom: 15px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; margin-bottom: 10px; font-size: 1.5em;">🔄 {household}: The Renewal Roulette</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        <b>{name1_only}</b> likes certainty. <b>{name2_only}</b> expects rates to drop. 
+        This analysis pits <b>{name1_only}'s</b> need for a fixed path against <b>{name2_only}'s</b> forecast to see which strategy wins the math.
     </p>
 </div>
 """, unsafe_allow_html=True)
-st.write("")
 
-# --- 5. TWO-COLUMN INPUTS ---
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("🛡️ Column 1: Fixed Path")
-    m_bal = cloud_input("Current Balance ($)", "renewal_analysis", "m_bal", step=5000.0)
-    m_amort = cloud_input("Amortization (Yrs)", "renewal_analysis", "m_amort", step=1.0)
-    fixed_rate = cloud_input("Contracted Fixed Rate (%)", "renewal_analysis", "fixed_rate", step=0.05)
+# --- 6. CALCULATION ENGINE (REPLICATED EXACTLY) ---
+def simulate_renewal_v3(balance, amort_rem, fixed_rate, var_start, target_rate, months_to_reach):
+    months = 60 # 5-Year Term
+    f_periodic = (fixed_rate / 100) / 12
+    # Guard against ZeroDivision
+    f_denom = ((1 + f_periodic)**(amort_rem*12) - 1)
+    f_pmt = balance * (f_periodic * (1 + f_periodic)**(amort_rem*12)) / f_denom if f_denom != 0 else (balance / 12)
     
-    term_options = [1, 2, 3, 4, 5]
-    sel_term = st.selectbox("Renewal Term (Years)", term_options, 
-                            index=term_options.index(int(ren_data.get('term_yrs', 5))),
-                            key="renewal_analysis:term_yrs_sel", on_change=sync_widget, args=("renewal_analysis:term_yrs_sel",))
-    ren_data['term_yrs'] = sel_term
+    total_change = target_rate - var_start
+    monthly_step = total_change / months_to_reach if months_to_reach > 0 else 0
+    
+    v_balance, f_balance = balance, balance
+    history, cum_v_int, cum_f_int = [], 0, 0
+    
+    for m in range(1, months + 1):
+        curr_v_rate = var_start + (monthly_step * m) if m <= months_to_reach else target_rate
+        v_periodic = (curr_v_rate / 100) / 12
+        rem_months = (amort_rem * 12) - (m - 1)
+        
+        v_denom = ((1 + v_periodic)**rem_months - 1)
+        v_pmt = v_balance * (v_periodic * (1 + v_periodic)**rem_months) / v_denom if v_denom != 0 else (v_balance / 12)
+        
+        v_int_mo = v_balance * v_periodic
+        f_int_mo = f_balance * f_periodic
+        cum_v_int += v_int_mo
+        cum_f_int += f_int_mo
+        
+        v_balance -= (v_pmt - v_int_mo)
+        f_balance -= (f_pmt - f_int_mo)
+        
+        history.append({
+            "Month": m, "V_Rate": curr_v_rate, "F_Rate": fixed_rate,
+            "V_Pmt": v_pmt, "F_Pmt": f_pmt, "Cum_V_Int": cum_v_int, "Cum_F_Int": cum_f_int
+        })
+    return history
+
+# --- 7. INPUTS (RETAINING ORIGINAL STRUCTURE WITH CLOUD_INPUT) ---
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("🏦 Current Mortgage")
+    balance = cloud_input("Remaining Balance ($)", "renewal_analysis", "balance", step=1000.0)
+    amort = cloud_input("Remaining Amortization (Years)", "renewal_analysis", "amort", step=1.0)
+    fixed_quote = cloud_input("Fixed Rate Quote (%)", "renewal_analysis", "fixed_quote", step=0.01)
 
 with col2:
-    st.subheader("🌊 Column 2: Variable Path")
-    curr_var_rate = cloud_input("Current Variable Rate (%)", "renewal_analysis", "curr_var_rate", step=0.05)
-    target_var_rate = cloud_input("Target Variable Rate (%)", "renewal_analysis", "target_var_rate", step=0.05)
-    months_to_target = cloud_input("Months to reach Target", "renewal_analysis", "months_to_target", step=1.0)
+    st.subheader("🎲 The Variable Forecast")
+    var_start = cloud_input("Current Variable Rate (%)", "renewal_analysis", "var_start", step=0.01)
+    target_rate = cloud_input("I expect the rate to reach (%)", "renewal_analysis", "target_rate", step=0.25)
+    
+    st.write("")
+    months_to_reach = st.slider("Months until it hits that target?", 1, 60, value=int(ren_store.get('months_to_reach', 12)), key="renewal_analysis:months_to_reach", on_change=sync_widget, args=("renewal_analysis:months_to_reach",))
     
     st.write("")
     worst_case = st.toggle("🔥 Stress Test: 'Stay-High' Scenario", help="Simulates variable rates never dropping.")
 
-# --- 6. CALCULATIONS (SAFE MATH) ---
-term_months = int(ren_data['term_yrs'] * 12)
-f_rate_safe = max(fixed_rate, 0.0001) / 100
-amort_safe = max(m_amort, 1.0)
-fixed_mo = f_rate_safe / 12
+# Execute Logic
+final_target = var_start if worst_case else target_rate
+history = simulate_renewal_v3(balance, amort, fixed_quote, var_start, final_target, months_to_reach)
+df = pd.DataFrame(history)
 
-# Formula: (P * r) / (1 - (1 + r)^-n)
-pmt_fixed = (m_bal * fixed_mo) / (1 - (1 + fixed_mo)**-(amort_safe * 12))
-
-# Variable Path Simulation
-start_v = curr_var_rate / 100
-end_v = (curr_var_rate / 100) if worst_case else (target_var_rate / 100)
-mo_drop = (start_v - end_v) / months_to_target if (months_to_target > 0 and not worst_case) else 0
-
-v_bal, f_bal, v_int_total, f_int_total = m_bal, m_bal, 0, 0
-data_rows = []
-
-for m in range(1, term_months + 1):
-    # Fixed Path
-    f_int = f_bal * fixed_mo
-    f_prin = pmt_fixed - f_int
-    f_bal -= f_prin
-    f_int_total += f_int
-    
-    # Variable Path Logic
-    curr_v_rate = start_v if worst_case else (start_v - (mo_drop * (m-1)) if m <= months_to_target else end_v)
-    v_mo_rate = max(0.0001, curr_v_rate) / 12
-    
-    # Safe Amortization for Variable
-    v_denom = (1 - (1 + v_mo_rate)**-((amort_safe * 12) - m + 1))
-    pmt_var = (v_bal * v_mo_rate) / v_denom if v_denom != 0 else (v_bal / 12)
-    
-    v_int = v_bal * v_mo_rate
-    v_prin = pmt_var - v_int
-    v_bal -= v_prin
-    v_int_total += v_int
-    
-    data_rows.append({"Month": m, "V_Rate": curr_v_rate*100, "V_Pmt": pmt_var, "F_Pmt": pmt_fixed, "Cum_V_Int": v_int_total, "Cum_F_Int": f_int_total})
-
-df = pd.DataFrame(data_rows)
-interest_diff = f_int_total - v_int_total
-
-# --- 7. RESULTS ---
+# --- 8. METRICS & VERDICT ---
 st.divider()
-st.subheader(f"📊 The Verdict: {ren_data['term_yrs']}-Year Horizon")
+final = history[-1]
+res1, res2 = st.columns(2)
+res1.metric("Fixed Payment (Certainty)", f"${final['F_Pmt']:,.2f}")
+res2.metric("Final Variable Payment (Forecast)", f"${final['V_Pmt']:,.2f}")
 
-v1, v2, v3 = st.columns(3)
-v1.metric("Total Fixed Interest", f"${f_int_total:,.0f}")
-v2.metric("Total Variable Interest", f"${v_int_total:,.0f}", 
-          delta=f"-${interest_diff:,.0f} Savings" if interest_diff > 0 else f"${abs(interest_diff):,.0f} Penalty",
-          delta_color="normal" if interest_diff > 0 else "inverse")
-v3.metric("Break-Even Cuts", f"{((curr_var_rate - fixed_rate) / 0.25):.1f} cuts")
+if final['Cum_V_Int'] < final['Cum_F_Int']:
+    diff = final['Cum_F_Int'] - final['Cum_V_Int']
+    st.success(f"🎯 **The Verdict: The Variable Path Wins.** Based on this forecast, **{name2_only}** is correct. Total interest savings: **${diff:,.0f}**.")
+else:
+    diff = final['Cum_V_Int'] - final['Cum_F_Int']
+    st.error(f"🛡️ **The Verdict: The Fixed Path Wins.** **{name1_only}** is correct. The Variable path costs **${diff:,.0f}** MORE in interest.")
 
-# --- 8. VISUALS ---
-t1, t2, t3 = st.tabs(["Rate Path", "Payment Comparison", "Interest Burn"])
-with t1:
-    fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(x=df["Month"], y=df["V_Rate"], name="Variable Path", line=dict(color=PRIMARY_GOLD, width=3)))
-    fig1.add_trace(go.Scatter(x=df["Month"], y=[fixed_rate]*term_months, name="Fixed Rate", line=dict(color=CHARCOAL, dash='dash')))
-    fig1.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
-    fig1.update_yaxes(ticksuffix="%")
-    st.plotly_chart(fig1, use_container_width=True)
+# --- 9. CHARTS ---
+st.markdown("### 📊 Deep Dive Analysis")
+tab1, tab2, tab3 = st.tabs(["Rate Path", "Payment Change", "Cumulative Interest"])
 
-with t2:
-    fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=df["Month"], y=df["V_Pmt"], name="Variable Payment", line=dict(color=PRIMARY_GOLD, width=3)))
-    fig2.add_trace(go.Scatter(x=df["Month"], y=[pmt_fixed]*term_months, name="Fixed Payment", line=dict(color=CHARCOAL, dash='dash')))
-    fig2.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
-    fig2.update_yaxes(tickprefix="$")
-    st.plotly_chart(fig2, use_container_width=True)
+with tab1:
+    fig_rate = go.Figure()
+    fig_rate.add_trace(go.Scatter(x=df["Month"], y=df["V_Rate"], name="Variable Rate", line=dict(color=PRIMARY_GOLD, width=3)))
+    fig_rate.add_trace(go.Scatter(x=df["Month"], y=df["F_Rate"], name="Fixed Rate", line=dict(color=CHARCOAL, dash='dash')))
+    fig_rate.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
+    fig_rate.update_yaxes(ticksuffix="%")
+    st.plotly_chart(fig_rate, use_container_width=True)
 
-with t3:
-    fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=df["Month"], y=df["Cum_V_Int"], name="Total Variable Interest", fill='tozeroy', line=dict(color=PRIMARY_GOLD)))
-    fig3.add_trace(go.Scatter(x=df["Month"], y=df["Cum_F_Int"], name="Total Fixed Interest", line=dict(color=CHARCOAL, width=2)))
-    fig3.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
-    fig3.update_yaxes(tickprefix="$")
-    st.plotly_chart(fig3, use_container_width=True)
+with tab2:
+    fig_pmt = go.Figure()
+    fig_pmt.add_trace(go.Scatter(x=df["Month"], y=df["V_Pmt"], name="Variable Payment", line=dict(color=PRIMARY_GOLD, width=3)))
+    fig_pmt.add_trace(go.Scatter(x=df["Month"], y=df["F_Pmt"], name="Fixed Payment", line=dict(color=CHARCOAL, dash='dash')))
+    fig_pmt.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
+    fig_pmt.update_yaxes(tickprefix="$")
+    st.plotly_chart(fig_pmt, use_container_width=True)
+
+with tab3:
+    fig_int = go.Figure()
+    fig_int.add_trace(go.Scatter(x=df["Month"], y=df["Cum_V_Int"], name="Total Var Interest", fill='tozeroy', line=dict(color=PRIMARY_GOLD)))
+    fig_int.add_trace(go.Scatter(x=df["Month"], y=df["Cum_F_Int"], name="Total Fixed Interest", line=dict(color=CHARCOAL, width=2)))
+    fig_int.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
+    fig_int.update_yaxes(tickprefix="$")
+    st.plotly_chart(fig_int, use_container_width=True)
 
 show_disclaimer()
