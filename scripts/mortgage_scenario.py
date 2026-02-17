@@ -83,21 +83,25 @@ if "scenarios" not in store:
         {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
     ]
 
-# --- 3. HELPER: CLOUD SYNC (FORCE SAVE) ---
+# --- 3. HELPER: CLOUD SYNC (ROBUST & VISIBLE) ---
 def trigger_cloud_save():
-    # 1. Update the local session state 'app_db' first
+    # 1. Force Sync: Ensure the 'mortgage_scenario' key in app_db matches our local 'store'
     st.session_state.app_db['mortgage_scenario'] = store
     
-    # 2. Force write to Supabase
+    # 2. Write to Supabase with Error Handling and Visual Feedback
     if st.session_state.get('user'):
         try:
             supabase.table('user_data').update({
                 'data': st.session_state.app_db
             }).eq('user_id', st.session_state.user.id).execute()
-            # Optional: feedback for debugging
-            # st.toast("✅ Saved to Cloud", icon="☁️") 
+            
+            # The "Green Note" you were looking for
+            st.toast("Changes saved automatically", icon="✅")
+            
         except Exception as e:
-            st.error(f"Save Failed: {e}")
+            st.error(f"⚠️ Cloud Save Failed: {e}")
+    else:
+        st.warning("⚠️ Offline Mode: Changes saved locally only.")
 
 # --- 4. CALLBACK: UPDATE STORE ---
 def update_ms_store():
