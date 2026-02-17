@@ -1,16 +1,42 @@
 import streamlit as st
+import time
 from style_utils import inject_global_css
-from data_handler import cloud_input
+from data_handler import cloud_input, load_user_data, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
+# --- 2. SMART DATA LOADER (The Fix) ---
+# This ensures that if you land here and data is missing, we fetch it immediately.
+if 'app_db' not in st.session_state:
+    st.session_state.app_db = {}
+
+# Check if profile is empty (blank data)
+profile_data = st.session_state.app_db.get('profile', {})
+is_empty = not profile_data.get('p1_name')
+
+if is_empty and st.session_state.get('user'):
+    user = st.session_state.user
+    # Handle user object vs dictionary
+    user_id = user.id if hasattr(user, 'id') else user.get('id')
+    
+    with st.spinner("🔄 Fetching Dori's data from cloud..."):
+        load_user_data(user_id)
+        time.sleep(0.5) # Give state a moment to settle
+        st.rerun() # Refresh page to show the data
+
+# --- PAGE LAYOUT ---
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
 st.title("👤 General Client Information")
-st.info("Your information is saved automatically to your Cloud Vault.")
+
+# Connection Status Indicator
+if supabase:
+    st.caption("🟢 Cloud Status: **Online & Synced**")
+else:
+    st.error("🔴 Cloud Status: **Offline** (Check Secrets)")
 
 # --- SECTION 1: HOUSEHOLD INCOME DETAILS ---
 st.subheader("👥 Household Income Details")
@@ -42,11 +68,13 @@ st.subheader("🏠 Housing & Property Details")
 h_toggle, h_data = st.columns([1, 2])
 
 with h_toggle:
-    # Note: Radio buttons require a slightly different helper if you have many, 
-    # but for now, we'll keep the direct update logic for the radio specifically.
+    # Manual Sync for Radio Button
     from data_handler import sync_widget
     status_options = ["Renting", "Owning"]
     curr_status = st.session_state.app_db['profile'].get('housing_status', 'Renting')
+    
+    # Handle case where curr_status might be empty/None
+    if curr_status not in status_options: curr_status = "Renting"
     
     st.radio(
         "Current Status", 
@@ -58,6 +86,7 @@ with h_toggle:
     )
 
 with h_data:
+    # Check the DB value directly for immediate UI update
     if st.session_state.app_db['profile'].get('housing_status') == "Renting":
         cloud_input("Monthly Rent ($)", "profile", "rent_pmt", step=50.0)
     else:
@@ -82,8 +111,10 @@ with l2:
     cloud_input("Credit Card Payments (Monthly)", "profile", "cc_pmt", step=50.0)
     cloud_input("Total LOC Balance ($)", "profile", "loc_balance", step=500.0)
 with l3:
+    # Manual Sync for Selectbox
     prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
     curr_prov = st.session_state.app_db['profile'].get('province', 'Ontario')
+    if curr_prov not in prov_options: curr_prov = "Ontario"
     
     st.selectbox(
         "Province", 
