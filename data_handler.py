@@ -5,18 +5,25 @@ from supabase import create_client, Client
 @st.cache_resource
 def init_supabase():
     try:
-        # .get() returns None instead of crashing if key is missing
+        # Use .get() to avoid crashing if keys are temporarily missing
+        # We check both top-level keys AND nested [supabase] keys just in case
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
         
-        # Only connect if both keys exist
+        # Fallback: check if they are nested under a [supabase] header
+        if not url and "supabase" in st.secrets:
+             url = st.secrets["supabase"].get("SUPABASE_URL")
+             key = st.secrets["supabase"].get("SUPABASE_KEY")
+
+        # Only connect if we found valid credentials
         if url and key:
             return create_client(url, key)
         return None
     except Exception:
+        # If anything goes wrong, return None (Offline Mode) instead of crashing
         return None
 
-# Initialize (Result is either the Client or None)
+# Initialize the client 
 supabase = init_supabase()
 
 # --- 2. INPUT WIDGET HELPER ---
@@ -29,6 +36,7 @@ def cloud_input(label, section, key, input_type="number", step=None):
     
     # Get current value (or default)
     val = st.session_state.app_db[section].get(key)
+    
     if val is None:
         val = 0.0 if input_type == "number" else ""
 
@@ -42,12 +50,12 @@ def cloud_input(label, section, key, input_type="number", step=None):
     st.session_state.app_db[section][key] = new_val
     return new_val
 
-# --- 3. SESSION STATE INIT ---
-def init_session_state():
-    if 'app_db' not in st.session_state:
-        st.session_state.app_db = {}
+# --- 3. SYNC HELPER FOR RADIOS/SELECTBOXES ---
+def sync_widget(key_path):
+    # Splits "profile:housing_status" into ["profile", "housing_status"]
+    section, key = key_path.split(":")
+    if section not in st.session_state.app_db:
+        st.session_state.app_db[section] = {}
     
-    # Initialize basic keys to prevent KeyErrors elsewhere
-    for k in ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']:
-        if k not in st.session_state.app_db:
-            st.session_state.app_db[k] = {}
+    # Update the DB with the new widget value
+    st.session_state.app_db[section][key] = st.session_state[key_path]
