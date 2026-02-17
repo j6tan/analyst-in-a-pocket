@@ -1,8 +1,7 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# --- 1. FRESH CONNECTION (NO CACHE) ---
-# We removed @st.cache_resource to force a fresh connection check every reload
+# --- 1. BULLETPROOF CONNECTION ---
 def init_supabase():
     try:
         # Check standard secrets
@@ -22,61 +21,53 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- 2. DATA LOADER WITH DEBUGGING ---
-def load_user_data(user_id):
-    """Fetches user data and reports status."""
-    if not supabase:
-        st.warning("⚠️ Cloud Disconnected: Check Secrets.")
-        init_session_state()
-        return
-
-    try:
-        # Fetch the JSON blob
-        response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
-        
-        if response.data and len(response.data) > 0:
-            cloud_data = response.data[0]['data']
-            
-            # SUCCESS: Load data into session
-            if cloud_data:
-                st.session_state.app_db = cloud_data
-                # Fix: Ensure all keys exist even if cloud data is partial
-                init_session_state() 
-                
-                # DEBUG NOTE: Remove this line after you see it works!
-                # st.toast(f"✅ Data Loaded! Found profile for {cloud_data.get('profile', {}).get('p1_name', 'User')}", icon="cloud")
-                
-        else:
-            # No data found for this user_id
-            st.toast("⚠️ New User: No existing data found.", icon="new")
-            init_session_state()
-            
-    except Exception as e:
-        st.error(f"Data Load Error: {e}")
-        init_session_state()
-
-# --- 3. SESSION STATE INITIALIZER ---
+# --- 2. SESSION STATE INITIALIZER ---
 def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
+    # Initialize required sections
     defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']
     for k in defaults:
         if k not in st.session_state.app_db:
             st.session_state.app_db[k] = {}
 
+# --- 3. DATA LOADER ---
+def load_user_data(user_id):
+    """Fetches user data safely."""
+    # Ensure state exists before we try to load into it
+    init_session_state()
+    
+    if not supabase:
+        st.warning("⚠️ Offline Mode")
+        return
+
+    try:
+        response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            cloud_data = response.data[0]['data']
+            if cloud_data:
+                # Merge cloud data with existing structure
+                st.session_state.app_db = cloud_data
+                init_session_state() # Re-verify structure after load
+        else:
+            # New user, just keep the empty init
+            pass
+            
+    except Exception as e:
+        st.error(f"Data Load Error: {e}")
+
 # --- 4. WIDGET HELPERS ---
 def cloud_input(label, section, key, input_type="number", step=None):
-    # Just in case app_db isn't ready
+    # SAFETY: Ensure DB exists
     if 'app_db' not in st.session_state:
         init_session_state()
     if section not in st.session_state.app_db:
         st.session_state.app_db[section] = {}
     
-    # Get current value from DB
+    # Get current value
     val = st.session_state.app_db[section].get(key)
-    
-    # Handle missing/null values
     if val is None:
         val = 0.0 if input_type == "number" else ""
 
@@ -86,13 +77,21 @@ def cloud_input(label, section, key, input_type="number", step=None):
     else:
         new_val = st.text_input(label, value=str(val), key=f"{section}_{key}")
         
-    # Save back to local state immediately
+    # Update Local DB immediately
     st.session_state.app_db[section][key] = new_val
     return new_val
 
 def sync_widget(key_path):
+    # SAFETY: Use init_session_state() to prevent AttributeError
+    if 'app_db' not in st.session_state:
+        init_session_state()
+        
     if ':' in key_path:
         section, key = key_path.split(":")
+        
+        # Double check section exists
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
+            
+        # Safe Assignment
         st.session_state.app_db[section][key] = st.session_state[key_path]
