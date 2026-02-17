@@ -1,16 +1,20 @@
 import streamlit as st
-from supabase import create_client, Client
+# The app will crash here if 'supabase' is not in requirements.txt
+try:
+    from supabase import create_client, Client
+except ImportError:
+    st.error("🚨 Critical Error: The 'supabase' library is not installed. Please add 'supabase' to your requirements.txt file.")
+    st.stop()
 
 # --- 1. SAFE SUPABASE INITIALIZATION ---
 @st.cache_resource
 def init_supabase():
     try:
         # Use .get() to avoid crashing if keys are temporarily missing
-        # We check both top-level keys AND nested [supabase] keys just in case
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
         
-        # Fallback: check if they are nested under a [supabase] header
+        # Fallback: check if they are nested under a [supabase] header (common in local setups)
         if not url and "supabase" in st.secrets:
              url = st.secrets["supabase"].get("SUPABASE_URL")
              key = st.secrets["supabase"].get("SUPABASE_KEY")
@@ -53,9 +57,20 @@ def cloud_input(label, section, key, input_type="number", step=None):
 # --- 3. SYNC HELPER FOR RADIOS/SELECTBOXES ---
 def sync_widget(key_path):
     # Splits "profile:housing_status" into ["profile", "housing_status"]
-    section, key = key_path.split(":")
-    if section not in st.session_state.app_db:
-        st.session_state.app_db[section] = {}
+    if ':' in key_path:
+        section, key = key_path.split(":")
+        if section not in st.session_state.app_db:
+            st.session_state.app_db[section] = {}
+        
+        # Update the DB with the new widget value
+        st.session_state.app_db[section][key] = st.session_state[key_path]
+
+# --- 4. SESSION STATE INIT (Crucial for the ImportError) ---
+def init_session_state():
+    if 'app_db' not in st.session_state:
+        st.session_state.app_db = {}
     
-    # Update the DB with the new widget value
-    st.session_state.app_db[section][key] = st.session_state[key_path]
+    # Initialize basic keys to prevent KeyErrors elsewhere
+    for k in ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']:
+        if k not in st.session_state.app_db:
+            st.session_state.app_db[k] = {}
