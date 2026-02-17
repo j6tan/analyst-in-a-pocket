@@ -18,7 +18,7 @@ except Exception as e:
 if st.button("🔎 Show Me The Real IDs"):
     try:
         # We limit to 5 rows and DO NOT filter by "dori" to prevent the crash
-        response = supabase.table('user_data').select('*').limit(5).execute()
+        response = supabase.table('user_vault').select('*').limit(5).execute()
         
         if response.data:
             st.success("✅ Success! Here is what your database actually contains:")
