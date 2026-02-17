@@ -1,46 +1,77 @@
 import streamlit as st
-# The app will crash here if 'supabase' is not in requirements.txt
+# Safety check: ensure libraries are installed
 try:
     from supabase import create_client, Client
 except ImportError:
-    st.error("🚨 Critical Error: The 'supabase' library is not installed. Please add 'supabase' to your requirements.txt file.")
+    st.error("🚨 Critical Error: 'supabase' library is missing. Please add it to requirements.txt.")
     st.stop()
 
 # --- 1. SAFE SUPABASE INITIALIZATION ---
 @st.cache_resource
 def init_supabase():
     try:
-        # Use .get() to avoid crashing if keys are temporarily missing
+        # Use .get() to prevent crashing if secrets are missing
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
         
-        # Fallback: check if they are nested under a [supabase] header (common in local setups)
+        # Fallback for nested secrets (common in local setups)
         if not url and "supabase" in st.secrets:
              url = st.secrets["supabase"].get("SUPABASE_URL")
              key = st.secrets["supabase"].get("SUPABASE_KEY")
 
-        # Only connect if we found valid credentials
         if url and key:
             return create_client(url, key)
         return None
     except Exception:
-        # If anything goes wrong, return None (Offline Mode) instead of crashing
         return None
 
-# Initialize the client 
 supabase = init_supabase()
 
-# --- 2. INPUT WIDGET HELPER ---
+# --- 2. SESSION STATE INITIALIZER ---
+def init_session_state():
+    if 'app_db' not in st.session_state:
+        st.session_state.app_db = {}
+    
+    # Initialize required sections to prevent KeyErrors
+    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']
+    for k in defaults:
+        if k not in st.session_state.app_db:
+            st.session_state.app_db[k] = {}
+
+# --- 3. DATA LOADER (THIS WAS MISSING) ---
+def load_user_data(user_id):
+    """Fetches the user's JSON blob from Supabase and loads it into session state."""
+    if not supabase:
+        return # Stay offline if no connection
+        
+    try:
+        # Fetch data row for this user
+        response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
+        
+        if response.data and len(response.data) > 0:
+            # Success: Load cloud data into app
+            cloud_data = response.data[0]['data']
+            if cloud_data:
+                st.session_state.app_db = cloud_data
+                # Re-run init to ensure any new keys are added
+                init_session_state()
+        else:
+            # No data found (New User) -> Initialize empty
+            init_session_state()
+            
+    except Exception as e:
+        st.error(f"⚠️ Error loading profile: {e}")
+
+# --- 4. INPUT WIDGET HELPER ---
 def cloud_input(label, section, key, input_type="number", step=None):
     # Ensure DB structure exists
     if 'app_db' not in st.session_state:
-        st.session_state.app_db = {}
+        init_session_state()
     if section not in st.session_state.app_db:
         st.session_state.app_db[section] = {}
     
-    # Get current value (or default)
+    # Get current value
     val = st.session_state.app_db[section].get(key)
-    
     if val is None:
         val = 0.0 if input_type == "number" else ""
 
@@ -54,23 +85,10 @@ def cloud_input(label, section, key, input_type="number", step=None):
     st.session_state.app_db[section][key] = new_val
     return new_val
 
-# --- 3. SYNC HELPER FOR RADIOS/SELECTBOXES ---
+# --- 5. SYNC HELPER ---
 def sync_widget(key_path):
-    # Splits "profile:housing_status" into ["profile", "housing_status"]
     if ':' in key_path:
         section, key = key_path.split(":")
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
-        
-        # Update the DB with the new widget value
         st.session_state.app_db[section][key] = st.session_state[key_path]
-
-# --- 4. SESSION STATE INIT (Crucial for the ImportError) ---
-def init_session_state():
-    if 'app_db' not in st.session_state:
-        st.session_state.app_db = {}
-    
-    # Initialize basic keys to prevent KeyErrors elsewhere
-    for k in ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']:
-        if k not in st.session_state.app_db:
-            st.session_state.app_db[k] = {}
