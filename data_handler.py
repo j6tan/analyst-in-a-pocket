@@ -72,7 +72,7 @@ def load_user_data(user_id):
 
     try:
         # Fetch data
-        response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
+        response = supabase.table('user_vault').select('data').eq('user_id', user_id).execute()
         
         if response.data and len(response.data) > 0:
             cloud_data = response.data[0]['data']
