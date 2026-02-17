@@ -1,57 +1,52 @@
 import streamlit as st
-from supabase import create_client
+import os
 
 st.set_page_config(layout="wide")
-st.title("🕵️ Schema Inspector")
+st.title("🔑 Secrets Detective")
 
-# 1. Connect
+st.write("### 1. Diagnostics")
+
+# A. Check if secrets file exists (Internal check)
 try:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    supabase = create_client(url, key)
-    st.success("✅ Connected to Supabase API")
-except Exception as e:
-    st.error(f"❌ Connection Failed: {e}")
-    st.stop()
+    # List all top-level keys (Masking values for safety)
+    keys_found = list(st.secrets.keys())
+    
+    if not keys_found:
+        st.error("❌ NO SECRETS FOUND. The app sees an empty secrets file.")
+    else:
+        st.success(f"✅ Found {len(keys_found)} keys in secrets.")
+        st.write("**Keys detected:**")
+        st.code(keys_found) # <--- THIS IS WHAT I NEED TO SEE
 
-# 2. Test Table Existence & Structure
-st.subheader("Database Diagnosis")
-
-table_name = st.text_input("Table to inspect:", value="user_data")
-
-if st.button("🔬 Inspect Table Structure"):
-    try:
-        # A. Try to fetch just 1 row (No ID filter, so it won't crash on bad IDs)
-        st.info(f"Attempting to read 1 row from '{table_name}'...")
-        response = supabase.table(table_name).select("*").limit(1).execute()
-        
-        # B. Analyze Results
-        st.success(f"✅ Success! Table '{table_name}' exists.")
-        
-        if response.data and len(response.data) > 0:
-            row = response.data[0]
-            st.write("### 📋 Columns Found:")
-            st.json(list(row.keys())) # Show me the column names
-            
-            st.write("### 🧪 Sample Data (First Row):")
-            st.json(row)
-            
-            # C. Check specifically for 'user_id'
-            if 'user_id' in row:
-                st.write(f"ℹ️ `user_id` format in DB: `{row['user_id']}`")
-                st.write(f"ℹ️ Your input was: `dori`")
-                if len(str(row['user_id'])) > 20 and "dori" in "dori":
-                    st.warning("⚠️ MISMATCH DETECTED: The database uses UUIDs (long codes), but you are logging in with a short username ('dori'). You must update your 'VALID_USERS' list in `streamlit_app.py` to match these UUIDs.")
-            else:
-                st.error("❌ The column `user_id` DOES NOT EXIST. Please check the 'Columns Found' list above for the correct ID column name.")
-                
+        # B. Check for the specific key we need
+        if "SUPABASE_URL" in st.secrets:
+            st.success("✅ SUPABASE_URL is present.")
+            val = st.secrets["SUPABASE_URL"]
+            st.write(f"Value starts with: `{val[:10]}...`") 
+            # Check for quotes in the value (Common error)
+            if val.startswith('"') or val.startswith("'"):
+                st.error("⚠️ WARNING: The value includes quotes inside the string! In TOML, you don't need double quotes if you already used them in the dashboard.")
         else:
-            st.warning(f"⚠️ Table '{table_name}' exists but is EMPTY. Please add a row in Supabase dashboard first.")
+            st.error("❌ SUPABASE_URL is MISSING from the top level.")
+
+        # C. Check for nested sections (e.g. [supabase])
+        if "supabase" in st.secrets:
+            st.info("ℹ️ Found a '[supabase]' section. Checking inside...")
+            nested_keys = list(st.secrets["supabase"].keys())
+            st.code(nested_keys)
             
-    except Exception as e:
-        st.error(f"❌ Error: {e}")
-        st.markdown("""
-        **Likely Causes:**
-        1. The table name is wrong (Check Supabase Dashboard).
-        2. Row Level Security (RLS) is on and blocking access.
-        """)
+except Exception as e:
+    st.error(f"Error reading secrets: {e}")
+
+st.divider()
+st.write("### 2. How to Fix")
+st.markdown("""
+If the list above is empty or does not contain `SUPABASE_URL`, you must:
+1. Go to **Manage App** (bottom right) -> **⋮** -> **Settings** -> **Secrets**.
+2. **DELETE EVERYTHING** in the box.
+3. Type the following **MANUALLY** (Do not copy-paste, to avoid invisible characters):
+""")
+st.code("""
+SUPABASE_URL = "https://your-url.supabase.co"
+SUPABASE_KEY = "your-key"
+""", language="toml")
