@@ -2,59 +2,49 @@ import streamlit as st
 from supabase import create_client, Client
 
 # ==========================================
-# 1. ROBUST CONNECTION & DEBUGGER
+# 1. ROBUST CONNECTION
 # ==========================================
 @st.cache_resource
 def init_supabase():
-    """
-    Attempts to connect to Supabase and debugs secrets if they fail.
-    """
-    # 1. Try to get keys (Safe .get() method never crashes)
-    url = st.secrets.get("SUPABASE_URL")
-    key = st.secrets.get("SUPABASE_KEY")
+    """Connects to Supabase safely."""
+    try:
+        # Check standard secrets
+        url = st.secrets.get("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY")
 
-    # 2. Fallback for nested [supabase] section (Just in case)
-    if not url and "supabase" in st.secrets:
-        url = st.secrets["supabase"].get("SUPABASE_URL")
-        key = st.secrets["supabase"].get("SUPABASE_KEY")
+        # Check nested secrets
+        if not url and "supabase" in st.secrets:
+            url = st.secrets["supabase"].get("SUPABASE_URL")
+            key = st.secrets["supabase"].get("SUPABASE_KEY")
 
-    # 3. Connection Logic
-    if url and key:
-        try:
+        if url and key:
             return create_client(url, key)
-        except Exception as e:
-            print(f"Supabase Client Error: {e}")
-            return None
-    else:
-        # DEBUGGING: This prints to your Manage App -> Logs console
-        print(f"⚠️ Secrets Missing. Available keys: {list(st.secrets.keys())}")
+        return None
+    except Exception:
         return None
 
-# Initialize Client
 supabase = init_supabase()
-
 
 # ==========================================
 # 2. SESSION STATE MANAGEMENT
 # ==========================================
 def init_session_state():
-    """Creates the database folder structure if missing."""
+    """Ensures database structure exists."""
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
-    # Define all required data sections
     defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']
     for section in defaults:
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
 
-
 # ==========================================
-# 3. WIDGET SYNC (Fixes "AttributeError")
+# 3. WIDGET SYNC (THE FIX IS HERE)
 # ==========================================
 def sync_widget(key_path):
     """
-    Saves widget data to the database safely.
+    Saves widget data to the database.
+    Fixes the KeyError by converting 'profile:name' -> 'profile_name'.
     """
     if 'app_db' not in st.session_state:
         init_session_state()
@@ -62,47 +52,41 @@ def sync_widget(key_path):
     if ':' in key_path:
         section, key = key_path.split(":")
         
-        # Construct the widget key (underscore format)
+        # FIX: Construct the actual widget ID (Underscore)
         widget_id = f"{section}_{key}"
         
-        # Only update if the widget exists in session state
+        # Only try to read if the widget actually exists
         if widget_id in st.session_state:
+            # Ensure section exists in DB
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
+                
+            # Save the value
             st.session_state.app_db[section][key] = st.session_state[widget_id]
 
-
 # ==========================================
-# 4. DEEP DATA LOADER (Fixes "Blank Data")
+# 4. DEEP DATA LOADER
 # ==========================================
 def load_user_data(user_id):
-    """
-    Downloads data for 'user_id' and forces the screen to update.
-    """
+    """Downloads data and forces widgets to update."""
     init_session_state()
     
     if not supabase:
-        st.error("⚠️ Offline: Could not find SUPABASE_URL in secrets.")
+        st.warning("⚠️ Offline Mode")
         return
 
     try:
-        # 1. Fetch data (Try exact match first)
+        # Fetch data
         response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
         
-        # 2. Case-Insensitive Fallback (e.g. 'Dori' vs 'dori')
-        if not response.data:
-            response = supabase.table('user_data').select('data').ilike('user_id', user_id).execute()
-
-        # 3. Load Data
         if response.data and len(response.data) > 0:
             cloud_data = response.data[0]['data']
             
             if cloud_data:
-                # Update Master DB
+                # 1. Update Master DB
                 st.session_state.app_db = cloud_data
                 
-                # FORCE UPDATE WIDGETS
-                # This explicitly overwrites the text boxes with cloud data
+                # 2. Force Update Widgets
                 for section, content in cloud_data.items():
                     if isinstance(content, dict):
                         for key, value in content.items():
@@ -110,16 +94,14 @@ def load_user_data(user_id):
                             st.session_state[widget_id] = value
                 
                 init_session_state()
-                st.toast(f"✅ Loaded data for {user_id}!", icon="📂")
         else:
-            st.toast(f"⚠️ No data found for user: {user_id}", icon="🤷")
+            pass # New user
             
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-
 # ==========================================
-# 5. SMART INPUT HELPER
+# 5. INPUT HELPER
 # ==========================================
 def cloud_input(label, section, key, input_type="number", step=None):
     if 'app_db' not in st.session_state:
@@ -132,31 +114,28 @@ def cloud_input(label, section, key, input_type="number", step=None):
     # Priority: DB Value > Widget Value > Default
     db_val = st.session_state.app_db[section].get(key)
     
-    # Initialize widget state from DB if new
-    if widget_id not in st.session_state and db_val is not None:
-        st.session_state[widget_id] = db_val
+    if widget_id not in st.session_state:
+        if db_val is not None:
+            st.session_state[widget_id] = db_val
     
     current_val = st.session_state.get(widget_id)
     if current_val is None:
         current_val = 0.0 if input_type == "number" else ""
 
-    # Render Widget
     if input_type == "number":
-        val = st.number_input(
+        st.number_input(
             label, 
             value=float(current_val), 
             step=step, 
             key=widget_id,
             on_change=sync_widget,
-            args=(f"{section}:{key}",)
+            args=(f"{section}:{key}",) # This passes the 'colon' key to sync_widget
         )
     else:
-        val = st.text_input(
+        st.text_input(
             label, 
             value=str(current_val), 
             key=widget_id,
             on_change=sync_widget,
             args=(f"{section}:{key}",)
         )
-        
-    return val
