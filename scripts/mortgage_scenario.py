@@ -28,15 +28,14 @@ ms_data = st.session_state.app_db['mortgage_scenario']
 # Retrieve Affordability Data (Robust Sync)
 aff_store = st.session_state.app_db.get('affordability', {}) 
 
-# Logic Fix: If 'max_purchase' key is missing, calculate it from components
+# Calculate Price from Affordability (since max_purchase might be missing)
 aff_down = float(aff_store.get('down_payment', 0.0))
+loan_cap = float(aff_store.get('loan_cap', 0.0))
 aff_price = float(aff_store.get('max_purchase', 0.0))
 
-if aff_price == 0:
-    # Fallback: Price = Loan Cap + Down Payment
-    loan_cap = float(aff_store.get('loan_cap', 0.0))
-    if loan_cap > 0:
-        aff_price = loan_cap + aff_down
+# Fallback: Price = Loan Cap + Down Payment
+if aff_price == 0 and loan_cap > 0:
+    aff_price = loan_cap + aff_down
 
 aff_amort = int(aff_store.get('amortization', 25))
 
@@ -59,8 +58,16 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
-# Initialization Logic
-if not ms_data.get('initialized'):
+# --- AUTO-HEAL INITIALIZATION ---
+# Check if current data is "Stale" (Generic Defaults 800k/160k)
+curr_price = float(ms_data.get('price', 800000.0))
+curr_down = float(ms_data.get('down', 160000.0))
+
+is_stale = (curr_price == 800000.0 and curr_down == 160000.0)
+has_new_data = (aff_price > 0 and aff_price != 800000.0)
+
+if not ms_data.get('initialized') or (is_stale and has_new_data):
+    # Use Affordability data if available, otherwise defaults
     init_price = aff_price if aff_price > 0 else 800000.0
     init_down = aff_down if aff_down > 0 else 160000.0
     init_amort = aff_amort if aff_price > 0 else 25
@@ -78,30 +85,29 @@ if not ms_data.get('initialized'):
 
 store = ms_data
 
+# Double check scenarios list exists
 if "scenarios" not in store:
     store["scenarios"] = [
         {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
     ]
 
-# --- 3. HELPER: CLOUD SYNC (ROBUST & VISIBLE) ---
+# --- 3. HELPER: CLOUD SYNC (EXPLICIT) ---
 def trigger_cloud_save():
-    # 1. Force Sync: Ensure the 'mortgage_scenario' key in app_db matches our local 'store'
+    # 1. Force update the master app_db object
     st.session_state.app_db['mortgage_scenario'] = store
     
-    # 2. Write to Supabase with Error Handling and Visual Feedback
+    # 2. Write to Supabase
     if st.session_state.get('user'):
         try:
             supabase.table('user_data').update({
                 'data': st.session_state.app_db
             }).eq('user_id', st.session_state.user.id).execute()
             
-            # The "Green Note" you were looking for
-            st.toast("Changes saved automatically", icon="✅")
+            # VISUAL CONFIRMATION
+            st.toast("Saved successfully", icon="✅")
             
         except Exception as e:
-            st.error(f"⚠️ Cloud Save Failed: {e}")
-    else:
-        st.warning("⚠️ Offline Mode: Changes saved locally only.")
+            st.error(f"Save Failed: {e}")
 
 # --- 4. CALLBACK: UPDATE STORE ---
 def update_ms_store():
