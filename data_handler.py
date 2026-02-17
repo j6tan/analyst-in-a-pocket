@@ -1,18 +1,17 @@
 import streamlit as st
 from supabase import create_client, Client
 
+print("--- RELOADING DATA HANDLER (V3 FIX) ---")
+
 # ==========================================
 # 1. ROBUST CONNECTION
 # ==========================================
 @st.cache_resource
 def init_supabase():
-    """Connects to Supabase safely."""
     try:
-        # Check standard secrets
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
 
-        # Check nested secrets
         if not url and "supabase" in st.secrets:
             url = st.secrets["supabase"].get("SUPABASE_URL")
             key = st.secrets["supabase"].get("SUPABASE_KEY")
@@ -26,10 +25,9 @@ def init_supabase():
 supabase = init_supabase()
 
 # ==========================================
-# 2. SESSION STATE MANAGEMENT
+# 2. SESSION STATE SETUP
 # ==========================================
 def init_session_state():
-    """Ensures database structure exists."""
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
@@ -39,12 +37,11 @@ def init_session_state():
             st.session_state.app_db[section] = {}
 
 # ==========================================
-# 3. WIDGET SYNC (THE FIX IS HERE)
+# 3. WIDGET SYNC (THE CRASH FIX)
 # ==========================================
 def sync_widget(key_path):
     """
-    Saves widget data to the database.
-    Fixes the KeyError by converting 'profile:name' -> 'profile_name'.
+    Fixes the KeyError by ignoring the colon key and using the underscore key.
     """
     if 'app_db' not in st.session_state:
         init_session_state()
@@ -52,23 +49,21 @@ def sync_widget(key_path):
     if ':' in key_path:
         section, key = key_path.split(":")
         
-        # FIX: Construct the actual widget ID (Underscore)
+        # CRITICAL FIX: We use underscore (_) to find the widget
         widget_id = f"{section}_{key}"
         
-        # Only try to read if the widget actually exists
+        # Only save if the widget actually exists in memory
         if widget_id in st.session_state:
-            # Ensure section exists in DB
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
-                
-            # Save the value
+            
+            # Save the value to the database
             st.session_state.app_db[section][key] = st.session_state[widget_id]
 
 # ==========================================
-# 4. DEEP DATA LOADER
+# 4. DEEP DATA LOADER (BLANK DATA FIX)
 # ==========================================
 def load_user_data(user_id):
-    """Downloads data and forces widgets to update."""
     init_session_state()
     
     if not supabase:
@@ -86,7 +81,7 @@ def load_user_data(user_id):
                 # 1. Update Master DB
                 st.session_state.app_db = cloud_data
                 
-                # 2. Force Update Widgets
+                # 2. Force Update Widgets (Crucial)
                 for section, content in cloud_data.items():
                     if isinstance(content, dict):
                         for key, value in content.items():
@@ -95,10 +90,11 @@ def load_user_data(user_id):
                 
                 init_session_state()
         else:
-            pass # New user
+            # New user case
+            pass
             
     except Exception as e:
-        st.error(f"Sync Error: {e}")
+        print(f"Sync Error: {e}")
 
 # ==========================================
 # 5. INPUT HELPER
@@ -110,18 +106,18 @@ def cloud_input(label, section, key, input_type="number", step=None):
         st.session_state.app_db[section] = {}
     
     widget_id = f"{section}_{key}"
-    
-    # Priority: DB Value > Widget Value > Default
     db_val = st.session_state.app_db[section].get(key)
     
-    if widget_id not in st.session_state:
-        if db_val is not None:
-            st.session_state[widget_id] = db_val
+    # Initialize widget if missing
+    if widget_id not in st.session_state and db_val is not None:
+        st.session_state[widget_id] = db_val
     
     current_val = st.session_state.get(widget_id)
     if current_val is None:
         current_val = 0.0 if input_type == "number" else ""
 
+    # Render Widget
+    # Note: We pass "section:key" to args, but sync_widget handles it safely now
     if input_type == "number":
         st.number_input(
             label, 
@@ -129,7 +125,7 @@ def cloud_input(label, section, key, input_type="number", step=None):
             step=step, 
             key=widget_id,
             on_change=sync_widget,
-            args=(f"{section}:{key}",) # This passes the 'colon' key to sync_widget
+            args=(f"{section}:{key}",)
         )
     else:
         st.text_input(
