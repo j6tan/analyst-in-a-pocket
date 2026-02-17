@@ -1,7 +1,7 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# --- 1. BULLETPROOF CONNECTION ---
+# --- 1. CONNECTION SETUP ---
 def init_supabase():
     try:
         # Check standard secrets
@@ -26,37 +26,43 @@ def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
-    # Initialize required sections
     defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']
     for k in defaults:
         if k not in st.session_state.app_db:
             st.session_state.app_db[k] = {}
 
-# --- 3. DATA LOADER ---
+# --- 3. DATA LOADER (DEBUG MODE) ---
 def load_user_data(user_id):
-    """Fetches user data safely."""
+    """Fetches user data and reports status VISIBLY."""
     # Ensure state exists before we try to load into it
     init_session_state()
     
     if not supabase:
-        st.warning("⚠️ Offline Mode")
+        st.warning("⚠️ Offline Mode: Secrets missing or connection failed.")
         return
 
     try:
+        # DEBUG: Tell the user exactly what we are searching for
+        st.toast(f"🔍 Searching Cloud for User ID: {user_id}...", icon="☁️")
+        
+        # Execute Query
         response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
         
         if response.data and len(response.data) > 0:
             cloud_data = response.data[0]['data']
             if cloud_data:
-                # Merge cloud data with existing structure
+                # SUCCESS: Load data into session
                 st.session_state.app_db = cloud_data
                 init_session_state() # Re-verify structure after load
+                st.toast("✅ Data Found & Loaded!", icon="🎉")
+            else:
+                st.toast("⚠️ Row found, but 'data' column was empty.", icon="🤷")
         else:
-            # New user, just keep the empty init
-            pass
+            # FAILURE: No data found for this ID
+            st.error(f"❌ No data found for ID: {user_id}. Please check your Supabase 'user_data' table to ensure the IDs match exactly.")
             
     except Exception as e:
-        st.error(f"Data Load Error: {e}")
+        st.error(f"🔥 Database Error: {e}")
 
 # --- 4. WIDGET HELPERS ---
 def cloud_input(label, section, key, input_type="number", step=None):
@@ -68,6 +74,7 @@ def cloud_input(label, section, key, input_type="number", step=None):
     
     # Get current value
     val = st.session_state.app_db[section].get(key)
+    
     if val is None:
         val = 0.0 if input_type == "number" else ""
 
