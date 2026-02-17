@@ -90,7 +90,8 @@ pages = {
         st.Page("scripts/smith_maneuver.py", title=smith_label, icon=smith_icon),
     ],
     "Account": [
-        st.Page("scripts/membership.py", title="Membership 💎", icon="💎")
+        st.Page("scripts/membership.py", title="Membership 💎", icon="💎"),
+        st.Page("debug_spy.py", title="🕵️ DEBUG SPY", icon="🕵️")
     ]
 }
 
@@ -148,6 +149,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
