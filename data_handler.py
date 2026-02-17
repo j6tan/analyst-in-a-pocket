@@ -2,32 +2,24 @@ import streamlit as st
 from supabase import create_client, Client
 
 # ==========================================
-# 1. BULLETPROOF CONNECTION (Forever Fix #1)
+# 1. BULLETPROOF CONNECTION
 # ==========================================
 def init_supabase():
-    """
-    Connects to Supabase safely. 
-    Never crashes, even if secrets are missing or formatted differently.
-    """
+    """Connects to Supabase safely without crashing on missing secrets."""
     try:
-        # Attempt 1: Standard Streamlit Cloud Secrets
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
 
-        # Attempt 2: Nested TOML Secrets (Common in local development)
         if not url and "supabase" in st.secrets:
             url = st.secrets["supabase"].get("SUPABASE_URL")
             key = st.secrets["supabase"].get("SUPABASE_KEY")
 
-        # Only connect if we found both keys
         if url and key:
             return create_client(url, key)
-        
-        return None # Return None instead of crashing
+        return None
     except Exception:
         return None
 
-# Initialize the client immediately
 supabase = init_supabase()
 
 
@@ -39,7 +31,6 @@ def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
-    # Define all required sections here
     defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver']
     for section in defaults:
         if section not in st.session_state.app_db:
@@ -48,24 +39,30 @@ def init_session_state():
 def sync_widget(key_path):
     """
     Updates the database when a user changes a specific input.
-    Usage: on_change=sync_widget, args=("profile:p1_name",)
     """
+    # Ensure DB exists
     if 'app_db' not in st.session_state:
         init_session_state()
         
     if ':' in key_path:
         section, key = key_path.split(":")
-        # Update the master DB with the new widget value
-        st.session_state.app_db[section][key] = st.session_state[key_path]
+        
+        # FIX: The widget key uses an underscore, not a colon
+        widget_key = f"{section}_{key}"
+        
+        # Only update if the widget exists in state
+        if widget_key in st.session_state:
+            # Update the master DB with the new widget value
+            if section not in st.session_state.app_db:
+                 st.session_state.app_db[section] = {}
+            st.session_state.app_db[section][key] = st.session_state[widget_key]
 
 
 # ==========================================
-# 3. DEEP SYNC DATA LOADER (Forever Fix #2)
+# 3. DEEP SYNC DATA LOADER
 # ==========================================
 def load_user_data(user_id):
-    """
-    Downloads user data AND forces the UI widgets to update.
-    """
+    """Downloads user data AND forces the UI widgets to update."""
     init_session_state()
     
     if not supabase:
@@ -73,7 +70,6 @@ def load_user_data(user_id):
         return
 
     try:
-        # Fetch data from Supabase
         response = supabase.table('user_data').select('data').eq('user_id', user_id).execute()
         
         if response.data and len(response.data) > 0:
@@ -83,21 +79,15 @@ def load_user_data(user_id):
                 # 1. Update the Master Database
                 st.session_state.app_db = cloud_data
                 
-                # 2. DEEP SYNC: Force-update every widget key
-                # This fixes the "Blank Data" issue by pushing data into the widgets
+                # 2. Force-update every widget key
                 for section, content in cloud_data.items():
                     if isinstance(content, dict):
                         for key, value in content.items():
-                            # Widget keys are formatted as "section_key" (e.g., profile_p1_name)
                             widget_id = f"{section}_{key}"
                             st.session_state[widget_id] = value
                 
-                # 3. Re-verify structure
                 init_session_state()
-                st.toast("✅ Data Synced Successfully!", icon="🔄")
-                
         else:
-            # New user or empty row
             pass
             
     except Exception as e:
@@ -108,32 +98,27 @@ def load_user_data(user_id):
 # 4. SMART INPUT WIDGET
 # ==========================================
 def cloud_input(label, section, key, input_type="number", step=None):
-    """
-    Creates an input that is linked to both the Session State and the App DB.
-    """
-    # 1. Ensure DB exists
+    """Creates an input linked to both Session State and App DB."""
     if 'app_db' not in st.session_state:
         init_session_state()
     if section not in st.session_state.app_db:
         st.session_state.app_db[section] = {}
     
-    # 2. Construct the unique widget ID
+    # Construct the unique widget ID with underscore
     widget_id = f"{section}_{key}"
     
-    # 3. Get the value (Priority: Widget State > DB Value > Default)
-    # We prefer the DB value if the widget state is missing (first load)
+    # Get value (DB > Widget State > Default)
     db_val = st.session_state.app_db[section].get(key)
     
     if widget_id not in st.session_state:
         if db_val is not None:
             st.session_state[widget_id] = db_val
     
-    # 4. Handle defaults for None values
     current_val = st.session_state.get(widget_id)
     if current_val is None:
         current_val = 0.0 if input_type == "number" else ""
 
-    # 5. Render the Widget
+    # Render Widget
     if input_type == "number":
         val = st.number_input(
             label, 
