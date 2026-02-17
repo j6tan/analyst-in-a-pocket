@@ -20,6 +20,10 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 1. DATA LINKING & UTILS ---
+# Ensure app_db exists to prevent crashes
+if 'app_db' not in st.session_state:
+    st.session_state.app_db = {}
+
 prof = st.session_state.app_db.get('profile', {})
 client_name1 = prof.get('p1_name', 'Dori') 
 client_name2 = prof.get('p2_name', 'Kevin') 
@@ -61,16 +65,19 @@ def trigger_cloud_save():
     
     if user and supabase:
         try:
+            # Handle both object-style and dict-style user objects
             user_id = user.id if hasattr(user, 'id') else user.get('id')
+            
             supabase.table('user_data').update({
                 'data': st.session_state.app_db
             }).eq('user_id', user_id).execute()
+            
             st.toast("Saved successfully", icon="✅")
-        except Exception as e:
-            # Don't crash on connection drops
+        except Exception:
+            # Silently fail if connection drops (don't annoy user)
             pass
     elif not supabase:
-        # Offline Mode: Just save locally
+        # We are offline, do nothing (data is still saved in session)
         pass
 
 # --- AUTO-HEAL INITIALIZATION ---
