@@ -58,6 +58,31 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
+# --- HELPER: CLOUD SAVE (Defined early for initialization) ---
+def trigger_cloud_save():
+    # 1. Force update the master app_db object
+    # (Note: ms_data is a reference, so this confirms the link)
+    st.session_state.app_db['mortgage_scenario'] = ms_data
+    
+    user = st.session_state.get('user')
+    if user:
+        try:
+            # Handle both object-style and dict-style user objects
+            user_id = user.id if hasattr(user, 'id') else user.get('id')
+            
+            response = supabase.table('user_data').update({
+                'data': st.session_state.app_db
+            }).eq('user_id', user_id).execute()
+            
+            # SUCCESS VISUAL
+            st.toast("Saved successfully", icon="✅")
+            
+        except Exception as e:
+            st.error(f"⚠️ Save Failed: {e}")
+    else:
+        # DEBUG: Tell user if they aren't logged in
+        st.warning("⚠️ NOT SAVED: User not logged in.")
+
 # --- AUTO-HEAL INITIALIZATION ---
 # Check if current data is "Stale" (Generic Defaults 800k/160k)
 curr_price = float(ms_data.get('price', 800000.0))
@@ -82,6 +107,9 @@ if not ms_data.get('initialized') or (is_stale and has_new_data):
         ],
         "initialized": True
     })
+    
+    # CRITICAL FIX: Save immediately upon initialization
+    trigger_cloud_save()
 
 store = ms_data
 
@@ -90,24 +118,6 @@ if "scenarios" not in store:
     store["scenarios"] = [
         {"label": "Standard Monthly", "rate": global_rate_default, "freq": "Monthly", "strat": "None", "extra": 0.0, "lump": 0.0, "double": False}
     ]
-
-# --- 3. HELPER: CLOUD SYNC (EXPLICIT) ---
-def trigger_cloud_save():
-    # 1. Force update the master app_db object
-    st.session_state.app_db['mortgage_scenario'] = store
-    
-    # 2. Write to Supabase
-    if st.session_state.get('user'):
-        try:
-            supabase.table('user_data').update({
-                'data': st.session_state.app_db
-            }).eq('user_id', st.session_state.user.id).execute()
-            
-            # VISUAL CONFIRMATION
-            st.toast("Saved successfully", icon="✅")
-            
-        except Exception as e:
-            st.error(f"Save Failed: {e}")
 
 # --- 4. CALLBACK: UPDATE STORE ---
 def update_ms_store():
