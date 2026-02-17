@@ -57,14 +57,6 @@ with st.sidebar:
 
     # --- THE FIX: THIS PART IS NOW INDEPENDENT ---
     st.divider() 
-    if st.button("Test Cloud Connection"):
-        try:
-            # This checks if your .streamlit/secrets.toml is working
-            url = st.secrets["SUPABASE_URL"]
-            st.write(f"Cloud URL: {url}")
-            st.success("Supabase is Live! ☁️")
-        except Exception as e:
-            st.error(f"Connection Failed: {e}")
 
 # --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
 is_pro = st.session_state.get("is_pro", False)
@@ -156,6 +148,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
