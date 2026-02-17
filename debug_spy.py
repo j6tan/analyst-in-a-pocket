@@ -1,52 +1,42 @@
 import streamlit as st
-import os
+from supabase import create_client
 
 st.set_page_config(layout="wide")
-st.title("🔑 Secrets Detective")
+st.title("🕵️ Data Detective")
 
-st.write("### 1. Diagnostics")
-
-# A. Check if secrets file exists (Internal check)
+# 1. Connect
 try:
-    # List all top-level keys (Masking values for safety)
-    keys_found = list(st.secrets.keys())
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    supabase = create_client(url, key)
+    st.success("✅ Connected to Cloud")
+except Exception:
+    st.error("❌ Connection failed (but we know secrets exist now).")
+    st.stop()
+
+# 2. Input
+st.write("### Check User Data")
+target_user = st.text_input("Enter Username to find:", value="dori")
+
+if st.button("🔎 Search Database"):
+    st.write(f"Searching for ID: `{target_user}`...")
     
-    if not keys_found:
-        st.error("❌ NO SECRETS FOUND. The app sees an empty secrets file.")
+    # Attempt A: Exact Match (dori)
+    res_exact = supabase.table('user_data').select('*').eq('user_id', target_user).execute()
+    
+    # Attempt B: Capitalized (Dori)
+    res_cap = supabase.table('user_data').select('*').eq('user_id', target_user.capitalize()).execute()
+    
+    # Report Results
+    if res_exact.data:
+        st.success(f"✅ Found EXACT match for '{target_user}'!")
+        st.json(res_exact.data[0])
+    elif res_cap.data:
+        st.warning(f"⚠️ Found match for '{target_user.capitalize()}' (Capitalized)!")
+        st.info("The app is sending lowercase 'dori', but DB has 'Dori'. I need to fix the casing in the code.")
+        st.json(res_cap.data[0])
     else:
-        st.success(f"✅ Found {len(keys_found)} keys in secrets.")
-        st.write("**Keys detected:**")
-        st.code(keys_found) # <--- THIS IS WHAT I NEED TO SEE
-
-        # B. Check for the specific key we need
-        if "SUPABASE_URL" in st.secrets:
-            st.success("✅ SUPABASE_URL is present.")
-            val = st.secrets["SUPABASE_URL"]
-            st.write(f"Value starts with: `{val[:10]}...`") 
-            # Check for quotes in the value (Common error)
-            if val.startswith('"') or val.startswith("'"):
-                st.error("⚠️ WARNING: The value includes quotes inside the string! In TOML, you don't need double quotes if you already used them in the dashboard.")
-        else:
-            st.error("❌ SUPABASE_URL is MISSING from the top level.")
-
-        # C. Check for nested sections (e.g. [supabase])
-        if "supabase" in st.secrets:
-            st.info("ℹ️ Found a '[supabase]' section. Checking inside...")
-            nested_keys = list(st.secrets["supabase"].keys())
-            st.code(nested_keys)
-            
-except Exception as e:
-    st.error(f"Error reading secrets: {e}")
-
-st.divider()
-st.write("### 2. How to Fix")
-st.markdown("""
-If the list above is empty or does not contain `SUPABASE_URL`, you must:
-1. Go to **Manage App** (bottom right) -> **⋮** -> **Settings** -> **Secrets**.
-2. **DELETE EVERYTHING** in the box.
-3. Type the following **MANUALLY** (Do not copy-paste, to avoid invisible characters):
-""")
-st.code("""
-SUPABASE_URL = "https://your-url.supabase.co"
-SUPABASE_KEY = "your-key"
-""", language="toml")
+        st.error(f"❌ No data found for '{target_user}' OR '{target_user.capitalize()}'.")
+        st.write("Here are the first 5 IDs that ACTUALLY exist in your table:")
+        all_users = supabase.table('user_data').select('user_id').limit(5).execute()
+        st.write([row['user_id'] for row in all_users.data])
