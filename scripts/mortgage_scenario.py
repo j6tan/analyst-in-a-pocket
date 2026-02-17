@@ -5,7 +5,13 @@ import plotly.graph_objects as go
 import os
 import json
 from style_utils import inject_global_css, show_disclaimer 
-from data_handler import supabase 
+
+# --- SAFE IMPORT: Handle Missing Secrets Gracefully ---
+# This prevents the "Connection Failed" error if secrets.toml is missing
+try:
+    from data_handler import supabase
+except Exception:
+    supabase = None
 
 # 1. Inject the Wealthsimple-inspired Editorial CSS
 inject_global_css()
@@ -58,19 +64,20 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
-# --- HELPER: CLOUD SAVE (Defined early for initialization) ---
+# --- HELPER: CLOUD SAVE (CRASH PROOF) ---
 def trigger_cloud_save():
     # 1. Force update the master app_db object
-    # (Note: ms_data is a reference, so this confirms the link)
     st.session_state.app_db['mortgage_scenario'] = ms_data
     
+    # 2. Check if we are logged in AND if Supabase is connected
     user = st.session_state.get('user')
-    if user:
+    
+    if user and supabase:
         try:
             # Handle both object-style and dict-style user objects
             user_id = user.id if hasattr(user, 'id') else user.get('id')
             
-            response = supabase.table('user_data').update({
+            supabase.table('user_data').update({
                 'data': st.session_state.app_db
             }).eq('user_id', user_id).execute()
             
@@ -78,10 +85,10 @@ def trigger_cloud_save():
             st.toast("Saved successfully", icon="✅")
             
         except Exception as e:
-            st.error(f"⚠️ Save Failed: {e}")
-    else:
-        # DEBUG: Tell user if they aren't logged in
-        st.warning("⚠️ NOT SAVED: User not logged in.")
+            st.error(f"⚠️ Cloud Error: {e}")
+    elif not supabase:
+        # Don't crash, just warn gently
+        st.toast("Offline Mode: Secrets missing", icon="⚠️")
 
 # --- AUTO-HEAL INITIALIZATION ---
 # Check if current data is "Stale" (Generic Defaults 800k/160k)
@@ -108,7 +115,7 @@ if not ms_data.get('initialized') or (is_stale and has_new_data):
         "initialized": True
     })
     
-    # CRITICAL FIX: Save immediately upon initialization
+    # Save immediately upon initialization
     trigger_cloud_save()
 
 store = ms_data
@@ -347,77 +354,4 @@ with main_cols[-1]:
     st.write("### ") 
     st.write("### ")
     if st.session_state.num_options < 5: st.button("➕", on_click=add_option, use_container_width=True)
-    if st.session_state.num_options > 1: st.button("➖", on_click=remove_option, use_container_width=True)
-
-st.divider()
-
-# --- 10. RECOMMENDATION ---
-best_int_scenario = min(results, key=lambda x: x['Total_Life_Int'])
-total_savings = results[0]['Total_Life_Int'] - best_int_scenario['Total_Life_Int']
-
-st.markdown("### 🎯 Professional Recommendation")
-if total_savings > 0:
-    st.success(f"**Recommendation:** Strategy {best_int_scenario['Name']} is the highest-value option. It saves you **${total_savings:,.0f}** in total interest and eliminates your debt **{results[0]['Payoff_Time'] - best_int_scenario['Payoff_Time']:.1f} years** faster.")
-else:
-    st.info(f"**Recommendation:** No interest savings detected. Switching to **Accelerated** payments is the most impactful way to pay off the principal faster.")
-
-st.divider()
-
-# --- 11. PLOTS ---
-def apply_style(fig, title_text):
-    fig.update_layout(
-        template="plotly_white",
-        title=dict(text=title_text, font=dict(size=24, color="#2E2B28")),
-        xaxis=dict(title_font=dict(size=20, color="#2E2B28"), tickfont=dict(size=16)),
-        yaxis=dict(title_font=dict(size=20, color="#2E2B28"), tickfont=dict(size=16), tickformat="$,.0f"),
-        legend=dict(font=dict(size=16))
-    )
-    return fig
-
-tabs = st.tabs(["📉 Balance Projection", "💰 Monthly Cash-Out", "📊 5-Year Progress", "📑 Summary Table"])
-
-with tabs[0]:
-    fig1 = go.Figure()
-    for i, r in enumerate(results): 
-        if not r['History'].empty:
-            fig1.add_trace(go.Scatter(
-                x=r['History']['Year'], 
-                y=r['History']['Balance'], 
-                name=r['Name'], 
-                line=dict(color=SCENARIO_COLORS[i % len(SCENARIO_COLORS)], width=4)
-            ))
-    st.plotly_chart(apply_style(fig1, "Projected Mortgage Balance"), use_container_width=True)
-
-with tabs[1]:
-    avg_df = pd.DataFrame([{"Scenario": r['Name'], "Monthly Out": r['Monthly_Avg']} for r in results])
-    fig2 = px.bar(avg_df, x="Scenario", y="Monthly Out", color="Scenario", text_auto='$,.0f', color_discrete_sequence=SCENARIO_COLORS)
-    fig2.update_traces(textfont_size=18, marker_line_width=0)
-    st.plotly_chart(apply_style(fig2, "Total Monthly Budget Requirement"), use_container_width=True)
-
-with tabs[2]:
-    stack_list = []
-    for r in results:
-        stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Prin'], "Type": "Equity Built"})
-        stack_list.append({"Scenario": r['Name'], "Amount": r['Term_Int'], "Type": "Interest Paid"})
-    
-    fig3 = px.bar(pd.DataFrame(stack_list), x="Scenario", y="Amount", color="Type", barmode="stack", 
-                  color_discrete_map={"Equity Built": PRINCIPAL_COLOR, "Interest Paid": INTEREST_COLOR}, text_auto='$,.0f')
-    fig3.update_traces(textfont_size=18, marker_line_width=0)
-    st.plotly_chart(apply_style(fig3, "5-Year Milestone: Equity vs. Interest"), use_container_width=True)
-
-with tabs[3]:
-    table_df = pd.DataFrame([{
-        "Scenario": r['Name'],
-        "Rate": f"{r['Rate']:.2f}%",
-        "Frequency": r['Freq'],
-        "Extra Pay Activity": r['Prepay_Active'], 
-        "Monthly Out": f"${r['Monthly_Avg']:,}",
-        "Equity (5yr)": f"${r['Term_Prin']:,}",
-        "Total Interest": f"${r['Total_Life_Int']:,}",
-        "Savings vs A": f"${(results[0]['Total_Life_Int'] - r['Total_Life_Int']):,}",
-        "Payoff Time": f"{r['Payoff_Time']} yr"
-    } for r in results])
-    st.table(table_df)
-
-# --- 12. LEGAL DISCLAIMER ---
-show_disclaimer()
+    if st.session_state.num_options > 1: st.button("➖", on_click=remove_option, use_container_
