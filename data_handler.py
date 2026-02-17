@@ -1,15 +1,28 @@
 import streamlit as st
-from supabase import create_client
+from supabase import create_client, Client
 
-# --- 1. CLOUD CONNECTION ---
+# --- CRASH-PROOF INITIALIZATION ---
 @st.cache_resource
 def init_supabase():
-    """Establishes connection using your Streamlit Secrets."""
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    # Attempt to load secrets safely
+    try:
+        # Check if secrets exist before accessing them
+        if "SUPABASE_URL" in st.secrets and "SUPABASE_KEY" in st.secrets:
+            url = st.secrets["SUPABASE_URL"]
+            key = st.secrets["SUPABASE_KEY"]
+            return create_client(url, key)
+        else:
+            return None
+    except Exception:
+        # If secrets.toml is missing or corrupt, return None (Offline Mode)
+        return None
 
+# Initialize the client (will be None if secrets are missing)
 supabase = init_supabase()
+
+# Helper to check connection status
+def is_connected():
+    return supabase is not None
 
 # --- 2. THE MASTER DATA STRUCTURE (DEFAULTS) ---
 # This is critical. It defines the 'map' of your app's memory.
