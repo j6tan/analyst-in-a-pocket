@@ -26,15 +26,31 @@ def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
-    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver', 'budget', 'affordability_second', 'sales_proceeds', 'simple_mortgage']
+    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver', 'budget', 'affordability_second', 'sales_proceeds', 'simple_mortgage', 'buy_vs_rent']
     for section in defaults:
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
 
-# --- 3. WIDGET SYNC (WITH AUTO-SAVE) ---
+# --- 3. DATABASE SAVING ---
+def trigger_auto_save():
+    """
+    Manually forces the current App DB to be saved to Supabase.
+    Useful for widgets like Selectboxes or Radio buttons that don't use sync_widget.
+    """
+    if st.session_state.get('is_logged_in') and st.session_state.get('username') and supabase:
+        try:
+            user_id = st.session_state.username
+            supabase.table('user_vault').upsert({
+                'id': user_id, 
+                'data': st.session_state.app_db
+            }).execute()
+        except Exception as e:
+            print(f"Auto-Save Error: {e}")
+
 def sync_widget(key_path):
     """
     Updates local session state AND pushes changes to Supabase immediately.
+    Used by cloud_input callback.
     """
     if 'app_db' not in st.session_state:
         init_session_state()
@@ -46,21 +62,12 @@ def sync_widget(key_path):
         if widget_id in st.session_state:
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
+            
+            # Update DB from Widget
             st.session_state.app_db[section][key] = st.session_state[widget_id]
             
-            # --- CLOUD AUTO-SAVE ---
-            # Automatically pushes changes to the vault when you type
-            if st.session_state.get('is_logged_in') and st.session_state.get('username') and supabase:
-                try:
-                    user_id = st.session_state.username
-                    # Updates the existing row for this user
-                    supabase.table('user_vault').upsert({
-                        'id': user_id, 
-                        'data': st.session_state.app_db
-                    }).execute()
-                except Exception as e:
-                    # Log silently to console
-                    print(f"Auto-Save Error: {e}")
+            # Save to Cloud
+            trigger_auto_save()
 
 # --- 4. DATA LOADER ---
 def load_user_data(user_id):
@@ -102,7 +109,7 @@ def load_user_data(user_id):
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER (WARNING FIXED) ---
+# --- 5. SMART INPUT HELPER ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
@@ -110,27 +117,34 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     widget_id = f"{section}_{key}"
     db_val = st.session_state.app_db[section].get(key)
     
-    # 1. Ensure Key Exists in Session State (The Source of Truth)
+    # 1. Initialize State if missing
     if widget_id not in st.session_state:
         if db_val is not None:
              st.session_state[widget_id] = db_val
         else:
-             # Set defaults if DB is empty
              st.session_state[widget_id] = 0.0 if input_type == "number" else ""
 
-    # 2. Render Widget WITHOUT 'value=' argument
-    # Streamlit will automatically use the value from st.session_state[widget_id]
+    # 2. RESYNC FIX: If Widget is 0/Empty but DB has data, force the DB value
+    # This fixes the "Blank Input" bug when switching pages
+    current_val = st.session_state.get(widget_id)
+    is_empty_state = (current_val == 0.0 or current_val == "")
+    has_db_value = (db_val is not None and db_val != 0.0 and db_val != "")
+    
+    if is_empty_state and has_db_value:
+        st.session_state[widget_id] = db_val
+
+    # 3. Render Widget (No 'value=' param to avoid warning)
     if input_type == "number":
-        val = st.number_input(
+        st.number_input(
             label, step=step, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs 
         )
     else:
-        val = st.text_input(
+        st.text_input(
             label, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs
         )
         
-    return val
+    return st.session_state[widget_id]
