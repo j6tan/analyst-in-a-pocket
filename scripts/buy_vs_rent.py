@@ -31,8 +31,7 @@ if 'buy_vs_rent' not in st.session_state.app_db:
     st.session_state.app_db['buy_vs_rent'] = {}
 br_store = st.session_state.app_db['buy_vs_rent']
 
-# FIX: Only run defaults if NEVER initialized. 
-# This prevents resetting your data to 0 or defaults on reload.
+# FIX: Check 'initialized' flag to prevent resetting your work
 if not br_store.get('initialized'):
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     br_store.update({
@@ -46,7 +45,7 @@ if not br_store.get('initialized'):
         "rent_inc": 2.5,
         "stock_ret": 8.0, 
         "years": 15.0,
-        "initialized": True # Lock it so we don't overwrite again
+        "initialized": True # Lock it!
     })
     # Force Save
     if st.session_state.get("is_logged_in") and st.session_state.get("username"):
