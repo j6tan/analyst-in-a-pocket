@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 from style_utils import inject_global_css
-from data_handler import cloud_input, load_user_data, supabase, sync_widget
+from data_handler import cloud_input, load_user_data, supabase, trigger_auto_save
 
 # 1. Inject Style
 inject_global_css()
@@ -80,7 +80,7 @@ with h_toggle:
     # Force sync if changed
     if new_status != curr_status:
         st.session_state.app_db['profile']['housing_status'] = new_status
-        # We manually trigger a rerun to refresh the UI on the right
+        trigger_auto_save() # <--- NEW SAVE METHOD
         st.rerun()
 
 with h_data:
@@ -127,8 +127,6 @@ with l3:
     # 3. Manual Sync: If the widget value differs from DB, update DB immediately
     if selected_prov != curr_prov:
         st.session_state.app_db['profile']['province'] = selected_prov
-        # Note: We don't need to rerun here, next action will save it.
-        # But to be safe for cloud saving, we can trigger the sync logic:
-        sync_widget("profile:province")
+        trigger_auto_save() # <--- NEW SAVE METHOD
 
 st.success("✅ Financial Passport updated and synchronized with Cloud Vault.")
