@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import math
+import os
+import json
 from style_utils import inject_global_css, show_disclaimer 
 from data_handler import cloud_input, sync_widget
 
@@ -13,26 +15,73 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. INITIALIZATION ---
+# --- 1. INITIALIZATION & DATA BRIDGING ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Ensure the section exists in the database
+# Ensure the section exists
 if 'simple_mortgage' not in st.session_state.app_db:
     st.session_state.app_db['simple_mortgage'] = {}
 
+# A. FETCH PROFILES (Personalization)
+prof = st.session_state.app_db.get('profile', {})
+p1_name = prof.get('p1_name')
+p2_name = prof.get('p2_name')
+
+if p1_name:
+    household_name = f"{p1_name} & {p2_name}" if p2_name else p1_name
+    intro_header = f"Strategy for {household_name}"
+    intro_text = f"**{household_name}**, most people focus on the monthly payment. Wealthy investors focus on the **Interest Curve**. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
+else:
+    intro_header = "Strategy First, Math Second"
+    intro_text = "Most people focus on the monthly payment. Wealthy investors focus on the <b>Interest Curve</b>. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
+
+# B. FETCH AFFORDABILITY DATA (Smart Defaults)
+# We only pre-fill if the mortgage tool is "empty" (fresh session) to avoid overwriting user edits
+sm_data = st.session_state.app_db['simple_mortgage']
+aff_data = st.session_state.app_db.get('affordability', {})
+
+# 1. Pull Price & Down Payment
+if 'price' not in sm_data:
+    # Try to get max purchase, otherwise fallback to loan_cap + down
+    aff_price = aff_data.get('max_purchase', 0.0)
+    if aff_price == 0:
+        aff_price = aff_data.get('loan_cap', 0.0) + aff_data.get('down_payment', 0.0)
+    
+    if aff_price > 0: sm_data['price'] = aff_price
+
+if 'down' not in sm_data:
+    aff_down = aff_data.get('down_payment', 0.0)
+    if aff_down > 0: sm_data['down'] = aff_down
+
+# 2. Pull Market Rate
+def load_market_intel():
+    path = os.path.join("data", "market_intel.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f: return json.load(f)
+        except: pass
+    # Default Fallback if no file
+    return {"rates": {"five_year_fixed_uninsured": 4.50}}
+
+if 'rate' not in sm_data:
+    intel = load_market_intel()
+    # Safely navigate the JSON structure
+    market_rate = intel.get("rates", {}).get("five_year_fixed_uninsured", 4.50)
+    sm_data['rate'] = float(market_rate)
+
+# --- 2. TITLE SECTION ---
 st.title("🏡 Mortgage Strategy Calculator")
-st.markdown("""
+st.markdown(f"""
     <div style="background-color: #F8F9FA; padding: 20px; border-radius: 10px; border-left: 5px solid #CEB36F; margin-bottom: 25px;">
-        <h4 style="color: #4A4E5A; margin: 0 0 5px 0;">Strategy First, Math Second</h4>
+        <h4 style="color: #4A4E5A; margin: 0 0 5px 0;">{intro_header}</h4>
         <p style="color: #6C757D; font-size: 1.05em; margin: 0; line-height: 1.5;">
-            Most people focus on the monthly payment. Wealthy investors focus on the <b>Interest Curve</b>. 
-            Use this tool to see how small "micro-payments" can destroy your debt years ahead of schedule.
+            {intro_text}
         </p>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 2. CALCULATION ENGINE ---
+# --- 3. CALCULATION ENGINE ---
 def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, extra_per_pmt=0, lump_sum_annual=0):
     freq_map = {
         "Monthly": 12, "Semi-monthly": 24, "Bi-weekly": 26, 
@@ -47,18 +96,14 @@ def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, ex
 
     # Convert to chosen frequency
     if "Accelerated" in freq_label: 
-        # Accelerated = Monthly Payment / (4 if weekly, 2 if bi-weekly)
         pmt = base_m_pmt / (4 if "Weekly" in freq_label else 2)
     else: 
-        # Regular = Annualized Monthly / Periods per year
         pmt = (base_m_pmt * 12) / p_yr
 
     total_periodic = pmt + extra_per_pmt
     periodic_rate = ((1 + (annual_rate / 100) / 2)**(2 / p_yr)) - 1
 
     # --- TRUE AVERAGE MONTHLY TOTAL ---
-    # (Base + Extra) * Payments/Year + Annual Lump Sum = Total Annual Outflow
-    # Total Annual Outflow / 12 = Average Monthly Cost
     total_annual_outflow = (total_periodic * p_yr) + lump_sum_annual
     avg_monthly_total = total_annual_outflow / 12
 
@@ -106,11 +151,12 @@ def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, ex
         "amort_years": amort_years
     }
 
-# --- 3. INPUT SECTION ---
+# --- 4. INPUT SECTION ---
 c1, c2 = st.columns(2)
 
 with c1:
     st.subheader("🏠 Mortgage Details")
+    # These inputs will now auto-fill from Affordability DB if available
     price = cloud_input("Purchase Price ($)", "simple_mortgage", "price", step=5000.0)
     down = cloud_input("Down Payment ($)", "simple_mortgage", "down", step=5000.0)
     rate = cloud_input("Interest Rate (%)", "simple_mortgage", "rate", step=0.1)
@@ -135,7 +181,7 @@ with c2:
 
 st.divider()
 
-# --- 4. THE OVERVIEW (Bottom Half) ---
+# --- 5. THE OVERVIEW (Bottom Half) ---
 loan_amt = max(0, price - down)
 
 if loan_amt > 0 and rate > 0:
