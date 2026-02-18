@@ -47,15 +47,12 @@ def trigger_auto_save():
 def sync_widget(key_path):
     """
     Standard Callback: Updates app_db from Widget -> Saves to Cloud.
-    Expects key_path in format 'section:key'
-    But looks for widget_id in format 'section_key'
     """
     if 'app_db' not in st.session_state:
         init_session_state()
         
     if ':' in key_path:
         section, key = key_path.split(":")
-        # IMPORTANT: Widget Keys use UNDERSCORE, Sync Args use COLON
         widget_id = f"{section}_{key}"
         
         if widget_id in st.session_state:
@@ -122,8 +119,7 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
         else:
              st.session_state[widget_id] = 0.0 if input_type == "number" else ""
 
-    # 2. STRICT TYPE CASTING & RESYNC
-    # This solves the "0" bug. If Screen is 0 but DB is > 0, we force DB value.
+    # 2. DATA RESYNC: If widget is 0 but DB has data, force the DB value
     try:
         current_val = float(st.session_state.get(widget_id, 0))
     except (ValueError, TypeError):
@@ -134,20 +130,24 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     except (ValueError, TypeError):
         db_val_float = 0.0
     
-    # If the widget is "Empty" (0) but the DB has real data, FORCE the session state
     if input_type == "number" and current_val == 0.0 and db_val_float != 0.0:
         st.session_state[widget_id] = db_val_float
 
-    # 3. Render Widget
+    # 3. RENDER WIDGET (With Explicit Value to Fix Blank Inputs)
     if input_type == "number":
         st.number_input(
-            label, step=step, key=widget_id, 
+            label, 
+            value=float(st.session_state[widget_id]), # <--- This fixes the blank input bug
+            step=step, 
+            key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs 
         )
     else:
         st.text_input(
-            label, key=widget_id, 
+            label, 
+            value=str(st.session_state[widget_id]),
+            key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs
         )
