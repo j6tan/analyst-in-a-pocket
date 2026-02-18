@@ -104,7 +104,7 @@ def load_user_data(user_id):
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER (ERROR FIXED) ---
+# --- 5. SMART INPUT HELPER ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
@@ -119,8 +119,8 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
         else:
              st.session_state[widget_id] = 0.0 if input_type == "number" else ""
 
-    # 2. DATA RESYNC: If widget is 0 but DB has data, force the DB value into Session State
-    # This fixes "Blank Inputs" without causing the "Default Value" error
+    # 2. SMART RESYNC: Fixes "Blank Input" bug
+    # If the widget shows 0/empty, but the DB has a value, we FORCE the session state to match DB.
     try:
         current_val = float(st.session_state.get(widget_id, 0))
     except (ValueError, TypeError):
@@ -131,23 +131,25 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     except (ValueError, TypeError):
         db_val_float = 0.0
     
+    # The Fix: Update Session State BEFORE creating the widget
     if input_type == "number" and current_val == 0.0 and db_val_float != 0.0:
         st.session_state[widget_id] = db_val_float
 
-    # 3. RENDER WIDGET (Removed 'value=' to fix conflict)
-    # Streamlit will automatically read the correct number from st.session_state[widget_id]
+    # 3. RENDER WIDGET
+    # We DO NOT pass 'value=' here because st.session_state[widget_id] is already set above.
     if input_type == "number":
         st.number_input(
-            label, 
-            step=step, 
-            key=widget_id, 
+            label, step=step, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs 
         )
     else:
+        # Text input logic (same resync principle applies if needed, but usually simpler)
+        if st.session_state.get(widget_id) == "" and db_val:
+             st.session_state[widget_id] = str(db_val)
+             
         st.text_input(
-            label, 
-            key=widget_id, 
+            label, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs
         )
