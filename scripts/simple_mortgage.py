@@ -56,7 +56,7 @@ def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, ex
     total_periodic = pmt + extra_per_pmt
     periodic_rate = ((1 + (annual_rate / 100) / 2)**(2 / p_yr)) - 1
 
-    # --- NEW: TRUE AVERAGE MONTHLY TOTAL ---
+    # --- TRUE AVERAGE MONTHLY TOTAL ---
     # (Base + Extra) * Payments/Year + Annual Lump Sum = Total Annual Outflow
     # Total Annual Outflow / 12 = Average Monthly Cost
     total_annual_outflow = (total_periodic * p_yr) + lump_sum_annual
@@ -98,7 +98,7 @@ def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, ex
     return {
         "pmt_amt": pmt,
         "total_periodic": total_periodic,
-        "avg_monthly_total": avg_monthly_total, # The new metric
+        "avg_monthly_total": avg_monthly_total,
         "term_int": term_int,
         "term_prin": term_prin,
         "total_int": total_life_int,
@@ -110,7 +110,7 @@ def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, ex
 c1, c2 = st.columns(2)
 
 with c1:
-    st.subheader("1. The Loan")
+    st.subheader("🏠 Mortgage Details")
     price = cloud_input("Purchase Price ($)", "simple_mortgage", "price", step=5000.0)
     down = cloud_input("Down Payment ($)", "simple_mortgage", "down", step=5000.0)
     rate = cloud_input("Interest Rate (%)", "simple_mortgage", "rate", step=0.1)
@@ -118,7 +118,7 @@ with c1:
     st.session_state.app_db['simple_mortgage']['amort'] = amort
 
 with c2:
-    st.subheader("2. The Strategy")
+    st.subheader("💸 Payment Methods")
     
     # Frequency Select
     freq_opts = ["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"]
@@ -151,7 +151,6 @@ if loan_amt > 0 and rate > 0:
     st.header("📊 Mortgage Overview")
     
     m1, m2, m3, m4 = st.columns(4)
-    # UPDATED METRIC: Shows true average monthly cost including lump sums
     m1.metric(
         "Avg Monthly Total", 
         f"${user_res['avg_monthly_total']:,.0f}", 
