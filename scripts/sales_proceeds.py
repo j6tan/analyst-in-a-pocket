@@ -131,7 +131,7 @@ def calculate_proceeds(sale_price):
 if target_price > 0:
     st.divider()
     
-    # A. THE 5-POINT SPECTRUM (Merged)
+    # A. THE 5-POINT SPECTRUM (Fixed HTML Generation)
     st.subheader("📊 Scenario Spectrum")
     
     scenarios = [
@@ -142,7 +142,7 @@ if target_price > 0:
         {"label": "+10% Price", "price": target_price * 1.10, "bg": "#DCFCE7", "text": "#14532D"},
     ]
     
-    # Build the HTML String
+    # Start Container
     spectrum_html = '<div style="display: flex; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; margin-bottom: 20px;">'
     
     for i, s in enumerate(scenarios):
@@ -151,16 +151,14 @@ if target_price > 0:
         # Determine Border
         border_right = "border-right: 1px solid rgba(0,0,0,0.05);" if i < 4 else ""
         
-        # Build Section
-        spectrum_html += f"""
-        <div style="flex: 1; background-color: {s['bg']}; padding: 15px 5px; text-align: center; {border_right}">
-            <div style="font-size: 0.75em; font-weight: bold; color: {s['text']}; opacity: 0.8; margin-bottom: 5px;">{s['label']}</div>
-            <div style="font-size: 1.1em; font-weight: 700; color: #1F2937; margin-bottom: 8px;">${s['price']/1000:,.0f}k</div>
-            <div style="font-size: 0.7em; color: #6B7280; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 6px; margin-bottom: 2px;">FEES: -${res['total_costs']/1000:,.1f}k</div>
-            <div style="font-size: 1.1em; font-weight: 800; color: {s['text']};">${res['net']/1000:,.0f}k</div>
-            <div style="font-size: 0.65em; color: {s['text']}; opacity: 0.7;">NET</div>
-        </div>
-        """
+        # Build Section (Indentation Safe)
+        spectrum_html += f'<div style="flex: 1; background-color: {s["bg"]}; padding: 15px 5px; text-align: center; {border_right}">'
+        spectrum_html += f'<div style="font-size: 0.75em; font-weight: bold; color: {s["text"]}; opacity: 0.8; margin-bottom: 5px;">{s["label"]}</div>'
+        spectrum_html += f'<div style="font-size: 1.1em; font-weight: 700; color: #1F2937; margin-bottom: 8px;">${s["price"]/1000:,.0f}k</div>'
+        spectrum_html += f'<div style="font-size: 0.7em; color: #6B7280; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 6px; margin-bottom: 2px;">FEES: -${res["total_costs"]/1000:,.1f}k</div>'
+        spectrum_html += f'<div style="font-size: 1.1em; font-weight: 800; color: {s["text"]};">${res["net"]/1000:,.0f}k</div>'
+        spectrum_html += f'<div style="font-size: 0.65em; color: {s["text"]}; opacity: 0.7;">NET</div>'
+        spectrum_html += '</div>'
     
     spectrum_html += '</div>'
     
@@ -169,7 +167,7 @@ if target_price > 0:
     
     st.write("") # Spacer
 
-    # B. THE OFFICIAL BREAKDOWN (Detailed)
+    # B. THE OFFICIAL BREAKDOWN
     # We calculate the Target Scenario specifically for the detail view
     target_res = calculate_proceeds(target_price)
 
