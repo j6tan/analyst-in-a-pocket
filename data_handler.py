@@ -8,7 +8,6 @@ def init_supabase():
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
         
-        # Check nested secrets just in case
         if not url and "supabase" in st.secrets:
             url = st.secrets["supabase"].get("SUPABASE_URL")
             key = st.secrets["supabase"].get("SUPABASE_KEY")
@@ -32,16 +31,14 @@ def init_session_state():
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
 
-# --- 3. WIDGET SYNC (NOW WITH AUTO-SAVE) ---
+# --- 3. WIDGET SYNC (WITH AUTO-SAVE) ---
 def sync_widget(key_path):
     """
     Updates local session state AND pushes changes to Supabase immediately.
     """
-    # 1. Init Check
     if 'app_db' not in st.session_state:
         init_session_state()
         
-    # 2. Local Update
     if ':' in key_path:
         section, key = key_path.split(":")
         widget_id = f"{section}_{key}"
@@ -51,18 +48,18 @@ def sync_widget(key_path):
                 st.session_state.app_db[section] = {}
             st.session_state.app_db[section][key] = st.session_state[widget_id]
             
-            # 3. CLOUD AUTO-SAVE (The Fix)
-            # If the user is logged in, we push the new data to the Vault immediately.
+            # --- CLOUD AUTO-SAVE ---
+            # Automatically pushes changes to the vault when you type
             if st.session_state.get('is_logged_in') and st.session_state.get('username') and supabase:
                 try:
                     user_id = st.session_state.username
-                    # Upsert ensures we update the existing row for this user
+                    # Updates the existing row for this user
                     supabase.table('user_vault').upsert({
                         'id': user_id, 
                         'data': st.session_state.app_db
                     }).execute()
                 except Exception as e:
-                    # Log silently to console so we don't spam the UI
+                    # Log silently to console
                     print(f"Auto-Save Error: {e}")
 
 # --- 4. DATA LOADER ---
@@ -74,7 +71,6 @@ def load_user_data(user_id):
         return
 
     try:
-        # Looking for 'user_vault' and 'id'
         response = supabase.table('user_vault').select('data').eq('id', user_id).execute()
         
         if response.data and len(response.data) > 0:
@@ -83,7 +79,7 @@ def load_user_data(user_id):
             if cloud_data:
                 st.session_state.app_db = cloud_data
                 
-                # Force Update Widgets
+                # Pre-fill Session State keys so widgets find them immediately
                 for section, content in cloud_data.items():
                     if isinstance(content, dict):
                         for key, value in content.items():
@@ -93,7 +89,7 @@ def load_user_data(user_id):
                 init_session_state()
                 st.toast(f"✅ Data Loaded for: {user_id}", icon="📂")
         else:
-            # If user has no data yet, create a blank entry so they can start saving
+            # Create blank profile if new user
             st.toast(f"🆕 Creating new profile for: {user_id}", icon="✨")
             try:
                 supabase.table('user_vault').insert({
@@ -101,12 +97,12 @@ def load_user_data(user_id):
                     'data': st.session_state.app_db
                 }).execute()
             except Exception:
-                pass # If it already exists, ignore
+                pass
             
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER ---
+# --- 5. SMART INPUT HELPER (WARNING FIXED) ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
@@ -114,21 +110,25 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     widget_id = f"{section}_{key}"
     db_val = st.session_state.app_db[section].get(key)
     
-    if widget_id not in st.session_state and db_val is not None:
-        st.session_state[widget_id] = db_val
-    
-    current_val = st.session_state.get(widget_id)
-    if current_val is None: current_val = 0.0 if input_type == "number" else ""
+    # 1. Ensure Key Exists in Session State (The Source of Truth)
+    if widget_id not in st.session_state:
+        if db_val is not None:
+             st.session_state[widget_id] = db_val
+        else:
+             # Set defaults if DB is empty
+             st.session_state[widget_id] = 0.0 if input_type == "number" else ""
 
+    # 2. Render Widget WITHOUT 'value=' argument
+    # Streamlit will automatically use the value from st.session_state[widget_id]
     if input_type == "number":
         val = st.number_input(
-            label, value=float(current_val), step=step, key=widget_id, 
+            label, step=step, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs 
         )
     else:
         val = st.text_input(
-            label, value=str(current_val), key=widget_id, 
+            label, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs
         )
