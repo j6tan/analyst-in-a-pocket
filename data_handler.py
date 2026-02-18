@@ -7,12 +7,9 @@ def init_supabase():
     try:
         url = st.secrets.get("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY")
-        
-        # Check nested secrets just in case
         if not url and "supabase" in st.secrets:
             url = st.secrets["supabase"].get("SUPABASE_URL")
             key = st.secrets["supabase"].get("SUPABASE_KEY")
-
         if url and key:
             return create_client(url, key)
         return None
@@ -48,9 +45,8 @@ def sync_widget(key_path):
     """
     Standard Callback: Updates app_db from Widget -> Saves to Cloud.
     """
-    if 'app_db' not in st.session_state:
-        init_session_state()
-        
+    if 'app_db' not in st.session_state: init_session_state()
+    
     if ':' in key_path:
         section, key = key_path.split(":")
         widget_id = f"{section}_{key}"
@@ -58,54 +54,31 @@ def sync_widget(key_path):
         if widget_id in st.session_state:
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
-            
-            # Update DB from Widget
             st.session_state.app_db[section][key] = st.session_state[widget_id]
-            
-            # Save to Cloud
             trigger_auto_save()
 
 # --- 4. DATA LOADER ---
 def load_user_data(user_id):
     init_session_state()
-    
-    if not supabase:
-        st.error("🚨 Cloud Disconnected: Check secrets.")
-        return
+    if not supabase: return
 
     try:
         response = supabase.table('user_vault').select('data').eq('id', user_id).execute()
-        
         if response.data and len(response.data) > 0:
             cloud_data = response.data[0]['data']
-            
             if cloud_data:
                 st.session_state.app_db = cloud_data
-                
-                # Pre-fill Session State keys so widgets find them immediately
+                # Pre-populate Session State
                 for section, content in cloud_data.items():
                     if isinstance(content, dict):
                         for key, value in content.items():
                             widget_id = f"{section}_{key}"
                             st.session_state[widget_id] = value
-                
-                init_session_state()
-                st.toast(f"✅ Data Loaded for: {user_id}", icon="📂")
-        else:
-            # Create blank profile if new user
-            st.toast(f"🆕 Creating new profile for: {user_id}", icon="✨")
-            try:
-                supabase.table('user_vault').insert({
-                    'id': user_id, 
-                    'data': st.session_state.app_db
-                }).execute()
-            except Exception:
-                pass
-            
+                st.toast(f"✅ Data Loaded", icon="📂")
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER (AGGRESSIVE RESYNC) ---
+# --- 5. SMART INPUT (THE FIX) ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
@@ -113,34 +86,49 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     widget_id = f"{section}_{key}"
     db_val = st.session_state.app_db[section].get(key)
     
-    # 1. Initialize State if missing
-    if widget_id not in st.session_state:
-        if db_val is not None:
-             st.session_state[widget_id] = db_val
-        else:
-             st.session_state[widget_id] = 0.0 if input_type == "number" else ""
-
-    # 2. AGGRESSIVE RESYNC:
-    # If the widget (session_state) is 0, but the Database has a real number,
-    # we OVERWRITE the session state to match the database immediately.
-    try:
-        current_val = float(st.session_state.get(widget_id, 0))
-    except (ValueError, TypeError):
-        current_val = 0.0
-
-    try:
-        db_val_float = float(db_val) if db_val is not None and str(db_val) != "" else 0.0
-    except (ValueError, TypeError):
-        db_val_float = 0.0
+    # 1. State/DB Check
+    current_state = st.session_state.get(widget_id)
     
-    if input_type == "number" and current_val == 0.0 and db_val_float != 0.0:
-        st.session_state[widget_id] = db_val_float
+    # Safely cast DB value
+    db_float = 0.0
+    try:
+        if db_val is not None and str(db_val).strip() != "":
+            db_float = float(db_val)
+    except: pass
 
-    # 3. RENDER WIDGET
-    # We DO NOT use 'value=' to avoid the Duplicate Error.
-    # Instead, we rely on the session_state update above to populate the widget.
+    # Safely cast Current State
+    state_float = 0.0
+    try:
+        if current_state is not None:
+            state_float = float(current_state)
+    except: pass
+
+    # 2. HARD RESET LOGIC
+    # If the Widget is 0 (or missing), BUT the Database has a real number...
+    # We DELETE the session state key. This forces Streamlit to re-mount the widget with the DB value.
+    if input_type == "number" and state_float == 0.0 and db_float != 0.0:
+        if widget_id in st.session_state:
+            del st.session_state[widget_id]
+        
+        # Now we render WITH 'value=', which is allowed because the key is gone from memory.
+        val = st.number_input(
+            label, 
+            value=db_float, 
+            step=step, 
+            key=widget_id, 
+            on_change=sync_widget, args=(f"{section}:{key}",),
+            **kwargs 
+        )
+        return val
+
+    # 3. STANDARD RENDER
+    # If state is valid (or both are 0), we render normally.
     if input_type == "number":
-        st.number_input(
+        # Initialize if missing entirely
+        if widget_id not in st.session_state:
+            st.session_state[widget_id] = db_float
+
+        val = st.number_input(
             label, 
             step=step, 
             key=widget_id, 
@@ -148,11 +136,15 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
             **kwargs 
         )
     else:
-        st.text_input(
+        # Text Logic
+        if widget_id not in st.session_state:
+            st.session_state[widget_id] = str(db_val) if db_val else ""
+            
+        val = st.text_input(
             label, 
             key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs
         )
         
-    return st.session_state[widget_id]
+    return val
