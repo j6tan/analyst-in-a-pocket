@@ -131,18 +131,18 @@ def calculate_proceeds(sale_price):
 if target_price > 0:
     st.divider()
     
-    # A. THE 5-POINT SPECTRUM (Fixed HTML Generation)
+    # A. THE 5-POINT SPECTRUM (Merged & Refined)
     st.subheader("📊 Scenario Spectrum")
     
     scenarios = [
-        {"label": "-10% Price", "price": target_price * 0.90, "bg": "#FEF2F2", "text": "#7F1D1D"},
-        {"label": "-5% Price", "price": target_price * 0.95, "bg": "#FFF1F2", "text": "#991B1B"},
-        {"label": "TARGET", "price": target_price, "bg": "#FFFBEB", "text": "#92400E"},
-        {"label": "+5% Price", "price": target_price * 1.05, "bg": "#F0FDF4", "text": "#166534"},
-        {"label": "+10% Price", "price": target_price * 1.10, "bg": "#DCFCE7", "text": "#14532D"},
+        {"label": "Price Adjusted -10%", "price": target_price * 0.90, "bg": "#FEF2F2", "text": "#7F1D1D"},
+        {"label": "Price Adjusted -5%", "price": target_price * 0.95, "bg": "#FFF1F2", "text": "#991B1B"},
+        {"label": "Target Price", "price": target_price, "bg": "#FFFBEB", "text": "#92400E"},
+        {"label": "Price Adjusted +5%", "price": target_price * 1.05, "bg": "#F0FDF4", "text": "#166534"},
+        {"label": "Price Adjusted +10%", "price": target_price * 1.10, "bg": "#DCFCE7", "text": "#14532D"},
     ]
     
-    # Start Container
+    # Start HTML String (Using flexbox for seamless row)
     spectrum_html = '<div style="display: flex; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; margin-bottom: 20px;">'
     
     for i, s in enumerate(scenarios):
@@ -153,11 +153,20 @@ if target_price > 0:
         
         # Build Section (Indentation Safe)
         spectrum_html += f'<div style="flex: 1; background-color: {s["bg"]}; padding: 15px 5px; text-align: center; {border_right}">'
-        spectrum_html += f'<div style="font-size: 0.75em; font-weight: bold; color: {s["text"]}; opacity: 0.8; margin-bottom: 5px;">{s["label"]}</div>'
+        
+        # Label (Top)
+        spectrum_html += f'<div style="font-size: 0.7em; font-weight: bold; color: {s["text"]}; opacity: 0.8; margin-bottom: 5px; text-transform: uppercase;">{s["label"]}</div>'
+        
+        # Sale Price (Middle)
         spectrum_html += f'<div style="font-size: 1.1em; font-weight: 700; color: #1F2937; margin-bottom: 8px;">${s["price"]/1000:,.0f}k</div>'
-        spectrum_html += f'<div style="font-size: 0.7em; color: #6B7280; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 6px; margin-bottom: 2px;">FEES: -${res["total_costs"]/1000:,.1f}k</div>'
-        spectrum_html += f'<div style="font-size: 1.1em; font-weight: 800; color: {s["text"]};">${res["net"]/1000:,.0f}k</div>'
-        spectrum_html += f'<div style="font-size: 0.65em; color: {s["text"]}; opacity: 0.7;">NET</div>'
+        
+        # Costs (Middle - Enhanced Visibility)
+        spectrum_html += f'<div style="font-size: 1.0em; font-weight: 600; color: #DC2626; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 6px; margin-bottom: 6px;">Costs: -${res["total_costs"]/1000:,.1f}k</div>'
+        
+        # Net Proceeds (Bottom - Big)
+        spectrum_html += f'<div style="font-size: 1.3em; font-weight: 800; color: {s["text"]};">${res["net"]/1000:,.0f}k</div>'
+        spectrum_html += f'<div style="font-size: 0.65em; color: {s["text"]}; opacity: 0.7;">Net Proceeds</div>'
+        
         spectrum_html += '</div>'
     
     spectrum_html += '</div>'
