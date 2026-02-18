@@ -27,7 +27,7 @@ def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
-    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver', 'budget']
+    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver', 'budget', 'affordability_second']
     for section in defaults:
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
@@ -79,8 +79,12 @@ def load_user_data(user_id):
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER (FIXED) ---
-def cloud_input(label, section, key, input_type="number", step=None):
+# --- 5. SMART INPUT HELPER (NOW ACCEPTS min_value/max_value) ---
+def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
+    """
+    Creates a persistent input widget.
+    Now accepts **kwargs to handle min_value, max_value, format, etc.
+    """
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
     
@@ -93,16 +97,18 @@ def cloud_input(label, section, key, input_type="number", step=None):
     current_val = st.session_state.get(widget_id)
     if current_val is None: current_val = 0.0 if input_type == "number" else ""
 
-    # FIX: We now capture the 'val' variable
     if input_type == "number":
+        # FIX: We pass **kwargs here so min_value/max_value works
         val = st.number_input(
             label, value=float(current_val), step=step, key=widget_id, 
-            on_change=sync_widget, args=(f"{section}:{key}",)
+            on_change=sync_widget, args=(f"{section}:{key}",),
+            **kwargs 
         )
     else:
         val = st.text_input(
             label, value=str(current_val), key=widget_id, 
-            on_change=sync_widget, args=(f"{section}:{key}",)
+            on_change=sync_widget, args=(f"{section}:{key}",),
+            **kwargs
         )
         
-    return val  # <--- THIS IS THE CRITICAL FIX THAT WAS MISSING
+    return val
