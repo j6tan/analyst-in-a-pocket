@@ -26,20 +26,37 @@ name2 = prof.get('p2_name') or ""
 household = f"{name1} and {name2}" if name2 else name1
 is_renter = prof.get('housing_status') == "Renting"
 
-# --- 3. PERSISTENCE & INITIALIZATION ---
+# --- 3. PERSISTENCE & INITIALIZATION (FIXED) ---
 if 'buy_vs_rent' not in st.session_state.app_db:
     st.session_state.app_db['buy_vs_rent'] = {}
 br_store = st.session_state.app_db['buy_vs_rent']
 
-if br_store.get('rent', 0) == 0:
+# FIX: Check for 'initialized' flag instead of checking if Rent is 0.
+# This prevents the app from resetting your Price/Downpayment just because Rent is empty.
+if not br_store.get('initialized'):
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     br_store.update({
-        "price": 800000.0, "dp": 200000.0, "rate": 4.0, "ann_tax": 2000.0,
-        "mo_maint": 500.0, "apprec": 1.5, "rent": profile_rent, "rent_inc": 2.5,
-        "stock_ret": 8.0, "years": 15.0
+        "price": 800000.0, 
+        "dp": 200000.0, 
+        "rate": 4.0, 
+        "ann_tax": 2000.0,
+        "mo_maint": 500.0, 
+        "apprec": 1.5, 
+        "rent": profile_rent, 
+        "rent_inc": 2.5,
+        "stock_ret": 8.0, 
+        "years": 15.0,
+        "initialized": True # Lock the defaults so they don't reload
     })
-    if st.session_state.get("is_logged_in"):
-        supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
+    # Force an immediate save of these defaults
+    if st.session_state.get("is_logged_in") and st.session_state.get("username"):
+        try:
+            supabase.table("user_vault").upsert({
+                "id": st.session_state.username, 
+                "data": st.session_state.app_db
+            }).execute()
+        except:
+            pass
 
 # --- 4. CALCULATION ENGINE ---
 def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
@@ -112,7 +129,7 @@ with col_right:
 
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
-# --- 7. VISUALS (FIXED SPACING) ---
+# --- 7. VISUALS ---
 owner_unrec, renter_unrec = df['Owner Unrecoverable'].iloc[-1], df['Renter Unrecoverable'].iloc[-1]
 owner_wealth, renter_wealth = df['Owner Net Wealth'].iloc[-1], df['Renter Wealth'].iloc[-1]
 
@@ -124,7 +141,6 @@ with v_col1:
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
     ])
-    # Reduced top margin and title gap
     fig_unrec.update_layout(
         title=dict(text="Total Sunk Costs", x=0.5, y=0.9, xanchor='center', yanchor='top'),
         margin=dict(t=40, b=0, l=0, r=0), 
@@ -138,7 +154,6 @@ with v_col2:
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
     ])
-    # Reduced top margin and title gap
     fig_wealth.update_layout(
         title=dict(text="Final Net Worth", x=0.5, y=0.9, xanchor='center', yanchor='top'),
         margin=dict(t=40, b=0, l=0, r=0), 
@@ -147,7 +162,7 @@ with v_col2:
     )
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 8. RESTORED STRATEGIC VERDICT ---
+# --- 8. STRATEGIC VERDICT ---
 st.divider()
 st.subheader("🎯 Strategic Wealth Verdict")
 ins_col1, ins_col2 = st.columns(2)
