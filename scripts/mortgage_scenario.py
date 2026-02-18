@@ -55,30 +55,43 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
-# --- HELPER: CLOUD SAVE (BUG FIXED HERE) ---
+# --- HELPER: CLOUD SAVE (MERGE-SAFE VERSION) ---
 def trigger_cloud_save():
-    # 1. Force update the master app_db object
-    st.session_state.app_db['mortgage_scenario'] = ms_data
-    
-    # 2. Check if we are connected to Supabase
-    # FIX: Use 'username' (string) instead of 'user' (object)
+    # Check if we are connected and logged in
     user_id = st.session_state.get('username')
     
     if user_id and supabase:
         try:
-            # FIX: Target 'user_vault' (correct table) and 'id' (correct column)
+            # 1. FETCH FIRST: Get the latest full database from the cloud
+            # This ensures we don't accidentally wipe 'profile' or 'budget' if they aren't loaded locally
+            response = supabase.table('user_vault').select('data').eq('id', user_id).execute()
+            
+            if response.data and len(response.data) > 0:
+                # Get the existing cloud data
+                current_cloud_db = response.data[0]['data']
+            else:
+                current_cloud_db = {}
+
+            # 2. MERGE: Update ONLY the Mortgage Scenario section
+            # We take the full cloud data and inject just our current mortgage settings
+            current_cloud_db['mortgage_scenario'] = ms_data
+
+            # 3. SAVE: Push the combined, safe object back to the vault
             supabase.table('user_vault').update({
-                'data': st.session_state.app_db
+                'data': current_cloud_db
             }).eq('id', user_id).execute()
             
-            # Optional: Toast only on manual triggers to avoid spam, but kept for feedback
-            # st.toast("Saved successfully", icon="✅") 
+            # 4. SYNC LOCAL: Update our local session to match the new reality
+            st.session_state.app_db = current_cloud_db
+            
         except Exception as e:
-            print(f"Save Error: {e}")
+            print(f"Safe-Save Error: {e}")
             pass
+            
     elif not supabase:
-        # We are offline, do nothing (data is still saved in session)
-        pass
+        # Offline mode: Just update local session
+        st.session_state.app_db['mortgage_scenario'] = ms_data
+
 
 # --- AUTO-HEAL INITIALIZATION ---
 curr_price = float(ms_data.get('price', 800000.0))
@@ -413,3 +426,4 @@ with tabs[3]:
 
 # --- 12. LEGAL DISCLAIMER ---
 show_disclaimer()
+
