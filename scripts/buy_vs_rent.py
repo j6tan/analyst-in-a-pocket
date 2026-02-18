@@ -26,13 +26,13 @@ name2 = prof.get('p2_name') or ""
 household = f"{name1} and {name2}" if name2 else name1
 is_renter = prof.get('housing_status') == "Renting"
 
-# --- 3. PERSISTENCE & INITIALIZATION (FIXED) ---
+# --- 3. PERSISTENCE & INITIALIZATION ---
 if 'buy_vs_rent' not in st.session_state.app_db:
     st.session_state.app_db['buy_vs_rent'] = {}
 br_store = st.session_state.app_db['buy_vs_rent']
 
-# FIX: Check for 'initialized' flag instead of checking if Rent is 0.
-# This prevents the app from resetting your Price/Downpayment just because Rent is empty.
+# FIX: Only run defaults if NEVER initialized. 
+# This prevents resetting your data to 0 or defaults on reload.
 if not br_store.get('initialized'):
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     br_store.update({
@@ -46,9 +46,9 @@ if not br_store.get('initialized'):
         "rent_inc": 2.5,
         "stock_ret": 8.0, 
         "years": 15.0,
-        "initialized": True # Lock the defaults so they don't reload
+        "initialized": True # Lock it so we don't overwrite again
     })
-    # Force an immediate save of these defaults
+    # Force Save
     if st.session_state.get("is_logged_in") and st.session_state.get("username"):
         try:
             supabase.table("user_vault").upsert({
@@ -100,7 +100,7 @@ with header_col2:
     st.title("Rent vs. Own Analysis")
 
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
+<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #BORDER_GREY; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
     <h3 style="color: {CHARCOAL}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.4; margin: 0;">
         {name1} values the <b>equity growth</b> and stability of ownership, while {name2 if name2 else 'the household'} is focused on the <b>opportunity cost</b> of the stock market. 
