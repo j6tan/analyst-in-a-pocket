@@ -104,7 +104,7 @@ def load_user_data(user_id):
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER ---
+# --- 5. SMART INPUT HELPER (ERROR FIXED) ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
@@ -119,7 +119,8 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
         else:
              st.session_state[widget_id] = 0.0 if input_type == "number" else ""
 
-    # 2. DATA RESYNC: If widget is 0 but DB has data, force the DB value
+    # 2. DATA RESYNC: If widget is 0 but DB has data, force the DB value into Session State
+    # This fixes "Blank Inputs" without causing the "Default Value" error
     try:
         current_val = float(st.session_state.get(widget_id, 0))
     except (ValueError, TypeError):
@@ -133,11 +134,11 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if input_type == "number" and current_val == 0.0 and db_val_float != 0.0:
         st.session_state[widget_id] = db_val_float
 
-    # 3. RENDER WIDGET (With Explicit Value to Fix Blank Inputs)
+    # 3. RENDER WIDGET (Removed 'value=' to fix conflict)
+    # Streamlit will automatically read the correct number from st.session_state[widget_id]
     if input_type == "number":
         st.number_input(
             label, 
-            value=float(st.session_state[widget_id]), # <--- This fixes the blank input bug
             step=step, 
             key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
@@ -146,7 +147,6 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     else:
         st.text_input(
             label, 
-            value=str(st.session_state[widget_id]),
             key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
             **kwargs
