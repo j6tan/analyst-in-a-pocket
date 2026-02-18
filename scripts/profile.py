@@ -1,13 +1,12 @@
 import streamlit as st
 import time
 from style_utils import inject_global_css
-from data_handler import cloud_input, load_user_data, supabase
+from data_handler import cloud_input, load_user_data, supabase, sync_widget
 
 # 1. Inject Style
 inject_global_css()
 
-# --- 2. SMART DATA LOADER (The Fix) ---
-# This ensures that if you land here and data is missing, we fetch it immediately.
+# --- 2. SMART DATA LOADER ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
@@ -15,15 +14,13 @@ if 'app_db' not in st.session_state:
 profile_data = st.session_state.app_db.get('profile', {})
 is_empty = not profile_data.get('p1_name')
 
-if is_empty and st.session_state.get('user'):
-    user = st.session_state.user
-    # Handle user object vs dictionary
-    user_id = user.id if hasattr(user, 'id') else user.get('id')
+if is_empty and st.session_state.get('username'):
+    user_id = st.session_state.username
     
-    with st.spinner("🔄 Fetching Dori's data from cloud..."):
+    with st.spinner(f"🔄 Fetching data for {user_id}..."):
         load_user_data(user_id)
-        time.sleep(0.5) # Give state a moment to settle
-        st.rerun() # Refresh page to show the data
+        time.sleep(0.5) 
+        st.rerun() 
 
 # --- PAGE LAYOUT ---
 if st.button("⬅️ Back to Home Dashboard"):
@@ -68,22 +65,23 @@ st.subheader("🏠 Housing & Property Details")
 h_toggle, h_data = st.columns([1, 2])
 
 with h_toggle:
-    # Manual Sync for Radio Button
-    from data_handler import sync_widget
+    # Housing Status Logic
     status_options = ["Renting", "Owning"]
     curr_status = st.session_state.app_db['profile'].get('housing_status', 'Renting')
-    
-    # Handle case where curr_status might be empty/None
     if curr_status not in status_options: curr_status = "Renting"
     
-    st.radio(
+    # We update session state immediately on change
+    new_status = st.radio(
         "Current Status", 
         status_options, 
         index=status_options.index(curr_status),
-        key="profile:housing_status",
-        on_change=sync_widget,
-        args=("profile:housing_status",)
+        key="profile_housing_status_widget"
     )
+    # Force sync if changed
+    if new_status != curr_status:
+        st.session_state.app_db['profile']['housing_status'] = new_status
+        # We manually trigger a rerun to refresh the UI on the right
+        st.rerun()
 
 with h_data:
     # Check the DB value directly for immediate UI update
@@ -111,18 +109,26 @@ with l2:
     cloud_input("Credit Card Payments (Monthly)", "profile", "cc_pmt", step=50.0)
     cloud_input("Total LOC Balance ($)", "profile", "loc_balance", step=500.0)
 with l3:
-    # Manual Sync for Selectbox
+    # --- PROVINCE SELECTOR (FIXED) ---
     prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
+    
+    # 1. Get current value safely
     curr_prov = st.session_state.app_db['profile'].get('province', 'Ontario')
     if curr_prov not in prov_options: curr_prov = "Ontario"
     
-    st.selectbox(
+    # 2. Render Widget with manual key handling
+    selected_prov = st.selectbox(
         "Province", 
         prov_options, 
         index=prov_options.index(curr_prov),
-        key="profile:province",
-        on_change=sync_widget,
-        args=("profile:province",)
+        key="profile_province_widget"
     )
+
+    # 3. Manual Sync: If the widget value differs from DB, update DB immediately
+    if selected_prov != curr_prov:
+        st.session_state.app_db['profile']['province'] = selected_prov
+        # Note: We don't need to rerun here, next action will save it.
+        # But to be safe for cloud saving, we can trigger the sync logic:
+        sync_widget("profile:province")
 
 st.success("✅ Financial Passport updated and synchronized with Cloud Vault.")
