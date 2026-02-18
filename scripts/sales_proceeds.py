@@ -131,58 +131,48 @@ def calculate_proceeds(sale_price):
 if target_price > 0:
     st.divider()
     
-    # A. THE 5-POINT SPECTRUM (Top)
+    # A. THE 5-POINT SPECTRUM (Merged)
     st.subheader("📊 Scenario Spectrum")
     
     scenarios = [
-        {"label": "-10% Price", "price": target_price * 0.90, "color": "#7F1D1D", "bg": "#FEF2F2", "border": "#FCA5A5"}, # Deep Red
-        {"label": "-5% Price", "price": target_price * 0.95, "color": "#B91C1C", "bg": "#FFF1F2", "border": "#FECDD3"}, # Med Red
-        {"label": "TARGET", "price": target_price, "color": "#B45309", "bg": "#FFFBEB", "border": "#FDE68A"}, # Gold
-        {"label": "+5% Price", "price": target_price * 1.05, "color": "#15803D", "bg": "#F0FDF4", "border": "#86EFAC"}, # Med Green
-        {"label": "+10% Price", "price": target_price * 1.10, "color": "#14532D", "bg": "#F0FDF4", "border": "#4ADE80"}, # Deep Green
+        {"label": "-10% Price", "price": target_price * 0.90, "bg": "#FEF2F2", "text": "#7F1D1D"},
+        {"label": "-5% Price", "price": target_price * 0.95, "bg": "#FFF1F2", "text": "#991B1B"},
+        {"label": "TARGET", "price": target_price, "bg": "#FFFBEB", "text": "#92400E"},
+        {"label": "+5% Price", "price": target_price * 1.05, "bg": "#F0FDF4", "text": "#166534"},
+        {"label": "+10% Price", "price": target_price * 1.10, "bg": "#DCFCE7", "text": "#14532D"},
     ]
     
-    # Create 5 Columns
-    cols = st.columns(5)
-    target_res = None
+    # Build the HTML String
+    spectrum_html = '<div style="display: flex; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; margin-bottom: 20px;">'
     
     for i, s in enumerate(scenarios):
         res = calculate_proceeds(s['price'])
-        if s['label'] == "TARGET": target_res = res
         
-        # We use a compact, high-density card layout
-        with cols[i]:
-            st.markdown(f"""
-            <div style="
-                background-color: {s['bg']}; 
-                border: 1px solid {s['border']}; 
-                border-radius: 8px; 
-                text-align: center; 
-                padding: 10px 5px;
-                height: 100%;
-                display: flex; flex-direction: column; justify-content: space-between;
-            ">
-                <div style="font-weight: bold; color: {s['color']}; font-size: 0.85em; margin-bottom: 5px; text-transform: uppercase;">
-                    {s['label']}
-                </div>
-                <div style="font-size: 1.1em; font-weight: 700; color: #333; margin-bottom: 8px;">
-                    ${s['price']/1000:,.0f}k
-                </div>
-                
-                <div style="font-size: 0.75em; color: #666; border-top: 1px solid {s['border']}; padding-top: 5px;">
-                    Cost: -${res['total_costs']/1000:,.1f}k
-                </div>
-                
-                <div style="margin-top: 8px; font-size: 1.2em; font-weight: 800; color: {s['color']};">
-                    ${res['net']/1000:,.0f}k
-                </div>
-                <div style="font-size: 0.7em; color: {s['color']}; opacity: 0.8;">NET PROCEEDS</div>
-            </div>
-            """, unsafe_allow_html=True)
+        # Determine Border
+        border_right = "border-right: 1px solid rgba(0,0,0,0.05);" if i < 4 else ""
+        
+        # Build Section
+        spectrum_html += f"""
+        <div style="flex: 1; background-color: {s['bg']}; padding: 15px 5px; text-align: center; {border_right}">
+            <div style="font-size: 0.75em; font-weight: bold; color: {s['text']}; opacity: 0.8; margin-bottom: 5px;">{s['label']}</div>
+            <div style="font-size: 1.1em; font-weight: 700; color: #1F2937; margin-bottom: 8px;">${s['price']/1000:,.0f}k</div>
+            <div style="font-size: 0.7em; color: #6B7280; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 6px; margin-bottom: 2px;">FEES: -${res['total_costs']/1000:,.1f}k</div>
+            <div style="font-size: 1.1em; font-weight: 800; color: {s['text']};">${res['net']/1000:,.0f}k</div>
+            <div style="font-size: 0.65em; color: {s['text']}; opacity: 0.7;">NET</div>
+        </div>
+        """
+    
+    spectrum_html += '</div>'
+    
+    # Render Once
+    st.markdown(spectrum_html, unsafe_allow_html=True)
     
     st.write("") # Spacer
 
     # B. THE OFFICIAL BREAKDOWN (Detailed)
+    # We calculate the Target Scenario specifically for the detail view
+    target_res = calculate_proceeds(target_price)
+
     st.subheader("📉 Official Net Sheet (Target Price)")
     
     st.markdown("""
