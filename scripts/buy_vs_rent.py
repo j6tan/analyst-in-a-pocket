@@ -5,33 +5,24 @@ import os
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. THEME & BRANDING ---
-PRIMARY_GOLD = "#CEB36F"
-CHARCOAL = "#2E2B28"
-OFF_WHITE = "#F8F9FA"
-SLATE_ACCENT = "#4A4E5A"
-BORDER_GREY = "#DEE2E6"
-
-# --- 2. DATA RETRIEVAL ---
+# --- 1. DATA SETUP ---
 prof = st.session_state.app_db.get('profile', {})
 name1 = prof.get('p1_name') or "Primary Client"
-name2 = prof.get('p2_name') or ""
-household = f"{name1} and {name2}" if name2 else name1
+household = f"{name1} & {prof.get('p2_name', '')}" if prof.get('p2_name') else name1
 is_renter = prof.get('housing_status') == "Renting"
 
-# --- 3. PERSISTENCE & INITIALIZATION ---
 if 'buy_vs_rent' not in st.session_state.app_db:
     st.session_state.app_db['buy_vs_rent'] = {}
 br_store = st.session_state.app_db['buy_vs_rent']
 
-# FIX: Check 'initialized' flag to prevent resetting your work
+# --- INITIALIZATION LOCK ---
+# Only run defaults if NEVER initialized.
 if not br_store.get('initialized'):
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     br_store.update({
@@ -45,19 +36,18 @@ if not br_store.get('initialized'):
         "rent_inc": 2.5,
         "stock_ret": 8.0, 
         "years": 15.0,
-        "initialized": True # Lock it!
+        "initialized": True # Lock!
     })
     # Force Save
-    if st.session_state.get("is_logged_in") and st.session_state.get("username"):
+    if st.session_state.get('username') and supabase:
         try:
-            supabase.table("user_vault").upsert({
-                "id": st.session_state.username, 
-                "data": st.session_state.app_db
+            supabase.table('user_vault').upsert({
+                'id': st.session_state.username, 
+                'data': st.session_state.app_db
             }).execute()
-        except:
-            pass
+        except: pass
 
-# --- 4. CALCULATION ENGINE ---
+# --- 2. CALCULATION ENGINE ---
 def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
     loan = price - dp
     m_rate = (rate/100)/12
@@ -65,50 +55,43 @@ def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent
     monthly_pi = loan * (m_rate * (1+m_rate)**n_months) / ((1+m_rate)**n_months - 1) if m_rate > 0 else loan / n_months
     
     data = []
-    total_owner_unrecoverable = 0
-    total_renter_unrecoverable = 0
+    total_owner_unrec, total_renter_unrec = 0, 0
     curr_loan, curr_val, curr_rent, renter_portfolio = loan, price, rent, dp 
     
     for y in range(1, int(years) + 1):
         annual_int = 0
         for _ in range(12):
-            mo_interest = curr_loan * m_rate
-            mo_principal = monthly_pi - mo_interest
-            annual_int += mo_interest
-            curr_loan -= mo_principal
-        owner_lost_this_year = annual_int + ann_tax + (mo_maint * 12)
-        total_owner_unrecoverable += owner_lost_this_year
+            mo_int = curr_loan * m_rate
+            mo_prin = monthly_pi - mo_int
+            annual_int += mo_int
+            curr_loan -= mo_prin
+        
+        total_owner_unrec += annual_int + ann_tax + (mo_maint * 12)
         curr_val *= (1 + apprec/100)
-        owner_wealth_net = curr_val - max(0, curr_loan) - ((curr_val * 0.03) + 1500)
-        total_renter_unrecoverable += curr_rent * 12
-        owner_mo_outlay = monthly_pi + (ann_tax/12) + mo_maint
-        mo_savings_gap = owner_mo_outlay - curr_rent
+        owner_net = curr_val - max(0, curr_loan) - ((curr_val * 0.03) + 1500)
+        
+        total_renter_unrec += curr_rent * 12
+        owner_outlay = monthly_pi + (ann_tax/12) + mo_maint
+        mo_save = owner_outlay - curr_rent
         for _ in range(12):
-            renter_portfolio = (renter_portfolio + mo_savings_gap) * (1 + (stock_ret/100)/12)
+            renter_portfolio = (renter_portfolio + mo_save) * (1 + (stock_ret/100)/12)
+            
         data.append({
-            "Year": y, "Owner Net Wealth": owner_wealth_net, "Renter Wealth": renter_portfolio,
-            "Owner Unrecoverable": total_owner_unrecoverable, "Renter Unrecoverable": total_renter_unrecoverable
+            "Year": y, "Owner Net Wealth": owner_net, "Renter Wealth": renter_portfolio,
+            "Owner Unrecoverable": total_owner_unrec, "Renter Unrecoverable": total_renter_unrec
         })
         curr_rent *= (1 + rent_inc/100)
     return pd.DataFrame(data)
 
-# --- 5. RESTORED STORYBOX ---
-st.markdown("<style>div.block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col2:
-    st.title("Rent vs. Own Analysis")
-
+# --- 3. UI LAYOUT ---
+st.title("Rent vs. Own Analysis")
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #BORDER_GREY; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
-    <h3 style="color: {CHARCOAL}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.4; margin: 0;">
-        {name1} values the <b>equity growth</b> and stability of ownership, while {name2 if name2 else 'the household'} is focused on the <b>opportunity cost</b> of the stock market. 
-        Is the "forced savings" of a mortgage worth more than a optimized investment portfolio?
-    </p>
+<div style="background-color: #F8F9FA; padding: 15px 25px; border-radius: 10px; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
+    <h3 style="color: #2E2B28; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
+    <p style="color: #4A4E5A; font-size: 1.1em; margin: 0;">Is the "forced savings" of a mortgage worth more than a optimized investment portfolio?</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. INPUTS ---
 col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("🏠 Homeownership Path")
@@ -128,7 +111,7 @@ with col_right:
 
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
-# --- 7. VISUALS ---
+# --- 4. RESULTS ---
 owner_unrec, renter_unrec = df['Owner Unrecoverable'].iloc[-1], df['Renter Unrecoverable'].iloc[-1]
 owner_wealth, renter_wealth = df['Owner Net Wealth'].iloc[-1], df['Renter Wealth'].iloc[-1]
 
@@ -137,62 +120,35 @@ v_col1, v_col2 = st.columns(2)
 
 with v_col1:
     fig_unrec = go.Figure(data=[
-        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
-        go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
+        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color='#CEB36F', text=[f"${owner_unrec:,.0f}"], textposition='auto'),
+        go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color='#2E2B28', text=[f"${renter_unrec:,.0f}"], textposition='auto')
     ])
-    fig_unrec.update_layout(
-        title=dict(text="Total Sunk Costs", x=0.5, y=0.9, xanchor='center', yanchor='top'),
-        margin=dict(t=40, b=0, l=0, r=0), 
-        height=300, 
-        showlegend=False
-    )
+    fig_unrec.update_layout(title="Total Sunk Costs", margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False)
     st.plotly_chart(fig_unrec, use_container_width=True)
 
 with v_col2:
     fig_wealth = go.Figure(data=[
-        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
-        go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
+        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color='#CEB36F', text=[f"${owner_wealth:,.0f}"], textposition='auto'),
+        go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color='#2E2B28', text=[f"${renter_wealth:,.0f}"], textposition='auto')
     ])
-    fig_wealth.update_layout(
-        title=dict(text="Final Net Worth", x=0.5, y=0.9, xanchor='center', yanchor='top'),
-        margin=dict(t=40, b=0, l=0, r=0), 
-        height=300, 
-        showlegend=False
-    )
+    fig_wealth.update_layout(title="Final Net Worth", margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False)
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 8. STRATEGIC VERDICT ---
 st.divider()
 st.subheader("🎯 Strategic Wealth Verdict")
 ins_col1, ins_col2 = st.columns(2)
 
 with ins_col1:
     if owner_wealth > renter_wealth:
-        st.success(f"🏆 **Wealth Champion: Homeowner**\n\nOwnership builds **${(owner_wealth - renter_wealth):,.0f} more** in assets over {int(years)} years.")
+        st.success(f"🏆 **Wealth Champion: Homeowner**\n\nAhead by **${(owner_wealth - renter_wealth):,.0f}**.")
     else:
-        st.warning(f"🏆 **Wealth Champion: Renter**\n\nStock returns currently outperform equity. The Renter is **${(renter_wealth - owner_wealth):,.0f} ahead**.")
-
-    sunk_diff = abs(owner_unrec - renter_unrec)
-    if owner_unrec < renter_unrec:
-        st.info(f"✨ **Efficiency Champion: Homeowner**\n\nOwnership is **${sunk_diff:,.0f} cheaper** in 'dead money' lost than renting.")
-    else:
-        st.info(f"✨ **Efficiency Champion: Renter**\n\nRenting is **${sunk_diff:,.0f} cheaper** in pure cash-out costs.")
+        st.warning(f"🏆 **Wealth Champion: Renter**\n\nAhead by **${(renter_wealth - owner_wealth):,.0f}**.")
 
 with ins_col2:
-    if (renter_wealth > owner_wealth) and (owner_unrec < renter_unrec):
-        st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; border: 1px solid #d1d5db;">
-        <b>🔍 The Investor's Paradox:</b><br>
-        Even though Ownership has lower sunk costs, the Renter is wealthier. <br><br>
-        This happens because your <b>{stock_ret}% Stock Return</b> is working harder on your initial capital than your <b>{apprec}% Home Appreciation</b>.
-        </div>
-        """, unsafe_allow_html=True)
+    sunk_diff = abs(owner_unrec - renter_unrec)
+    if owner_unrec < renter_unrec:
+        st.info(f"✨ **Efficiency Champion: Homeowner**\n\nSaves **${sunk_diff:,.0f}** in lost costs.")
     else:
-        ahead_mask = df['Owner Net Wealth'] > df['Renter Wealth']
-        be_year = int(df[ahead_mask].iloc[0]['Year']) if ahead_mask.any() else None
-        if be_year:
-            st.write(f"**Break-Even Horizon:** Year {be_year}. This is when equity build-up finally overcomes the high friction costs of interest and taxes.")
-        else:
-            st.write("**Growth Outlook:** Under current market settings, the home is not projected to catch up in net worth.")
+        st.info(f"✨ **Efficiency Champion: Renter**\n\nSaves **${sunk_diff:,.0f}** in lost costs.")
 
 show_disclaimer()
