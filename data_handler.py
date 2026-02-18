@@ -33,10 +33,7 @@ def init_session_state():
 
 # --- 3. DATABASE SAVING ---
 def trigger_auto_save():
-    """
-    Manually forces the current App DB to be saved to Supabase.
-    Useful for widgets like Selectboxes or Radio buttons that don't use sync_widget.
-    """
+    """Forces a Cloud Save. Call this manually for Selectboxes/Radios."""
     if st.session_state.get('is_logged_in') and st.session_state.get('username') and supabase:
         try:
             user_id = st.session_state.username
@@ -49,14 +46,16 @@ def trigger_auto_save():
 
 def sync_widget(key_path):
     """
-    Updates local session state AND pushes changes to Supabase immediately.
-    Used by cloud_input callback.
+    Standard Callback: Updates app_db from Widget -> Saves to Cloud.
+    Expects key_path in format 'section:key'
+    But looks for widget_id in format 'section_key'
     """
     if 'app_db' not in st.session_state:
         init_session_state()
         
     if ':' in key_path:
         section, key = key_path.split(":")
+        # IMPORTANT: Widget Keys use UNDERSCORE, Sync Args use COLON
         widget_id = f"{section}_{key}"
         
         if widget_id in st.session_state:
@@ -96,7 +95,6 @@ def load_user_data(user_id):
                 init_session_state()
                 st.toast(f"✅ Data Loaded for: {user_id}", icon="📂")
         else:
-            # Create blank profile if new user
             st.toast(f"🆕 Creating new profile for: {user_id}", icon="✨")
             try:
                 supabase.table('user_vault').insert({
@@ -124,16 +122,23 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
         else:
              st.session_state[widget_id] = 0.0 if input_type == "number" else ""
 
-    # 2. RESYNC FIX: If Widget is 0/Empty but DB has data, force the DB value
-    # This fixes the "Blank Input" bug when switching pages
-    current_val = st.session_state.get(widget_id)
-    is_empty_state = (current_val == 0.0 or current_val == "")
-    has_db_value = (db_val is not None and db_val != 0.0 and db_val != "")
-    
-    if is_empty_state and has_db_value:
-        st.session_state[widget_id] = db_val
+    # 2. STRICT TYPE CASTING & RESYNC
+    # This solves the "0" bug. If Screen is 0 but DB is > 0, we force DB value.
+    try:
+        current_val = float(st.session_state.get(widget_id, 0))
+    except (ValueError, TypeError):
+        current_val = 0.0
 
-    # 3. Render Widget (No 'value=' param to avoid warning)
+    try:
+        db_val_float = float(db_val) if db_val is not None and db_val != "" else 0.0
+    except (ValueError, TypeError):
+        db_val_float = 0.0
+    
+    # If the widget is "Empty" (0) but the DB has real data, FORCE the session state
+    if input_type == "number" and current_val == 0.0 and db_val_float != 0.0:
+        st.session_state[widget_id] = db_val_float
+
+    # 3. Render Widget
     if input_type == "number":
         st.number_input(
             label, step=step, key=widget_id, 
