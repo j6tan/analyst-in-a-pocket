@@ -27,16 +27,21 @@ def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
     
-    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver', 'budget', 'affordability_second']
+    defaults = ['profile', 'affordability', 'mortgage_scenario', 'smith_maneuver', 'budget', 'affordability_second', 'sales_proceeds', 'simple_mortgage']
     for section in defaults:
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
 
-# --- 3. WIDGET SYNC ---
+# --- 3. WIDGET SYNC (NOW WITH AUTO-SAVE) ---
 def sync_widget(key_path):
+    """
+    Updates local session state AND pushes changes to Supabase immediately.
+    """
+    # 1. Init Check
     if 'app_db' not in st.session_state:
         init_session_state()
         
+    # 2. Local Update
     if ':' in key_path:
         section, key = key_path.split(":")
         widget_id = f"{section}_{key}"
@@ -45,6 +50,20 @@ def sync_widget(key_path):
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
             st.session_state.app_db[section][key] = st.session_state[widget_id]
+            
+            # 3. CLOUD AUTO-SAVE (The Fix)
+            # If the user is logged in, we push the new data to the Vault immediately.
+            if st.session_state.get('is_logged_in') and st.session_state.get('username') and supabase:
+                try:
+                    user_id = st.session_state.username
+                    # Upsert ensures we update the existing row for this user
+                    supabase.table('user_vault').upsert({
+                        'id': user_id, 
+                        'data': st.session_state.app_db
+                    }).execute()
+                except Exception as e:
+                    # Log silently to console so we don't spam the UI
+                    print(f"Auto-Save Error: {e}")
 
 # --- 4. DATA LOADER ---
 def load_user_data(user_id):
@@ -74,17 +93,21 @@ def load_user_data(user_id):
                 init_session_state()
                 st.toast(f"✅ Data Loaded for: {user_id}", icon="📂")
         else:
-            st.toast(f"⚠️ User '{user_id}' not found in Vault.", icon="🤷")
+            # If user has no data yet, create a blank entry so they can start saving
+            st.toast(f"🆕 Creating new profile for: {user_id}", icon="✨")
+            try:
+                supabase.table('user_vault').insert({
+                    'id': user_id, 
+                    'data': st.session_state.app_db
+                }).execute()
+            except Exception:
+                pass # If it already exists, ignore
             
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT HELPER (NOW ACCEPTS min_value/max_value) ---
+# --- 5. SMART INPUT HELPER ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
-    """
-    Creates a persistent input widget.
-    Now accepts **kwargs to handle min_value, max_value, format, etc.
-    """
     if 'app_db' not in st.session_state: init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
     
@@ -98,7 +121,6 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     if current_val is None: current_val = 0.0 if input_type == "number" else ""
 
     if input_type == "number":
-        # FIX: We pass **kwargs here so min_value/max_value works
         val = st.number_input(
             label, value=float(current_val), step=step, key=widget_id, 
             on_change=sync_widget, args=(f"{section}:{key}",),
