@@ -55,26 +55,26 @@ def get_default_rate():
 
 global_rate_default = get_default_rate()
 
-# --- HELPER: CLOUD SAVE (CRASH PROOF) ---
+# --- HELPER: CLOUD SAVE (BUG FIXED HERE) ---
 def trigger_cloud_save():
     # 1. Force update the master app_db object
     st.session_state.app_db['mortgage_scenario'] = ms_data
     
     # 2. Check if we are connected to Supabase
-    user = st.session_state.get('user')
+    # FIX: Use 'username' (string) instead of 'user' (object)
+    user_id = st.session_state.get('username')
     
-    if user and supabase:
+    if user_id and supabase:
         try:
-            # Handle both object-style and dict-style user objects
-            user_id = user.id if hasattr(user, 'id') else user.get('id')
-            
-            supabase.table('user_data').update({
+            # FIX: Target 'user_vault' (correct table) and 'id' (correct column)
+            supabase.table('user_vault').update({
                 'data': st.session_state.app_db
-            }).eq('user_id', user_id).execute()
+            }).eq('id', user_id).execute()
             
-            st.toast("Saved successfully", icon="✅")
-        except Exception:
-            # Silently fail if connection drops (don't annoy user)
+            # Optional: Toast only on manual triggers to avoid spam, but kept for feedback
+            # st.toast("Saved successfully", icon="✅") 
+        except Exception as e:
+            print(f"Save Error: {e}")
             pass
     elif not supabase:
         # We are offline, do nothing (data is still saved in session)
@@ -121,6 +121,7 @@ def update_ms_store():
     # Capture Scenarios
     for i in range(len(store['scenarios'])):
         s = store['scenarios'][i]
+        # Use .get() to avoid KeyErrors if widget hasn't rendered yet
         s['label'] = st.session_state.get(f"n{i}", s['label'])
         s['rate'] = st.session_state.get(f"r{i}", s['rate'])
         s['freq'] = st.session_state.get(f"f{i}", s['freq'])
