@@ -79,10 +79,10 @@ pages = {
     ],
     "Foundations & Budgeting":[
         st.Page("scripts/budget.py", title="Monthly Budget", icon="🥑"), 
+        st.Page("scripts/buy_vs_rent.py", title="Buy vs Rent", icon="⚖️"),
+        st.Page("scripts/affordability.py", title="Simple Affordability", icon="🤔"),
         st.Page("scripts/simple_mortgage.py", title="Mortgage Calculator", icon="🏠"),
         st.Page("scripts/sales_proceeds.py", title="Seller Proceeds", icon="💰"),
-        st.Page("scripts/affordability.py", title="Simple Affordability", icon="🤔"),
-        st.Page("scripts/buy_vs_rent.py", title="Buy vs Rent", icon="⚖️"),
     ],
     "Advanced Wealth Strategy": [
         st.Page("scripts/mortgage_scenario.py", title=mort_label, icon=mort_icon),
@@ -151,6 +151,7 @@ if pg.title in pro_titles and not is_pro:
     # The script continues running below, generating the blurred charts in the background.
 
 pg.run()
+
 
 
 
