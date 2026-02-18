@@ -10,7 +10,6 @@ inject_global_css()
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Check if profile is empty (blank data)
 profile_data = st.session_state.app_db.get('profile', {})
 is_empty = not profile_data.get('p1_name')
 
@@ -62,7 +61,6 @@ with h_toggle:
     curr_status = st.session_state.app_db['profile'].get('housing_status', 'Renting')
     if curr_status not in status_options: curr_status = "Renting"
     
-    # FIX: Key must use UNDERSCORE (profile_housing_status) to match sync_widget logic
     st.radio(
         "Current Status", 
         status_options, 
@@ -101,7 +99,7 @@ with l3:
     curr_prov = st.session_state.app_db['profile'].get('province', 'Ontario')
     if curr_prov not in prov_options: curr_prov = "Ontario"
     
-    # FIX: Key must use UNDERSCORE (profile_province)
+    # FIXED: Uses standard key 'profile_province' to match Sync Engine
     st.selectbox(
         "Province", 
         prov_options, 
