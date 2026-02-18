@@ -12,7 +12,7 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. THEME & BRANDING (DEFINED GLOBALLY) ---
+# --- 1. THEME & BRANDING (Must be defined first to avoid NameError) ---
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
@@ -31,7 +31,7 @@ if 'buy_vs_rent' not in st.session_state.app_db:
     st.session_state.app_db['buy_vs_rent'] = {}
 br_store = st.session_state.app_db['buy_vs_rent']
 
-# Self-Healing: Only run defaults if never initialized OR if data seems corrupted (Price is 0)
+# FIX: Only reset defaults if initialized flag is missing OR data is clearly empty (price=0)
 if not br_store.get('initialized') or br_store.get('price', 0) == 0:
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     br_store.update({
@@ -45,9 +45,9 @@ if not br_store.get('initialized') or br_store.get('price', 0) == 0:
         "rent_inc": 2.5,
         "stock_ret": 8.0, 
         "years": 15.0,
-        "initialized": True
+        "initialized": True # Logic Lock
     })
-    # Force Cloud Save
+    # Force Save to Cloud
     if st.session_state.get("is_logged_in") and st.session_state.get("username"):
         try:
             supabase.table("user_vault").upsert({
@@ -95,7 +95,6 @@ def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent
 # --- 5. VISUALS ---
 st.title("Rent vs. Own Analysis")
 
-# FIXED CSS STRING (Added curly braces to BORDER_GREY and ensured vars are defined)
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
     <h3 style="color: {CHARCOAL}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
@@ -138,7 +137,8 @@ with v_col1:
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
     ])
-    fig_unrec.update_layout(title="Total Sunk Costs", margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False)
+    fig_unrec.update_layout(title=dict(text="Total Sunk Costs", x=0.5, y=0.9, xanchor='center', yanchor='top'),
+                            margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False)
     st.plotly_chart(fig_unrec, use_container_width=True)
 
 with v_col2:
@@ -146,7 +146,8 @@ with v_col2:
         go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
         go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
     ])
-    fig_wealth.update_layout(title="Final Net Worth", margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False)
+    fig_wealth.update_layout(title=dict(text="Final Net Worth", x=0.5, y=0.9, xanchor='center', yanchor='top'),
+                             margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False)
     st.plotly_chart(fig_wealth, use_container_width=True)
 
 # --- 8. VERDICT ---
@@ -156,15 +157,15 @@ ins_col1, ins_col2 = st.columns(2)
 
 with ins_col1:
     if owner_wealth > renter_wealth:
-        st.success(f"🏆 **Wealth Champion: Homeowner**\n\nAhead by **${(owner_wealth - renter_wealth):,.0f}**.")
+        st.success(f"🏆 **Wealth Champion: Homeowner**\n\nOwnership builds **${(owner_wealth - renter_wealth):,.0f} more** in assets over {int(years)} years.")
     else:
-        st.warning(f"🏆 **Wealth Champion: Renter**\n\nAhead by **${(renter_wealth - owner_wealth):,.0f}**.")
+        st.warning(f"🏆 **Wealth Champion: Renter**\n\nStock returns currently outperform equity. The Renter is **${(renter_wealth - owner_wealth):,.0f} ahead**.")
 
 with ins_col2:
     sunk_diff = abs(owner_unrec - renter_unrec)
     if owner_unrec < renter_unrec:
-        st.info(f"✨ **Efficiency Champion: Homeowner**\n\nSaves **${sunk_diff:,.0f}** in lost costs.")
+        st.info(f"✨ **Efficiency Champion: Homeowner**\n\nOwnership is **${sunk_diff:,.0f} cheaper** in 'dead money' lost than renting.")
     else:
-        st.info(f"✨ **Efficiency Champion: Renter**\n\nSaves **${sunk_diff:,.0f}** in lost costs.")
+        st.info(f"✨ **Efficiency Champion: Renter**\n\nRenting is **${sunk_diff:,.0f} cheaper** in pure cash-out costs.")
 
 show_disclaimer()
