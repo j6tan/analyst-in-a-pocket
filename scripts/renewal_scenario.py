@@ -116,7 +116,7 @@ with col1:
     st.subheader("🏦 Current Mortgage")
     # RENAMED LABELS & PROFILE DEFAULTS
     balance = cloud_input("Remaining Mortgage Balance ($)", "renewal_analysis", "balance", step=1000.0) 
-    amort = cloud_input("Remaining Am ($)", "renewal_analysis", "amort", step=1.0) 
+    amort = cloud_input("Remaining Am (Years)", "renewal_analysis", "amort", step=1.0) 
     fixed_quote = cloud_input("Fixed Rate Quote (%)", "renewal_analysis", "fixed_quote", step=0.01)
 
 with col2:
@@ -178,3 +178,4 @@ with tab3:
     st.plotly_chart(fig_int, use_container_width=True)
 
 show_disclaimer()
+
