@@ -19,14 +19,15 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 2. BRANDING COLORS (RGBA for Pydeck) ---
-PRIMARY_GOLD = [206, 179, 111, 255] # #CEB36F
-CHARCOAL = [46, 43, 40, 255]       # #2E2B28
-WHITE = [255, 255, 255, 255]
+# --- 2. BRANDING COLORS ---
+PRIMARY_GOLD_RGBA = [206, 179, 111, 255] # #CEB36F
+CHARCOAL_RGBA = [46, 43, 40, 255]       # #2E2B28
+DARK_RED = "#8B0000"
+SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS PANEL ---
+# --- 3. GLOBAL SETTINGS ---
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
     g_col1, g_col2, g_col3, g_col4 = st.columns([1.5, 1.5, 1, 1])
@@ -44,7 +45,7 @@ with st.container(border=True):
     with g_col5:
         use_mgmt = st.checkbox("Will you use a Property Manager?")
     with g_col6:
-        mgmt_fee = st.number_input("Property Management Fee (%)", value=8.0, step=0.5) if use_mgmt else 0.0
+        mgmt_fee = st.number_input("Management Fee (%)", value=8.0, step=0.5) if use_mgmt else 0.0
 
 # --- 4. LISTING MANAGEMENT ---
 if 'rental_listings' not in st.session_state:
@@ -67,7 +68,6 @@ def geocode_address(index):
         except: pass
 
 st.subheader("🏠 Property Underwriting")
-
 for i, listing in enumerate(st.session_state.rental_listings):
     with st.expander(f"Listing #{i+1}: {listing['address'][:30]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
@@ -97,13 +97,13 @@ if len(st.session_state.rental_listings) < 10:
 full_analysis_list = []
 for idx, l in enumerate(st.session_state.rental_listings):
     if l.get('lat') and l.get('lon'):
-        # Financial defaults if price is 0
-        noi, dp_amt, ann_mtg, net_cf, coc_ret = 0, 0, 0, 0, 0
+        noi, dp_amt, ann_mtg, net_cf, coc_ret, psf = 0, 0, 0, 0, 0, 0
+        gross_inc = l['rent'] * 12
+        mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
+        reserves = (l['rent'] * 12 * 0.05) 
+        op_ex = l['tax'] + (l['strata'] * 12) + (l['ins'] * 12) + mgmt_cost + reserves
+        
         if l['price'] > 0:
-            mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
-            reserves = (l['rent'] * 12 * 0.05) 
-            gross_inc = l['rent'] * 12
-            op_ex = l['tax'] + (l['strata'] * 12) + (l['ins'] * 12) + mgmt_cost + reserves
             noi = gross_inc - op_ex
             dp_amt = (l['price'] * (dp_global_val / 100)) if "Percent" in dp_mode else dp_global_val
             loan = l['price'] - dp_amt
@@ -112,74 +112,77 @@ for idx, l in enumerate(st.session_state.rental_listings):
             ann_mtg = pmt * 12
             net_cf = noi - ann_mtg
             coc_ret = (net_cf / dp_amt) * 100 if dp_amt > 0 else 0
+            psf = l['price'] / l['sqft'] if l.get('sqft', 0) > 0 else 0
 
         full_analysis_list.append({
-            "Address": l['address'], "Price": l['price'], "DP": dp_amt, 
-            "Gross": l['rent']*12, "OpEx": l['tax']+(l['strata']*12)+(l['ins']*12)+mgmt_cost+reserves if l['price']>0 else 0, 
-            "Mtg": ann_mtg, "Cap Rate %": (noi / l['price']) * 100 if l['price']>0 else 0, 
-            "CoC %": coc_ret, "Net $": net_cf, "lat": l['lat'], "lon": l['lon']
+            "Address": l['address'], "Price": l['price'], "Area (sqft)": l.get('sqft', 0),
+            "PSF": psf, "Gross Annual Rent": gross_inc, "Annual OpEx": op_ex,
+            "Annual Mortg": ann_mtg, "Annual Net Cash Flow": net_cf,
+            "Cap Rate %": (noi / l['price']) * 100 if l['price']>0 else 0,
+            "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 6. VISUALS, RANKING & LEGEND ---
+# --- 6. VISUALS & RANKING ---
 if full_analysis_list:
     df_results = pd.DataFrame(full_analysis_list)
     df_ranked = df_results[df_results['Price'] > 0].sort_values(by="CoC %", ascending=False).reset_index(drop=True)
     
-    # 1. Prepare Legend Data
     st.divider()
+    # Legend & Map
     l_col1, l_col2 = st.columns([3, 1])
-    with l_col1:
-        st.subheader("🗺️ Geographic Portfolio Distribution")
+    with l_col1: st.subheader("🗺️ Geographic Portfolio Distribution")
     with l_col2:
-        # Visual Legend using HTML/CSS
-        st.markdown(f"""
-        <div style="display: flex; gap: 15px; font-size: 0.85em; margin-top: 10px; justify-content: flex-end;">
-            <div style="display: flex; align-items: center; gap: 5px;">
-                <span style="height: 12px; width: 12px; background-color: #CEB36F; border-radius: 50%; display: inline-block;"></span> Top Rank
-            </div>
-            <div style="display: flex; align-items: center; gap: 5px;">
-                <span style="height: 12px; width: 12px; background-color: #2E2B28; border-radius: 50%; display: inline-block;"></span> Others
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 10px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
-    # 2. Advanced Mapping with Text Layer
+    # Pydeck Overlays
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
-    df_results['color'] = df_results['Rank'].map(lambda x: PRIMARY_GOLD if x == 1 else CHARCOAL)
-    df_results['radius'] = df_results['Rank'].map(lambda x: 250 if x == 1 else 150)
-
+    df_results['color'] = df_results['Rank'].map(lambda x: PRIMARY_GOLD_RGBA if x == 1 else CHARCOAL_RGBA)
     view_state = pdk.ViewState(latitude=df_results['lat'].mean(), longitude=df_results['lon'].mean(), zoom=10)
-    
-    # Scatter Layer for Color
-    scatter_layer = pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius='radius', pickable=True)
-    
-    # Text Layer for Numbers/Labels
-    text_layer = pdk.Layer(
-        "TextLayer",
-        df_results,
-        get_position='[lon, lat]',
-        get_text="Rank",
-        get_color=WHITE,
-        get_size=16,
-        get_alignment_baseline="'center'",
-    )
     
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
-        layers=[scatter_layer, text_layer],
-        tooltip={"text": "{Address}\nPrice: ${Price}\nRank: #{Rank}"}
+        layers=[pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=200, pickable=True)],
+        tooltip={"text": "{Address}\nRank: #{Rank}"}
     ))
 
-    # 3. Tables & Verdict
+    # --- UPDATED RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
-        st.dataframe(df_ranked.drop(columns=['lat', 'lon', 'DP', 'Gross', 'OpEx', 'Mtg']), use_container_width=True, hide_index=True,
-                     column_config={"Price": st.column_config.NumberColumn(format="$%d"), "Net $": st.column_config.NumberColumn(format="$%d"),
-                                    "Cap Rate %": st.column_config.NumberColumn(format="%.2f%%"), "CoC %": st.column_config.ProgressColumn(min_value=0, max_value=15, format="%.2f%%")})
+        st.dataframe(
+            df_ranked.drop(columns=['lat', 'lon', 'color', 'Rank', 'DP_RAW']), 
+            use_container_width=True, hide_index=True,
+            column_config={
+                "Price": st.column_config.NumberColumn(format="$%d"),
+                "Area (sqft)": st.column_config.NumberColumn(format="%d"),
+                "PSF": st.column_config.NumberColumn(format="$%.2f"),
+                "Gross Annual Rent": st.column_config.NumberColumn(format="$%d"),
+                "Annual OpEx": st.column_config.NumberColumn(format="$%d"),
+                "Annual Mortg": st.column_config.NumberColumn(format="$%d"),
+                "Annual Net Cash Flow": st.column_config.NumberColumn(format="$%d"),
+                "Cap Rate %": st.column_config.NumberColumn(format="%.2f%%"),
+                "CoC %": st.column_config.NumberColumn(format="%.2f%%") # Bar removed
+            }
+        )
 
+        # --- UPDATED SUMMARY METRICS (DARK RED OUTFLOWS) ---
+        st.subheader("💰 Deep Underwriting (Top Selection)")
         top = df_ranked.iloc[0]
-        st.success(f"🏆 **Top Choice (Ranked by CoC %):** {top['Address']}")
-        r1, r2, r3, r4 = st.columns(4)
-        r1.metric("Down Payment Req", f"${top['DP']:,.0f}"); r2.metric("Gross Annual Income", f"${top['Gross']:,.0f}"); r3.metric("Annual Operating Ex", f"${top['OpEx']:,.0f}"); r4.metric("Annual Mortgage", f"${top['Mtg']:,.0f}")
+        st.markdown(f"**Selected Listing:** {top['Address']}")
+
+        # Custom Metric Function to allow HTML Styling
+        def styled_metric(label, value, color, is_outflow=True):
+            prefix = "-" if is_outflow else ""
+            st.markdown(f"""
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+                <p style="margin:0; font-size: 0.85rem; color: #6c757d;">{label}</p>
+                <p style="margin:0; font-size: 1.5rem; font-weight: bold; color: {color};">{prefix}${value:,.0f}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        m1, m2, m3, m4 = st.columns(4)
+        with m1: styled_metric("Down Payment Req", top['DP_RAW'], DARK_RED)
+        with m2: styled_metric("Gross Annual Income", top['Gross Annual Rent'], SUCCESS_GREEN, is_outflow=False)
+        with m3: styled_metric("Annual Operating Ex", top['Annual OpEx'], DARK_RED)
+        with m4: styled_metric("Annual Mortgage", top['Annual Mortg'], DARK_RED)
 
 show_disclaimer()
