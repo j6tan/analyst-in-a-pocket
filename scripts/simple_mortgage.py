@@ -1,269 +1,183 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import math
-import os
-import json
-from style_utils import inject_global_css, show_disclaimer 
-from data_handler import cloud_input, sync_widget
+from style_utils import inject_global_css, show_disclaimer
+from data_handler import cloud_input, load_user_data, init_session_state, supabase
+import time
 
-# 1. Inject Style
+# --- 1. UNIVERSAL AUTO-LOADER ---
+init_session_state()
+if st.session_state.get('username') and not st.session_state.app_db.get('profile'):
+    with st.spinner("🔄 restoring your data..."):
+        load_user_data(st.session_state.username)
+        time.sleep(0.1)
+        st.rerun()
+
+# 2. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. INITIALIZATION & DATA BRIDGING ---
-if 'app_db' not in st.session_state:
-    st.session_state.app_db = {}
+# --- 3. THEME ---
+PRIMARY_GOLD = "#CEB36F"
+OFF_WHITE = "#F8F9FA"
+SLATE_ACCENT = "#4A4E5A"
 
-# Ensure the section exists
+# --- 4. DATA BRIDGE: RECONSTRUCT AFFORDABILITY ---
+# We need to re-calculate "Max Purchase" because it is a Result (not saved), 
+# whereas Down Payment is an Input (saved).
+def get_affordability_defaults():
+    aff = st.session_state.app_db.get('affordability', {})
+    
+    # 1. Retrieve Saved Inputs
+    t4 = float(aff.get('combined_t4', 0))
+    bonus = float(aff.get('combined_bonus', 0))
+    rental = float(aff.get('rental', 0))
+    debts = float(aff.get('combined_debt', 0))
+    dp_saved = float(aff.get('down_payment', 100000)) # Default if missing
+    rate_saved = float(aff.get('bank_rate', 4.5))
+    
+    # 2. Quick Calc for Max Purchase (Simplified)
+    # If income is 0, we return safe defaults
+    total_income = t4 + bonus + (rental * 0.8)
+    if total_income == 0:
+        return 500000, 100000 # Fallback
+        
+    monthly_inc = total_income / 12
+    stress_rate = max(5.25, rate_saved + 2.0)
+    r_stress = (stress_rate / 100) / 12
+    
+    # GDS/TDS estimates (approximate for default)
+    limit_gds = (monthly_inc * 0.39) - 400 # Assumed heat/tax
+    limit_tds = (monthly_inc * 0.44) - 400 - debts
+    max_payment = min(limit_gds, limit_tds)
+    
+    if max_payment <= 0:
+        return dp_saved, dp_saved
+        
+    # Mortgage Amount capacity
+    if r_stress > 0:
+        max_loan = max_payment * (1 - (1 + r_stress)**-300) / r_stress
+    else:
+        max_loan = max_payment * 300
+        
+    calc_max_price = max_loan + dp_saved
+    
+    # Round to nice numbers
+    return int(math.ceil(calc_max_price / 5000) * 5000), int(dp_saved)
+
+# Get the defaults
+default_price, default_dp = get_affordability_defaults()
+
+# --- 5. INITIALIZE SIMPLE MORTGAGE ---
 if 'simple_mortgage' not in st.session_state.app_db:
     st.session_state.app_db['simple_mortgage'] = {}
 
-# A. FETCH PROFILES (Personalization)
+# PRE-FILL LOGIC: If simple_mortgage is empty, inject the Affordability numbers
+sm_store = st.session_state.app_db['simple_mortgage']
+if sm_store.get('purchase_price', 0) == 0:
+    sm_store['purchase_price'] = default_price
+    sm_store['down_payment'] = default_dp
+    # Trigger save so we don't recalc every time
+    if st.session_state.get('username'):
+         supabase.table("user_vault").upsert({
+            "id": st.session_state.username, 
+            "data": st.session_state.app_db
+        }).execute()
+
+# --- 6. USER IDENTITY ---
 prof = st.session_state.app_db.get('profile', {})
-p1_name = prof.get('p1_name')
-p2_name = prof.get('p2_name')
+p1 = prof.get('p1_name', 'Client')
+p2 = prof.get('p2_name', '')
+household = f"{p1} & {p2}" if p2 else p1
 
-if p1_name:
-    household_name = f"{p1_name} & {p2_name}" if p2_name else p1_name
-    intro_header = f"Strategy for {household_name}"
-    intro_text = f"**{household_name}**, most people focus on the monthly payment. Wealthy investors focus on the **Interest Curve**. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
-else:
-    intro_header = "Strategy First, Math Second"
-    intro_text = "Most people focus on the monthly payment. Wealthy investors focus on the <b>Interest Curve</b>. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
+# --- 7. HEADER & STORY (FIXED FORMATTING) ---
+st.title("The Interest Curve")
 
-# B. FETCH AFFORDABILITY DATA (Smart Defaults)
-# We only pre-fill if the mortgage tool is "empty" (fresh session) to avoid overwriting user edits
-sm_data = st.session_state.app_db['simple_mortgage']
-aff_data = st.session_state.app_db.get('affordability', {})
-
-# 1. Pull Price & Down Payment
-if 'price' not in sm_data:
-    # Try to get max purchase, otherwise fallback to loan_cap + down
-    aff_price = aff_data.get('max_purchase', 0.0)
-    if aff_price == 0:
-        aff_price = aff_data.get('loan_cap', 0.0) + aff_data.get('down_payment', 0.0)
-    
-    if aff_price > 0: sm_data['price'] = aff_price
-
-if 'down' not in sm_data:
-    aff_down = aff_data.get('down_payment', 0.0)
-    if aff_down > 0: sm_data['down'] = aff_down
-
-# 2. Pull Market Rate
-def load_market_intel():
-    path = os.path.join("data", "market_intel.json")
-    if os.path.exists(path):
-        try:
-            with open(path, "r") as f: return json.load(f)
-        except: pass
-    # Default Fallback if no file
-    return {"rates": {"five_year_fixed_uninsured": 4.50}}
-
-if 'rate' not in sm_data:
-    intel = load_market_intel()
-    # Safely navigate the JSON structure
-    market_rate = intel.get("rates", {}).get("five_year_fixed_uninsured", 4.50)
-    sm_data['rate'] = float(market_rate)
-
-# --- 2. TITLE SECTION ---
-st.title("🏡 Mortgage Strategy Calculator")
 st.markdown(f"""
-    <div style="background-color: #F8F9FA; padding: 20px; border-radius: 10px; border-left: 5px solid #CEB36F; margin-bottom: 25px;">
-        <h4 style="color: #4A4E5A; margin: 0 0 5px 0;">{intro_header}</h4>
-        <p style="color: #6C757D; font-size: 1.05em; margin: 0; line-height: 1.5;">
-            {intro_text}
-        </p>
-    </div>
+<div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border-left: 6px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.6; margin: 0;">
+        <b>{household}</b>, most people focus on the monthly payment. Wealthy investors focus on the <b>Interest Curve</b>. 
+        Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule.
+    </p>
+</div>
 """, unsafe_allow_html=True)
 
-# --- 3. CALCULATION ENGINE ---
-def simulate_mortgage_single(principal, annual_rate, amort_years, freq_label, extra_per_pmt=0, lump_sum_annual=0):
-    freq_map = {
-        "Monthly": 12, "Semi-monthly": 24, "Bi-weekly": 26, 
-        "Weekly": 52, "Accelerated Bi-weekly": 26, "Accelerated Weekly": 52
-    }
-    p_yr = freq_map[freq_label]
-    
-    # Standard Mortgage Math
-    m_rate = ((1 + (annual_rate / 100) / 2)**(2 / 12)) - 1
-    num_m = amort_years * 12
-    base_m_pmt = principal * (m_rate * (1 + m_rate)**num_m) / ((1 + m_rate)**num_m - 1)
-
-    # Convert to chosen frequency
-    if "Accelerated" in freq_label: 
-        pmt = base_m_pmt / (4 if "Weekly" in freq_label else 2)
-    else: 
-        pmt = (base_m_pmt * 12) / p_yr
-
-    total_periodic = pmt + extra_per_pmt
-    periodic_rate = ((1 + (annual_rate / 100) / 2)**(2 / p_yr)) - 1
-
-    # --- TRUE AVERAGE MONTHLY TOTAL ---
-    total_annual_outflow = (total_periodic * p_yr) + lump_sum_annual
-    avg_monthly_total = total_annual_outflow / 12
-
-    balance = principal
-    total_life_int = 0
-    
-    # 5-Year Term Stats
-    term_periods = int(5 * p_yr)
-    term_int = 0
-    term_prin = 0
-    
-    # Run Simulation
-    for i in range(1, 15000): # Max iterations
-        if balance <= 0.05: break 
-        
-        interest_charge = balance * periodic_rate
-        actual_p = total_periodic
-        
-        # Apply Lump Sum annually
-        if i % p_yr == 0: actual_p += lump_sum_annual
-        
-        # Cap payment at remaining balance
-        if (actual_p - interest_charge) > balance: 
-            actual_p = balance + interest_charge
-            
-        principal_part = actual_p - interest_charge
-        balance -= principal_part
-        total_life_int += interest_charge
-        
-        if i <= term_periods:
-            term_int += interest_charge
-            term_prin += principal_part
-
-    # Calculate Payoff Time in Years
-    payoff_years = i / p_yr
-
-    return {
-        "pmt_amt": pmt,
-        "total_periodic": total_periodic,
-        "avg_monthly_total": avg_monthly_total,
-        "term_int": term_int,
-        "term_prin": term_prin,
-        "total_int": total_life_int,
-        "payoff_years": payoff_years,
-        "amort_years": amort_years
-    }
-
-# --- 4. INPUT SECTION ---
-c1, c2 = st.columns(2)
-
+# --- 8. INPUTS (FIXED: Integers) ---
+c1, c2, c3 = st.columns(3)
 with c1:
-    st.subheader("🏠 Mortgage Details")
-    # These inputs will now auto-fill from Affordability DB if available
-    price = cloud_input("Purchase Price ($)", "simple_mortgage", "price", step=5000.0)
-    down = cloud_input("Down Payment ($)", "simple_mortgage", "down", step=5000.0)
+    price = cloud_input("Purchase Price ($)", "simple_mortgage", "purchase_price", step=5000)
     rate = cloud_input("Interest Rate (%)", "simple_mortgage", "rate", step=0.1)
-    amort = st.slider("Amortization", 5, 30, 25, key="simple_mortgage:amort", on_change=sync_widget, args=("simple_mortgage:amort",))
-    st.session_state.app_db['simple_mortgage']['amort'] = amort
-
 with c2:
-    st.subheader("💸 Payment Methods")
-    
-    # Frequency Select
-    freq_opts = ["Monthly", "Semi-monthly", "Bi-weekly", "Weekly", "Accelerated Bi-weekly", "Accelerated Weekly"]
-    curr_freq = st.session_state.app_db['simple_mortgage'].get('freq', 'Monthly')
-    if curr_freq not in freq_opts: curr_freq = 'Monthly'
-    
-    freq = st.selectbox("Payment Frequency", freq_opts, index=freq_opts.index(curr_freq), key="simple_mortgage_freq_widget")
-    if freq != curr_freq:
-        st.session_state.app_db['simple_mortgage']['freq'] = freq
-        sync_widget("simple_mortgage:freq")
+    dp = cloud_input("Down Payment ($)", "simple_mortgage", "down_payment", step=1000)
+    amort = cloud_input("Amortization (Years)", "simple_mortgage", "amortization", step=1)
+with c3:
+    prepay = cloud_input("Monthly Prepayment ($)", "simple_mortgage", "prepayment", step=50)
+    freq = st.selectbox("Payment Frequency", ["Monthly", "Bi-Weekly Accelerated"], key="sm_freq")
 
-    extra = cloud_input("Extra Payment (Per Pay) $", "simple_mortgage", "extra_payment", step=50.0)
-    lump = cloud_input("Annual Lump Sum $", "simple_mortgage", "lump_sum", step=1000.0)
+# --- 9. CALCULATIONS ---
+loan_amount = price - dp
+monthly_rate = (rate / 100) / 12
+n_months = int(amort * 12)
 
-st.divider()
-
-# --- 5. THE OVERVIEW (Bottom Half) ---
-loan_amt = max(0, price - down)
-
-if loan_amt > 0 and rate > 0:
-    # Calculations
-    user_res = simulate_mortgage_single(loan_amt, rate, amort, freq, extra, lump)
-    base_res = simulate_mortgage_single(loan_amt, rate, amort, "Monthly", 0, 0)
-    
-    int_saved = base_res['total_int'] - user_res['total_int']
-    years_saved = base_res['payoff_years'] - user_res['payoff_years']
-    months_saved = years_saved * 12
-    
-    # A. The Headline Metrics
-    st.header("📊 Mortgage Overview")
-    
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric(
-        "Avg Monthly Total", 
-        f"${user_res['avg_monthly_total']:,.0f}", 
-        help=f"Includes Base Payment + Extra + Annual Lump Sum averaged over 12 months."
-    )
-    m2.metric("Interest Saved", f"${int_saved:,.0f}", delta="Wealth Created" if int_saved > 0 else None)
-    m3.metric("Time Saved", f"{years_saved:.1f} Years", delta="Freedom Accelerated" if years_saved > 0 else None)
-    m4.metric("Mortgage Free Year", f"{pd.Timestamp.now().year + int(user_res['payoff_years'])}")
-
-    st.write("") # Spacer
-
-    # B. Three Column Layout
-    col_strat, col_chart, col_reality = st.columns([1.2, 1, 1])
-    
-    # --- COLUMN 1: STRATEGIC INSIGHT ---
-    with col_strat:
-        st.subheader("📝 Strategic Insight")
-        
-        if int_saved > 50000:
-            st.success(f"Massive Impact: Your strategy is incredible. By paying extra, you are effectively earning a guaranteed {rate}% return on your money—tax-free.")
-            st.markdown(f"You will destroy **${int_saved:,.0f}** of bank profit. That is money that stays in your family instead of going to the lender.")
-        elif int_saved > 0:
-            st.info(f"Good Start: You are shaving {months_saved:.0f} months off your mortgage. Consider increasing your extra payment to $200/mo to see a dramatic leap in savings.")
-        else:
-            st.warning("The Cost of Waiting: Sticking to the minimum payment means you will pay maximum interest. Try adding just $50 extra per payment to see how much time you save.")
-
-    # --- COLUMN 2: PIE CHART ---
-    with col_chart:
-        chart_data = pd.DataFrame({
-            "Category": ["Interest", "Principal"],
-            "Amount": [user_res['term_int'], user_res['term_prin']]
-        })
-        
-        fig = px.pie(
-            chart_data, 
-            values="Amount", 
-            names="Category",
-            hole=0.5,
-            color="Category",
-            color_discrete_map={"Interest": "#4A4E5A", "Principal": "#CEB36F"},
-            title="First 5 Years"
-        )
-        fig.update_layout(
-            showlegend=False,
-            margin=dict(l=0, r=0, t=30, b=0),
-            height=200,
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)'
-        )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        
-        st.plotly_chart(fig, use_container_width=True)
-
-    # --- COLUMN 3: REALITY CHECK ---
-    with col_reality:
-        st.markdown(f"""
-        <div style="background-color: #E9ECEF; padding: 20px; border-radius: 10px; border: 1px solid #DEE2E6; height: 100%;">
-            <h4 style="color: #4A4E5A; margin-top: 0; font-size: 1.1em;">5-Year Reality Check</h4>
-            <p style="font-size: 0.9em; margin-bottom: 10px;">In the first 5 years alone:</p>
-            <p style="font-size: 1.1em; color: #DC2626; font-weight: bold; margin: 0;">-${user_res['term_int']:,.0f}</p>
-            <p style="font-size: 0.8em; color: #6C757D; margin-bottom: 15px;">Interest Paid to Bank</p>
-            <p style="font-size: 1.1em; color: #16A34A; font-weight: bold; margin: 0;">+${user_res['term_prin']:,.0f}</p>
-            <p style="font-size: 0.8em; color: #6C757D; margin: 0;">Equity You Keep</p>
-        </div>
-        """, unsafe_allow_html=True)
-
+if loan_amount > 0 and monthly_rate > 0:
+    monthly_pmt = loan_amount * (monthly_rate * (1 + monthly_rate)**n_months) / ((1 + monthly_rate)**n_months - 1)
 else:
-    st.info("👈 Enter your loan details above to generate your strategy.")
+    monthly_pmt = 0
+
+# Accelerated Bi-Weekly Logic
+if freq == "Bi-Weekly Accelerated":
+    payment_per_period = monthly_pmt / 2
+    periods_per_year = 26
+else:
+    payment_per_period = monthly_pmt
+    periods_per_year = 12
+
+actual_pmt = payment_per_period + prepay
+
+# Amortization Schedule Loop
+balance = loan_amount
+total_interest = 0
+months_passed = 0
+data = []
+
+while balance > 0 and months_passed < (amort * 12):
+    # Convert everything to monthly steps for plotting simplicity
+    # (Bi-weekly is approximated as 2.16 payments per month for interest calc in this simple view, 
+    # but strictly speaking we just track the balance reduction)
+    
+    interest = balance * monthly_rate
+    principal = (actual_pmt * (periods_per_year/12)) - interest
+    
+    if principal > balance: principal = balance
+    
+    balance -= principal
+    total_interest += interest
+    months_passed += 1
+    
+    data.append({"Month": months_passed, "Balance": balance, "Interest Paid": total_interest})
+
+df = pd.DataFrame(data)
+
+# --- 10. VISUALS ---
+st.divider()
+k1, k2, k3 = st.columns(3)
+k1.metric("Standard Payment", f"${monthly_pmt:,.2f}")
+k2.metric("Your Payment (with Prepay)", f"${actual_pmt:,.2f} / {freq}")
+k3.metric("Total Interest Cost", f"${total_interest:,.0f}")
+
+st.subheader("📉 The Payoff Trajectory")
+if not df.empty:
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df['Month']/12, y=df['Balance'], fill='tozeroy', name='Mortgage Balance', line=dict(color=PRIMARY_GOLD)))
+    fig.update_layout(height=400, xaxis_title="Years", yaxis_title="Balance ($)", margin=dict(l=0,r=0,t=20,b=20))
+    st.plotly_chart(fig, use_container_width=True)
+    
+    years_saved = amort - (months_passed / 12)
+    if years_saved > 0.5:
+        st.success(f"🎉 By adding prepayments, you become mortgage-free **{years_saved:.1f} years early**!")
 
 show_disclaimer()
