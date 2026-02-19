@@ -1,7 +1,31 @@
 import streamlit as st
 from supabase import create_client, Client
 
-# --- 1. CONNECTION ---
+# --- 1. DEFAULT DATABASE (Fallback System) ---
+# If Supabase is empty or keys are missing, these values will load.
+DEFAULT_DB = {
+    "profile": {
+        "province": "BC",
+        "housing_status": "Renting",
+        "p1_t4": 0.0,
+        "p2_t4": 0.0,
+        "m_rate": 4.5,
+        "m_amort": 25.0
+    },
+    "budget": {
+        "groceries": 600.0,
+        "dining": 300.0,
+        "utilities": 150.0,
+        "gas_transit": 200.0
+    },
+    "affordability": {
+        "bank_rate": 4.5,
+        "prop_taxes": 3000.0,
+        "heat": 150.0
+    }
+}
+
+# --- 2. CONNECTION ---
 @st.cache_resource
 def init_supabase():
     try:
@@ -19,7 +43,7 @@ def init_supabase():
 
 supabase = init_supabase()
 
-# --- 2. SESSION MANAGEMENT ---
+# --- 3. SESSION MANAGEMENT ---
 def init_session_state():
     if 'app_db' not in st.session_state:
         st.session_state.app_db = {}
@@ -29,7 +53,7 @@ def init_session_state():
         if section not in st.session_state.app_db:
             st.session_state.app_db[section] = {}
 
-# --- 3. AUTO-SAVE ---
+# --- 4. AUTO-SAVE ---
 def trigger_auto_save():
     if st.session_state.get('is_logged_in') and st.session_state.get('username') and supabase:
         try:
@@ -48,12 +72,17 @@ def sync_widget(key_path):
         widget_id = f"{section}_{key}"
         
         if widget_id in st.session_state:
+            val = st.session_state[widget_id]
+            # Ensure we save as standard types
+            if isinstance(val, (int, float)):
+                val = float(val)
+            
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
-            st.session_state.app_db[section][key] = st.session_state[widget_id]
+            st.session_state.app_db[section][key] = val
             trigger_auto_save()
 
-# --- 4. DATA LOADER (PRIME THE PUMP) ---
+# --- 5. DATA LOADER (SANITIZED) ---
 def load_user_data(user_id):
     init_session_state()
     if not supabase: return
@@ -64,70 +93,70 @@ def load_user_data(user_id):
             cloud_data = response.data[0]['data']
             if cloud_data:
                 st.session_state.app_db = cloud_data
-                # PRIME SESSION STATE: Force cloud values into widget keys immediately
+                
+                # PRIME SESSION STATE with Type Conversion
                 for section, content in cloud_data.items():
                     if isinstance(content, dict):
                         for key, value in content.items():
                             widget_id = f"{section}_{key}"
+                            
+                            # CRITICAL FIX: Force Ints to Floats immediately
+                            # This prevents the "Int in State vs Float in Widget" crash
+                            if isinstance(value, int):
+                                value = float(value)
+                                
                             st.session_state[widget_id] = value
+                            
                 st.toast(f"✅ Data Loaded", icon="📂")
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 5. SMART INPUT (THE FIX) ---
+# --- 6. SMART INPUT (BULLETPROOF) ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
-    if 'app_db' not in st.session_state: init_session_state()
+    init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
     
     widget_id = f"{section}_{key}"
+    
+    # 1. FETCH SOURCES
+    state_val = st.session_state.get(widget_id)
     db_val = st.session_state.app_db[section].get(key)
+    default_val = DEFAULT_DB.get(section, {}).get(key) # Fallback
     
-    # --- FORCE-FEED ENGINE (IMPROVED) ---
+    # 2. DETERMINE "TRUE" VALUE
+    final_val = None
     
-    # 1. Determine the "Truth" (Database Value)
-    target_val = None
+    # Priority A: Database Value (if exists)
     if db_val is not None and str(db_val).strip() != "":
         try:
-            target_val = float(db_val) if input_type == "number" else str(db_val)
-        except:
-            target_val = None
+            final_val = float(db_val) if input_type == "number" else str(db_val)
+        except: pass
+        
+    # Priority B: Default Value (if DB is empty and state is empty)
+    if final_val is None and (state_val is None or state_val == 0.0 or state_val == ""):
+        if default_val is not None:
+            final_val = float(default_val) if input_type == "number" else str(default_val)
 
-    # 2. Check Widget State
-    current_state = st.session_state.get(widget_id)
+    # 3. TYPE ENFORCEMENT & SYNC
+    # If we found a value, force it into Session State with correct Type
+    if final_val is not None:
+        if input_type == "number":
+             # Ensure Float
+             if not isinstance(final_val, float): final_val = float(final_val)
+             
+             # Only update state if it's materially different (prevents loop)
+             if state_val is None or not isinstance(state_val, float) or state_val != final_val:
+                 st.session_state[widget_id] = final_val
+        else:
+             # Ensure String
+             final_val = str(final_val)
+             if state_val != final_val:
+                 st.session_state[widget_id] = final_val
 
-    # 3. TYPE SAFETY FIX: Ensure Session State matches Widget Type
-    # If Supabase sent an int (100000), but widget wants float (100000.0), convert it now.
-    if input_type == "number" and current_state is not None:
-        try:
-            if not isinstance(current_state, float):
-                st.session_state[widget_id] = float(current_state)
-                current_state = st.session_state[widget_id]
-        except:
-            pass
-
-    # 4. THE OVERWRITE RULE (Aggressive):
-    # If the widget is missing from state, OR it is default/empty but DB has value...
-    # We FORCE the DB value into the session state.
-    should_overwrite = False
-    
-    if widget_id not in st.session_state:
-        should_overwrite = True
-    elif input_type == "number":
-        # If widget is 0.0 but DB says it should be 100,000 -> Overwrite
-        if (current_state == 0.0 or current_state is None) and (target_val is not None and target_val != 0.0):
-            should_overwrite = True
-    elif input_type == "text":
-        if (current_state == "" or current_state is None) and target_val:
-            should_overwrite = True
-            
-    if should_overwrite and target_val is not None:
-        st.session_state[widget_id] = target_val
-
-    # 5. RENDER
-    # We do NOT use 'value=' here because we set st.session_state[widget_id] above.
-    # Streamlit will automatically pick up the forced value.
+    # 4. RENDER WIDGET
+    # We rely on key=widget_id to pull the value we just set in st.session_state
     if input_type == "number":
-        # Final safety: ensure key exists and is float
+        # Final safety check to prevent crashing if state is somehow still missing
         if widget_id not in st.session_state: st.session_state[widget_id] = 0.0
         
         st.number_input(
