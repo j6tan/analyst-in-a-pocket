@@ -163,10 +163,11 @@ if not is_renter:
         </p>
     """, unsafe_allow_html=True)
 
-# --- 10. UNDERWRITING ASSUMPTIONS (FIXED: Integers) ---
+# --- 10. UNDERWRITING ASSUMPTIONS (FIXED: Steps are Integers) ---
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
+    # Rate = Float
     c_rate = cloud_input("Bank Contract Rate %", "affordability", "bank_rate", step=0.01)
     s_rate = max(5.25, c_rate + 2.0)
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
@@ -177,9 +178,19 @@ with uw_col2:
 with uw_col3:
     f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100)
     f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10)
-    prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], 
-                             index=0 if aff.get('prop_type') == "House / Freehold" else 1,
-                             key="affordability:prop_type", on_change=sync_widget, args=("affordability:prop_type",))
+    
+    # --- THE FIX IS HERE ---
+    # CHANGED KEY: "affordability:prop_type" -> "affordability_prop_type"
+    prop_type = st.selectbox(
+        "Property Type", 
+        ["House / Freehold", "Condo / Townhome"], 
+        index=0 if aff.get('prop_type') == "House / Freehold" else 1,
+        key="affordability_prop_type",  # Fixed Key
+        on_change=sync_widget, 
+        args=("affordability:prop_type",)
+    )
+    # -----------------------
+
     strata = cloud_input("Monthly Strata", "affordability", "strata", step=10) if prop_type == "Condo / Townhome" else 0
 
 st.divider()
@@ -197,8 +208,8 @@ with col_1:
 with col_2:
     st.subheader("💳 Debt & Status")
     i_debt = cloud_input("Monthly Debts", "affordability", "combined_debt", step=50)
-    f_fthb = st.checkbox("First-Time Home Buyer?", value=aff.get('is_fthb', False), key="affordability:is_fthb", on_change=sync_widget, args=("affordability:is_fthb",))
-    f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
+    f_fthb = st.checkbox("First-Time Home Buyer?", value=aff.get('is_fthb', False), key="affordability_is_fthb", on_change=sync_widget, args=("affordability:is_fthb",))
+    f_toronto = st.checkbox("Toronto Limits?", key="affordability_is_toronto") if province == "Ontario" else False
 
 with col_3:
     st.info("""
