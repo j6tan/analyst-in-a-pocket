@@ -102,7 +102,7 @@ with c2:
         st.markdown("**🏛️ Capital Gains / Tax Details**")
         adjusted_cost_base = cloud_input("Original Purchase Price + Renos (ACB) $", "sales_proceeds", "acb", step=5000.0)
         
-        # --- NEW: DYNAMIC TAX CALCULATOR (BC 2025 Est) ---
+        # --- DYNAMIC TAX CALCULATOR (BC 2025 Est) ---
         def get_marginal_tax_rate(income):
             if income <= 55867: return 20.06
             elif income <= 111733: return 31.00
@@ -126,10 +126,11 @@ with c2:
             f"{p2} (Inc: ${p2_inc/1000:.0f}k → ~{t2}%)": t2
         }
         
-        st.markdown("#### Whose marginal tax bracket applies?") # Bigger Header
-        sel_owner = st.radio("Registered Owner", list(tax_map.keys()), key="sp_tax_owner_radio")
+        # --- FIXED: SMALLER FONT FOR HEADER ---
+        st.markdown("**Whose marginal tax bracket applies?**")
+        sel_owner = st.radio("Registered Owner", list(tax_map.keys()), key="sp_tax_owner_radio", label_visibility="collapsed")
         marginal_tax_rate = tax_map[sel_owner]
-        # -------------------------------------------------
+        # --------------------------------------
 
 # --- 3. CALCULATION ENGINE ---
 def calculate_proceeds(sale_price):
