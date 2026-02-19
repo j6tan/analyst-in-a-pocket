@@ -66,8 +66,10 @@ smith_label, smith_icon = get_pro_meta("Smith Maneuver", "💰", is_pro)
 second_label, second_icon = get_pro_meta("Secondary Property", "🏢", is_pro)
 renewal_label, renewal_icon = get_pro_meta("Renewal Scenario", "🔄", is_pro)
 duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
+# ADDED: Rental Analyzer Label & Icon
+rental_label, rental_icon = get_pro_meta("Rental Multi-Tool", "🏢", is_pro)
 
-# Define label and icon for the new free tool
+# Define label and icon for the free tool
 pvi_label = "Debt vs. Equity"
 pvi_icon = "📉"
 
@@ -82,7 +84,6 @@ pages = {
         st.Page("scripts/affordability.py", title="Simple Affordability", icon="🤔"),
         st.Page("scripts/simple_mortgage.py", title="Mortgage Calculator", icon="🏠"),
         st.Page("scripts/sales_proceeds.py", title="Seller Proceeds", icon="💰"),
-        # INTEGRATED AS A FREE TOOL
         st.Page("scripts/pay_vs_invest.py", title=pvi_label, icon=pvi_icon), 
     ],
     "Advanced Wealth Strategy": [
@@ -91,6 +92,7 @@ pages = {
         st.Page("scripts/renewal_scenario.py", title=renewal_label, icon=renewal_icon),
         st.Page("scripts/rental_vs_stock.py", title=duel_label, icon=duel_icon),
         st.Page("scripts/smith_maneuver.py", title=smith_label, icon=smith_icon),
+        # INTEGRATED PAID TOOL
         st.Page("scripts/rental_analyzer.py", title=rental_label, icon=rental_icon)
     ],
     "Account": [
@@ -102,7 +104,8 @@ pages = {
 pg = st.navigation(pages)
 
 # --- 5. THE "SIDEBAR INJECTION" PAYWALL ---
-pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
+# ADDED: rental_label to pro_titles
+pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label, rental_label]
 
 if pg.title in pro_titles and not is_pro:
     st.markdown("""
@@ -143,5 +146,3 @@ if pg.title in pro_titles and not is_pro:
         st.markdown(card_html, unsafe_allow_html=True)
 
 pg.run()
-
-
