@@ -45,9 +45,7 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 12px; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h4 style="color: #2E2B28; margin: 0;">The Compounding Effect of Debt Paydown</h4>
     <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.6; margin: 10px 0 0 0;">
-        <b>{p1_name} & {p2_name}</b>, when you pay down your mortgage, you don't just reduce your debt by $1,000. 
-        You eliminate the interest on that $1,000 for every month remaining on your amortization. 
-        This is a <b>guaranteed, tax-free return</b> that compounds exactly like a high-interest savings account.
+        <b>{p1_name} & {p2_name}</b>, we are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -115,24 +113,21 @@ fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage Path'], name='Option A: Mo
 fig.update_layout(xaxis_title="Years", yaxis_title="Accumulated Wealth ($)", height=400, margin=dict(l=0,r=0,t=20,b=20))
 st.plotly_chart(fig, use_container_width=True)
 
-# --- 8. THE VERDICT ---
+# --- 8. THE VERDICT (SHRUNK & REFINED) ---
 winner = "Stock Market" if fv_stock > fv_mortgage else "Mortgage Paydown"
 diff = abs(fv_stock - fv_mortgage)
 
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 25px; border-radius: 12px; border: 2px solid {PRIMARY_GOLD}; text-align: center; margin-bottom: 30px;">
-    <h3 style="margin: 0; color: #2E2B28;">🏆 The Wealth Winner: {winner}</h3>
-    <p style="font-size: 1.15em; color: #4A4E5A; margin-top: 10px;">
+<div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 12px; border: 2px solid {PRIMARY_GOLD}; text-align: center; margin-bottom: 20px;">
+    <h3 style="margin: 0; color: #2E2B28; font-size: 1.25em;">🏆 The Wealth Winner: {winner}</h3>
+    <p style="font-size: 1.0em; color: #4A4E5A; margin: 5px 0 0 0; line-height: 1.2;">
         Choosing the {winner} path creates <b>${diff:,.0f} more</b> in total wealth over {amort} years.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 9. STRATEGIC INSIGHTS: THE SHORT VERSION ---
-st.divider()
+# --- 9. STRATEGIC INSIGHTS ---
 st.subheader("💡 Strategic Verdict")
-
-# Using a Grid for scannability
 i_col1, i_col2 = st.columns(2)
 
 with i_col1:
@@ -155,18 +150,5 @@ st.info(f"""
 **The "Acceleration" Myth:** Paying down a mortgage feels faster because the balance drops, but mathematically, 
 it is identical to compounding wealth in a TFSA. If the rates were equal, the outcome is the same.
 """)
-
-# --- 10. RESILIENCE CHECK ---
-st.write("")
-r_col1, r_col2 = st.columns(2)
-with r_col1:
-    if fv_stock > fv_mortgage:
-        st.success(f"✅ **Math Favors Stocks:** You gain **${abs(fv_stock - fv_mortgage):,.0f}** extra by chasing the market spread.")
-    else:
-        st.success(f"✅ **Math Favors Mortgage:** High taxes or low returns make the guaranteed payoff the winner.")
-
-with r_col2:
-    # Adding a psychological sanity check
-    st.warning(f"⚠️ **Psychology Check:** If market volatility makes you lose sleep, the **{m_rate}% guaranteed return** of debt-paydown is a massive emotional win.")
 
 show_disclaimer()
