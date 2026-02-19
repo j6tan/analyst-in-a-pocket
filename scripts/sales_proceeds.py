@@ -38,7 +38,14 @@ with c1:
     prop_types = ["Primary Residence", "Secondary / Investment"]
     curr_type = st.session_state.app_db['sales_proceeds'].get('prop_type', 'Primary Residence')
     if curr_type not in prop_types: curr_type = 'Primary Residence'
-    prop_type = st.selectbox("Property Type", prop_types, index=prop_types.index(curr_type), key="sp_prop_type")
+    
+    prop_type = st.selectbox(
+        "Property Type", 
+        prop_types, 
+        index=prop_types.index(curr_type), 
+        key="sp_prop_type_widget" # Unique widget key
+    )
+    # Manual Sync for Selectbox
     if prop_type != curr_type:
         st.session_state.app_db['sales_proceeds']['prop_type'] = prop_type
         sync_widget("sales_proceeds:prop_type")
@@ -50,10 +57,28 @@ with c1:
     mort_bal = cloud_input("Remaining Mortgage Balance ($)", "sales_proceeds", "mort_bal", step=1000.0)
     
     if mort_bal > 0:
-        mort_type = st.radio("Mortgage Type", ["Variable", "Fixed"], horizontal=True, key="sp_mort_type")
+        # --- FIX 2: SAVE MORTGAGE TYPE ---
+        m_types = ["Variable", "Fixed"]
+        saved_m_type = st.session_state.app_db['sales_proceeds'].get('mort_type', 'Variable')
+        if saved_m_type not in m_types: saved_m_type = 'Variable'
+        
+        mort_type = st.radio(
+            "Mortgage Type", 
+            m_types, 
+            horizontal=True, 
+            index=m_types.index(saved_m_type),
+            key="sp_mort_type_widget"
+        )
+        if mort_type != saved_m_type:
+            st.session_state.app_db['sales_proceeds']['mort_type'] = mort_type
+            sync_widget("sales_proceeds:mort_type")
+        # ---------------------------------
+
         mort_rate = cloud_input("Current Interest Rate (%)", "sales_proceeds", "mort_rate", step=0.1)
+        
         if mort_type == "Fixed":
-            months_left = st.number_input("Months Remaining in Term", 0, 60, 24, key="sp_months_left")
+            # Using cloud_input for persistence on months left too
+            months_left = cloud_input("Months Remaining in Term", "sales_proceeds", "months_left", step=1.0)
         else:
             months_left = 0
     else:
@@ -92,12 +117,17 @@ def calculate_proceeds(sale_price):
     # 2. Mortgage Penalty
     penalty = 0
     if mort_bal > 0:
-        penalty_3mo = (mort_bal * (mort_rate/100) / 12) * 3
-        if mort_type == "Variable":
-            penalty = penalty_3mo
+        # --- FIX 1: ZERO PENALTY IF 0 MONTHS LEFT ---
+        if mort_type == "Fixed" and months_left <= 0:
+            penalty = 0
         else:
-            ird_est = (mort_bal * 0.015) * (months_left / 12) 
-            penalty = max(penalty_3mo, ird_est)
+            penalty_3mo = (mort_bal * (mort_rate/100) / 12) * 3
+            if mort_type == "Variable":
+                penalty = penalty_3mo
+            else:
+                ird_est = (mort_bal * 0.015) * (months_left / 12) 
+                penalty = max(penalty_3mo, ird_est)
+        # --------------------------------------------
 
     # 3. Capital Gains / Tax
     cap_gains_tax = 0
@@ -131,7 +161,7 @@ def calculate_proceeds(sale_price):
 if target_price > 0:
     st.divider()
     
-    # A. THE 5-POINT SPECTRUM (Merged & Refined)
+    # A. THE 5-POINT SPECTRUM
     st.subheader("📊 Scenario Spectrum")
     
     scenarios = [
@@ -142,42 +172,25 @@ if target_price > 0:
         {"label": "Price Adjusted +10%", "price": target_price * 1.10, "bg": "#DCFCE7", "text": "#14532D"},
     ]
     
-    # Start HTML String (Using flexbox for seamless row)
     spectrum_html = '<div style="display: flex; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; margin-bottom: 20px;">'
     
     for i, s in enumerate(scenarios):
         res = calculate_proceeds(s['price'])
-        
-        # Determine Border
         border_right = "border-right: 1px solid rgba(0,0,0,0.05);" if i < 4 else ""
         
-        # Build Section (Indentation Safe)
         spectrum_html += f'<div style="flex: 1; background-color: {s["bg"]}; padding: 15px 5px; text-align: center; {border_right}">'
-        
-        # Label (Top)
         spectrum_html += f'<div style="font-size: 0.7em; font-weight: bold; color: {s["text"]}; opacity: 0.8; margin-bottom: 5px; text-transform: uppercase;">{s["label"]}</div>'
-        
-        # Sale Price (Middle)
         spectrum_html += f'<div style="font-size: 1.1em; font-weight: 700; color: #1F2937; margin-bottom: 8px;">${s["price"]/1000:,.0f}k</div>'
-        
-        # Costs (Middle - Enhanced Visibility)
         spectrum_html += f'<div style="font-size: 1.0em; font-weight: 600; color: #DC2626; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 6px; margin-bottom: 6px;">Costs: -${res["total_costs"]/1000:,.1f}k</div>'
-        
-        # Net Proceeds (Bottom - Big)
         spectrum_html += f'<div style="font-size: 1.3em; font-weight: 800; color: {s["text"]};">${res["net"]/1000:,.0f}k</div>'
         spectrum_html += f'<div style="font-size: 0.65em; color: {s["text"]}; opacity: 0.7;">Net Proceeds</div>'
-        
         spectrum_html += '</div>'
     
     spectrum_html += '</div>'
-    
-    # Render Once
     st.markdown(spectrum_html, unsafe_allow_html=True)
-    
-    st.write("") # Spacer
+    st.write("") 
 
     # B. THE OFFICIAL BREAKDOWN
-    # We calculate the Target Scenario specifically for the detail view
     target_res = calculate_proceeds(target_price)
 
     st.subheader("📉 Official Net Sheet (Target Price)")
