@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pydeck as pdk  # Added for advanced mapping
+import pydeck as pdk 
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import init_session_state, load_user_data
 
@@ -20,8 +20,8 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 2. BRANDING ---
-PRIMARY_GOLD = [206, 179, 111, 200]  # RGBA for Gold (#CEB36F)
-CHARCOAL = [46, 43, 40, 200]       # RGBA for Charcoal (#2E2B28)
+PRIMARY_GOLD = [206, 179, 111, 255] # Brand Gold
+CHARCOAL = [46, 43, 40, 255]       # Brand Charcoal
 OFF_WHITE = "#F8F9FA"
 
 st.title("Pro Rental Portfolio Analyzer")
@@ -93,7 +93,7 @@ if len(st.session_state.rental_listings) < 10:
 # --- 5. CALCULATIONS & RANKING ---
 results = []
 for l in st.session_state.rental_listings:
-    if l['price'] > 0 and l.get('lat'):
+    if l['price'] > 0 and l.get('lat') and l.get('lon'):
         mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
         gross_inc = l['rent'] * 12
@@ -104,22 +104,30 @@ for l in st.session_state.rental_listings:
         r = (m_rate / 100) / 12
         pmt = loan * (r * (1 + r)**(m_amort*12)) / ((1 + r)**(m_amort*12) - 1) if r > 0 else loan / (m_amort*12)
         net_cf = noi - (pmt * 12)
-        results.append({"Address": l['address'], "Price": l['price'], "DP": dp_amt, "Gross": gross_inc, "OpEx": op_ex, "Mtg": pmt*12, "Cap Rate %": (noi / l['price']) * 100, "CoC %": (net_cf / dp_amt) * 100 if dp_amt > 0 else 0, "Net $": net_cf, "lat": l['lat'], "lon": l['lon']})
+        results.append({
+            "Address": l['address'], "Price": l['price'], "DP": dp_amt, 
+            "Gross": gross_inc, "OpEx": op_ex, "Mtg": pmt*12, 
+            "Cap Rate %": (noi / l['price']) * 100, 
+            "CoC %": (net_cf / dp_amt) * 100 if dp_amt > 0 else 0, 
+            "Net $": net_cf, "lat": l['lat'], "lon": l['lon']
+        })
 
-# --- 6. ADVANCED MAPPING ---
+# --- 6. ADVANCED MAPPING (FIXED BASE MAP) ---
 if results:
     df_res = pd.DataFrame(results)
     sort_by = st.radio("Primary Metric:", ["CoC %", "Cap Rate %", "Net $"], horizontal=True)
     df_ranked = df_res.sort_values(by=sort_by, ascending=False).reset_index(drop=True)
     
-    # Assign colors based on rank
+    # Color logic: Rank #0 (Best) is Gold, others are Charcoal
     df_ranked['color'] = df_ranked.index.map(lambda x: PRIMARY_GOLD if x == 0 else CHARCOAL)
+    df_ranked['Rank'] = df_ranked.index + 1
     
     st.divider()
     st.subheader("🗺️ Geographic Portfolio Distribution")
     
-    # Pydeck logic for differentiated pins
-    view_state = pdk.ViewState(latitude=df_ranked['lat'].mean(), longitude=df_ranked['lon'].mean(), zoom=10, pitch=0)
+    # Fixed view state and map style
+    view_state = pdk.ViewState(latitude=df_ranked['lat'].mean(), longitude=df_ranked['lon'].mean(), zoom=10)
+    
     layer = pdk.Layer(
         "ScatterplotLayer",
         df_ranked,
@@ -130,14 +138,15 @@ if results:
     )
     
     st.pydeck_chart(pdk.Deck(
-        map_style='mapbox://styles/mapbox/light-v9',
+        # 'road' style works without Mapbox API key
+        map_style=None, 
         initial_view_state=view_state,
         layers=[layer],
-        tooltip={"text": "{Address}\nRank: #{index}\nMetric: {sort_by}"}
+        tooltip={"text": "{Address}\nRank: #{Rank}\nNet Cashflow: ${Net $}"}
     ))
 
     st.subheader("📊 Comparative Ranking")
-    st.dataframe(df_ranked.drop(columns=['lat', 'lon', 'DP', 'Gross', 'OpEx', 'Mtg', 'color']), use_container_width=True, hide_index=True)
+    st.dataframe(df_ranked.drop(columns=['lat', 'lon', 'DP', 'Gross', 'OpEx', 'Mtg', 'color', 'Rank']), use_container_width=True, hide_index=True)
 
     top = df_ranked.iloc[0]
     st.success(f"🏆 **Top Selection:** {top['Address']}")
