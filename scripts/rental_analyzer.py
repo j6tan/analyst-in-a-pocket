@@ -20,8 +20,8 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 2. BRANDING COLORS ---
-PRIMARY_GOLD_RGBA = [206, 179, 111, 255] # #CEB36F
-CHARCOAL_RGBA = [46, 43, 40, 255]       # #2E2B28
+PRIMARY_GOLD_RGBA = [206, 179, 111, 255] 
+CHARCOAL_RGBA = [46, 43, 40, 255]       
 DARK_RED = "#8B0000"
 SUCCESS_GREEN = "#28a745"
 
@@ -45,7 +45,7 @@ with st.container(border=True):
     with g_col5:
         use_mgmt = st.checkbox("Will you use a Property Manager?")
     with g_col6:
-        mgmt_fee = st.number_input("Management Fee (%)", value=8.0, step=0.5) if use_mgmt else 0.0
+        mgmt_fee = st.number_input("Property Management Fee (%)", value=8.0, step=0.5) if use_mgmt else 0.0
 
 # --- 4. LISTING MANAGEMENT ---
 if 'rental_listings' not in st.session_state:
@@ -98,9 +98,9 @@ full_analysis_list = []
 for idx, l in enumerate(st.session_state.rental_listings):
     if l.get('lat') and l.get('lon'):
         noi, dp_amt, ann_mtg, net_cf, coc_ret, psf = 0, 0, 0, 0, 0, 0
-        gross_inc = l['rent'] * 12
         mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
+        gross_inc = l['rent'] * 12
         op_ex = l['tax'] + (l['strata'] * 12) + (l['ins'] * 12) + mgmt_cost + reserves
         
         if l['price'] > 0:
@@ -128,28 +128,31 @@ if full_analysis_list:
     df_ranked = df_results[df_results['Price'] > 0].sort_values(by="CoC %", ascending=False).reset_index(drop=True)
     
     st.divider()
-    # Legend & Map
     l_col1, l_col2 = st.columns([3, 1])
     with l_col1: st.subheader("🗺️ Geographic Portfolio Distribution")
     with l_col2:
         st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 10px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
-    # Pydeck Overlays
+    # Pydeck Fix: Use df_results directly for mapping
+    best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
-    df_results['color'] = df_results['Rank'].map(lambda x: PRIMARY_GOLD_RGBA if x == 1 else CHARCOAL_RGBA)
-    view_state = pdk.ViewState(latitude=df_results['lat'].mean(), longitude=df_results['lon'].mean(), zoom=10)
+    df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
     
+    view_state = pdk.ViewState(latitude=df_results['lat'].mean(), longitude=df_results['lon'].mean(), zoom=10)
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
         layers=[pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=200, pickable=True)],
         tooltip={"text": "{Address}\nRank: #{Rank}"}
     ))
 
-    # --- UPDATED RANKING TABLE ---
+    # --- UPDATED RANKING TABLE (Resilient Fix) ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
+        # Ensure only columns existing in df_ranked are targeted for drop
+        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW'], errors='ignore')
+        
         st.dataframe(
-            df_ranked.drop(columns=['lat', 'lon', 'color', 'Rank', 'DP_RAW']), 
+            display_df, 
             use_container_width=True, hide_index=True,
             column_config={
                 "Price": st.column_config.NumberColumn(format="$%d"),
@@ -160,16 +163,15 @@ if full_analysis_list:
                 "Annual Mortg": st.column_config.NumberColumn(format="$%d"),
                 "Annual Net Cash Flow": st.column_config.NumberColumn(format="$%d"),
                 "Cap Rate %": st.column_config.NumberColumn(format="%.2f%%"),
-                "CoC %": st.column_config.NumberColumn(format="%.2f%%") # Bar removed
+                "CoC %": st.column_config.NumberColumn(format="%.2f%%")
             }
         )
 
-        # --- UPDATED SUMMARY METRICS (DARK RED OUTFLOWS) ---
+        # --- DEEP UNDERWRITING SUMMARY (Outflows Style) ---
         st.subheader("💰 Deep Underwriting (Top Selection)")
         top = df_ranked.iloc[0]
         st.markdown(f"**Selected Listing:** {top['Address']}")
 
-        # Custom Metric Function to allow HTML Styling
         def styled_metric(label, value, color, is_outflow=True):
             prefix = "-" if is_outflow else ""
             st.markdown(f"""
