@@ -1,14 +1,21 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import time
-from geopy.geocoders import Nominatim
-from style_utils import inject_global_css, show_disclaimer
-from data_handler import init_session_state, load_user_data
+import os
 
 # --- 1. CONFIG & AUTH ---
+from data_handler import init_session_state, load_user_data
+from style_utils import inject_global_css, show_disclaimer
+
 init_session_state()
 inject_global_css()
+
+# --- NEW: Safe Import for Geopy ---
+try:
+    from geopy.geocoders import Nominatim
+    geolocator = Nominatim(user_agent="analyst_in_a_pocket_v1")
+except ImportError:
+    geolocator = None
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
@@ -18,9 +25,7 @@ st.divider()
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
-
-# Initialize Geocoder
-geolocator = Nominatim(user_agent="analyst_in_a_pocket_v1")
+SLATE_ACCENT = "#4A4E5A"
 
 prof = st.session_state.app_db.get('profile', {})
 p1_name = prof.get('p1_name', 'Client 1')
@@ -30,9 +35,9 @@ st.title("Pro Rental Portfolio Analyzer")
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {CHARCOAL}; margin-top: 0; font-size: 1.5em;">🏢 {p1_name} & {p2_name}: Portfolio Underwriter</h3>
-    <p style="color: #4A4E5A; margin-bottom: 0;">
-        Enter addresses and click <b>Fetch Coordinates</b> to automatically place markers on the map. 
-        We analyze 20% down financing vs. projected rental yields.
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Underwrite up to 10 listings. Enter the address and use <b>Fetch Pin</b> to map the property. 
+        We calculate <b>Cap Rate</b> and <b>Net Cashflow</b> assuming a 20% down payment.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -54,6 +59,10 @@ def add_listing():
         st.session_state.rental_listings.append({"address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0})
 
 def geocode_address(index):
+    if not geolocator:
+        st.error("Address service not installed. Please check requirements.txt.")
+        return
+    
     addr = st.session_state.rental_listings[index]['address']
     if addr:
         try:
@@ -61,15 +70,15 @@ def geocode_address(index):
             if location:
                 st.session_state.rental_listings[index]['lat'] = location.latitude
                 st.session_state.rental_listings[index]['lon'] = location.longitude
-                st.toast(f"✅ Found: {location.address}", icon="📍")
+                st.toast(f"📍 Pinned: {location.address}")
             else:
-                st.error("Address not found. Please be more specific (City, Province).")
-        except Exception as e:
-            st.error("Geocoding service busy. Try again in a moment.")
+                st.warning("Could not find that address. Try adding City and Province.")
+        except Exception:
+            st.error("Service temporarily unavailable. Please try again.")
 
 # --- 5. INTERFACE ---
 for i, listing in enumerate(st.session_state.rental_listings):
-    with st.expander(f"🏠 Listing #{i+1}: {listing['address'] if listing['address'] else 'New Property'}", expanded=(i==0)):
+    with st.expander(f"🏠 Listing #{i+1}: {listing['address'] if listing['address'] else 'New Entry'}", expanded=(i==0)):
         c1, c2 = st.columns([4, 1])
         with c1:
             listing['address'] = st.text_input("Property Address", value=listing['address'], key=f"addr_{i}")
@@ -81,13 +90,13 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with col_d1: listing['price'] = st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}")
         with col_d2: listing['rent'] = st.number_input("Projected Rent ($)", value=listing['rent'], key=f"rt_{i}")
         with col_d3: 
-            if st.button("🗑️ Remove", key=f"del_{i}"):
+            if st.button("🗑️", key=f"del_{i}"):
                 st.session_state.rental_listings.pop(i)
                 st.rerun()
 
         col_e1, col_e2 = st.columns(2)
         with col_e1: listing['tax'] = st.number_input("Annual Property Tax", value=listing['tax'], key=f"tx_{i}")
-        with col_e2: listing['strata'] = st.number_input("Monthly Strata", value=listing['strata'], key=f"st_{i}")
+        with e2: listing['strata'] = st.number_input("Monthly Strata", value=listing['strata'], key=f"st_{i}")
 
 if len(st.session_state.rental_listings) < 10:
     st.button("➕ Add Listing", on_click=add_listing)
@@ -96,6 +105,7 @@ if len(st.session_state.rental_listings) < 10:
 results = []
 for l in st.session_state.rental_listings:
     if l['price'] > 0 and l['lat'] != 0.0:
+        # 5% Maintenance/Vacancy Reserve included for pro underwriting
         noi = (l['rent'] * 12) - (l['tax'] + (l['strata'] * 12) + (l['rent'] * 12 * 0.05))
         cap_rate = (noi / l['price']) * 100
         
@@ -106,7 +116,7 @@ for l in st.session_state.rental_listings:
         net_cashflow = noi - (pmt * 12)
         
         results.append({
-            "Address": l['address'], "Price": l['price'], "Rent": l['rent'],
+            "Address": l['address'], "Price": l['price'], 
             "Cap Rate (%)": round(cap_rate, 2), "Annual Net ($)": round(net_cashflow),
             "lat": l['lat'], "lon": l['lon']
         })
@@ -114,12 +124,26 @@ for l in st.session_state.rental_listings:
 if results:
     df_results = pd.DataFrame(results)
     st.divider()
-    st.subheader("🗺️ Geographic View")
+    st.subheader("🗺️ Geographic Portfolio Distribution")
     st.map(df_results) # Plots using 'lat' and 'lon' columns
 
-    st.subheader("📊 Performance Ranking")
-    sort_by = st.radio("Sort by:", ["Best Cap Rate", "Highest Cashflow"], horizontal=True)
+    st.subheader("📊 Comparative Analysis")
+    sort_by = st.radio("Rank Properties By:", ["Best Cap Rate", "Highest Cashflow"], horizontal=True)
     df_ranked = df_results.sort_values(by="Cap Rate (%)" if sort_by == "Best Cap Rate" else "Annual Net ($)", ascending=False)
-    st.dataframe(df_ranked.drop(columns=['lat', 'lon']), use_container_width=True, hide_index=True)
+    
+    st.dataframe(
+        df_ranked.drop(columns=['lat', 'lon']), 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "Price": st.column_config.NumberColumn(format="$%d"),
+            "Annual Net ($)": st.column_config.NumberColumn(format="$%d"),
+            "Cap Rate (%)": st.column_config.ProgressColumn(min_value=0, max_value=10, format="%.2f%%")
+        }
+    )
+    
+    # Verdict
+    top = df_ranked.iloc[0]
+    st.success(f"🏆 **Top Performer:** {top['Address']} offers the highest return based on your {sort_by} preference.")
 
 show_disclaimer()
