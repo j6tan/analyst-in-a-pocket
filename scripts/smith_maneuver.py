@@ -12,34 +12,36 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. DATA LINKING ---
+# --- 1. DATA LINKING & DYNAMIC TAX LOGIC ---
 prof = st.session_state.app_db.get('profile', {})
 
 client_name1 = prof.get('p1_name', 'Client 1')
 client_name2 = prof.get('p2_name', 'Client 2')
 
-# Calculate Total Income for Tax Purposes
-p1_income = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0))
-p2_income = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0))
+# Calculate Total Income for Dynamic Tax Purposes
+p1_income = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
+p2_income = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
-# Determine Strategy Lead (Higher Earner)
+def get_marginal_tax_rate(income):
+    # BC 2025 Combined Federal/Provincial Estimates
+    if income <= 55867: return 20.06
+    elif income <= 111733: return 31.00
+    elif income <= 173205: return 40.70
+    elif income <= 246752: return 45.80
+    else: return 53.50
+
+t1 = get_marginal_tax_rate(p1_income)
+t2 = get_marginal_tax_rate(p2_income)
+
+# Determine Strategy Lead (Higher Earner) for the recommendation note
 if p1_income >= p2_income:
     lead_client = client_name1
-    lead_income = p1_income
+    default_tax_idx = 0
 else:
     lead_client = client_name2
-    lead_income = p2_income
-
-def estimate_marginal_rate(income):
-    if income > 240000: return 53.5
-    elif income > 170000: return 48.0
-    elif income > 110000: return 43.0
-    elif income > 55000: return 29.0
-    else: return 20.0
-
-suggested_tax_rate = estimate_marginal_rate(lead_income)
+    default_tax_idx = 1
 
 # --- 2. PERSISTENCE & INITIALIZATION ---
 if 'smith_maneuver' not in st.session_state.app_db:
@@ -60,7 +62,6 @@ is_stale_default = (current_sm_amt == 500000.0 and current_sm_rate == 5.0 and cu
 has_real_profile = (prof_mortgage != 500000.0 or prof_rate != 5.0)
 
 if not sm_data.get('initialized') or (is_stale_default and has_real_profile):
-    
     if prof_mortgage == 0: prof_mortgage = 500000.0
     if prof_rate == 0: prof_rate = 5.0
     if prof_amort == 0: prof_amort = 25
@@ -72,7 +73,6 @@ if not sm_data.get('initialized') or (is_stale_default and has_real_profile):
         "loc_rate": prof_rate + 1.0, 
         "inv_return": 7.0,
         "div_yield": 5.0,
-        "tax_rate": float(suggested_tax_rate),
         "initial_lump": 0.0,
         "strategy_horizon": 25,
         "initialized": True
@@ -163,15 +163,19 @@ with st.container(border=True):
 
     c7, c8, c9 = st.columns(3)
     with c7:
-         # ADDED ASTERISK TO LABEL
-         tax_rate = cloud_input("Marginal Tax Rate (%)*", "smith_maneuver", "tax_rate", step=0.5)
+         # --- UPDATED: DYNAMIC RADIO SELECTOR ---
+         tax_labels = [f"{client_name1} ({t1}%)", f"{client_name2} ({t2}%)"]
+         tax_values = [t1, t2]
+         
+         sel_tax_label = st.radio("Marginal Tax Rate (%)*", tax_labels, index=default_tax_idx, horizontal=False, key="sm_tax_owner_radio")
+         tax_rate = tax_values[tax_labels.index(sel_tax_label)]
+         # ----------------------------------------
     with c8:
         initial_lump = cloud_input("Initial HELOC Room ($)", "smith_maneuver", "initial_lump", step=5000.0)
     with c9:
         strategy_horizon = st.slider("Strategy Horizon (Years)", 5, 30, int(sm_data.get('strategy_horizon', 25)), step=5)
         sm_data['strategy_horizon'] = strategy_horizon
     
-    # MOVED NOTE TO BOTTOM OF CONTAINER
     st.caption(f"Note: its recommended to hold the investment property/stock under **{lead_client}**'s name to achieve the maximum tax benefits.")
 
 # --- 9. CALC ENGINE ---
