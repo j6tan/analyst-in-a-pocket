@@ -82,37 +82,52 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     widget_id = f"{section}_{key}"
     db_val = st.session_state.app_db[section].get(key)
     
-    # --- FORCE-FEED ENGINE ---
-    # 1. Get what the widget THINKS the value is
-    current_state = st.session_state.get(widget_id)
+    # --- FORCE-FEED ENGINE (IMPROVED) ---
     
-    # 2. Sanitize Database Value
-    db_float = 0.0
-    try:
-        if db_val is not None and str(db_val).strip() != "":
-            db_float = float(db_val)
-    except: pass
+    # 1. Determine the "Truth" (Database Value)
+    target_val = None
+    if db_val is not None and str(db_val).strip() != "":
+        try:
+            target_val = float(db_val) if input_type == "number" else str(db_val)
+        except:
+            target_val = None
 
-    # 3. Sanitize Current State
-    state_float = 0.0
-    try:
-        if current_state is not None and str(current_state).strip() != "":
-            state_float = float(current_state)
-    except: pass
+    # 2. Check Widget State
+    current_state = st.session_state.get(widget_id)
 
-    # 4. THE OVERWRITE RULE:
-    # If the widget says "0" (empty/default) BUT the database has a real number...
-    # We OVERWRITE the session state memory directly.
-    if input_type == "number" and state_float == 0.0 and db_float != 0.0:
-        st.session_state[widget_id] = db_float
-    elif input_type == "text" and (current_state is None or str(current_state) == "") and db_val:
-        st.session_state[widget_id] = str(db_val)
+    # 3. TYPE SAFETY FIX: Ensure Session State matches Widget Type
+    # If Supabase sent an int (100000), but widget wants float (100000.0), convert it now.
+    if input_type == "number" and current_state is not None:
+        try:
+            if not isinstance(current_state, float):
+                st.session_state[widget_id] = float(current_state)
+                current_state = st.session_state[widget_id]
+        except:
+            pass
+
+    # 4. THE OVERWRITE RULE (Aggressive):
+    # If the widget is missing from state, OR it is default/empty but DB has value...
+    # We FORCE the DB value into the session state.
+    should_overwrite = False
+    
+    if widget_id not in st.session_state:
+        should_overwrite = True
+    elif input_type == "number":
+        # If widget is 0.0 but DB says it should be 100,000 -> Overwrite
+        if (current_state == 0.0 or current_state is None) and (target_val is not None and target_val != 0.0):
+            should_overwrite = True
+    elif input_type == "text":
+        if (current_state == "" or current_state is None) and target_val:
+            should_overwrite = True
+            
+    if should_overwrite and target_val is not None:
+        st.session_state[widget_id] = target_val
 
     # 5. RENDER
     # We do NOT use 'value=' here because we set st.session_state[widget_id] above.
     # Streamlit will automatically pick up the forced value.
     if input_type == "number":
-        # Final safety: ensure key exists
+        # Final safety: ensure key exists and is float
         if widget_id not in st.session_state: st.session_state[widget_id] = 0.0
         
         st.number_input(
