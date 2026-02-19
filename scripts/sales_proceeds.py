@@ -102,18 +102,34 @@ with c2:
         st.markdown("**🏛️ Capital Gains / Tax Details**")
         adjusted_cost_base = cloud_input("Original Purchase Price + Renos (ACB) $", "sales_proceeds", "acb", step=5000.0)
         
-        # SMART TAX SELECTION
+        # --- NEW: DYNAMIC TAX CALCULATOR (BC 2025 Est) ---
+        def get_marginal_tax_rate(income):
+            if income <= 55867: return 20.06
+            elif income <= 111733: return 31.00
+            elif income <= 173205: return 40.70
+            elif income <= 246752: return 45.80
+            else: return 53.50
+
         prof = st.session_state.app_db.get('profile', {})
         p1 = prof.get('p1_name', 'Client 1')
         p2 = prof.get('p2_name', 'Client 2')
-        t1 = float(prof.get('p1_tax_rate', 35.0))
-        t2 = float(prof.get('p2_tax_rate', 35.0))
         
-        tax_map = {f"{p1} ({t1}%)": t1, f"{p2} ({t2}%)": t2}
+        # Calculate Real-Time Income Sums
+        p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
+        p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
         
-        st.caption("Whose marginal tax bracket applies?")
+        t1 = get_marginal_tax_rate(p1_inc)
+        t2 = get_marginal_tax_rate(p2_inc)
+        
+        tax_map = {
+            f"{p1} (Inc: ${p1_inc/1000:.0f}k → ~{t1}%)": t1, 
+            f"{p2} (Inc: ${p2_inc/1000:.0f}k → ~{t2}%)": t2
+        }
+        
+        st.markdown("#### Whose marginal tax bracket applies?") # Bigger Header
         sel_owner = st.radio("Registered Owner", list(tax_map.keys()), key="sp_tax_owner_radio")
         marginal_tax_rate = tax_map[sel_owner]
+        # -------------------------------------------------
 
 # --- 3. CALCULATION ENGINE ---
 def calculate_proceeds(sale_price):
@@ -146,7 +162,7 @@ def calculate_proceeds(sale_price):
         net_gain = (sale_price - total_comm - gst_on_comm - lawyer_fees - staging) - adjusted_cost_base
         if net_gain > 0:
             if is_flip:
-                # Anti-Flipping Tax: 100% Inclusion as Business Income
+                # Anti-Flipping Tax: 100% Inclusion
                 flipping_tax = net_gain * (marginal_tax_rate / 100)
             else:
                 # Standard Capital Gains: 50% Inclusion
@@ -240,8 +256,7 @@ if target_price > 0:
     
     if target_res['flipping_tax'] > 0:
         rows_html += f'<div class="net-sheet-row"><span class="net-sheet-label">Anti-Flipping Tax (100% Inclusion)</span><span class="net-sheet-val negative">-${target_res["flipping_tax"]:,.2f}</span></div>'
-    # --------------------------------
-
+    
     rows_html += f'<div class="net-sheet-row total"><span class="net-sheet-label">ESTIMATED NET PROCEEDS</span><span class="net-sheet-val positive">${target_res["net"]:,.2f}</span></div>'
 
     st.markdown(f"""
