@@ -5,16 +5,14 @@ import os
 import json
 import math
 from style_utils import inject_global_css, show_disclaimer
-# ADDED: load_user_data, init_session_state
 from data_handler import cloud_input, sync_widget, supabase, load_user_data, init_session_state
 
-# --- UNIVERSAL LOADER START ---
+# --- UNIVERSAL LOADER ---
 init_session_state()
 if not st.session_state.app_db.get('profile') and st.session_state.get('username'):
     with st.spinner("🔄 Hydrating Data..."):
         load_user_data(st.session_state.username)
         st.rerun()
-# --- UNIVERSAL LOADER END ---
 
 # 1. Inject Style
 inject_global_css()
@@ -29,10 +27,10 @@ OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 
 def custom_round_up(n):
-    if n <= 0: return 0.0
+    if n <= 0: return 0
     digits = int(math.log10(n)) + 1
     step = {1:10, 2:10, 3:10, 4:100, 5:100, 6:1000, 7:10000}.get(digits, 50000)
-    return float(math.ceil(n / step) * step)
+    return int(math.ceil(n / step) * step)
 
 # --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {})
@@ -110,75 +108,64 @@ if 'affordability' not in st.session_state.app_db:
     st.session_state.app_db['affordability'] = {}
 aff = st.session_state.app_db['affordability']
 
-if aff.get('rental', 0) == 0: aff['rental'] = rental_sum
-if aff.get('combined_t4', 0) == 0: aff['combined_t4'] = t4_sum
-if aff.get('combined_bonus', 0) == 0: aff['combined_bonus'] = bonus_sum
-if aff.get('combined_debt', 0) == 0: aff['combined_debt'] = debt_sum
+if aff.get('rental', 0) == 0: aff['rental'] = int(rental_sum)
+if aff.get('combined_t4', 0) == 0: aff['combined_t4'] = int(t4_sum)
+if aff.get('combined_bonus', 0) == 0: aff['combined_bonus'] = int(bonus_sum)
+if aff.get('combined_debt', 0) == 0: aff['combined_debt'] = int(debt_sum)
 
 if aff.get('bank_rate', 0) == 0:
     TAX_DEFAULTS = {"BC": 0.0031, "Ontario": 0.0076, "Alberta": 0.0064}
     tr = TAX_DEFAULTS.get(province, 0.0075)
     max_p, min_d = solve_max_affordability(t4_sum + bonus_sum + (rental_sum * 0.8), debt_sum, 6.26, tr)
     aff.update({'bank_rate': 4.26, 'down_payment': custom_round_up(min_d + 2000), 'prop_taxes': custom_round_up(max_p * tr), 
-                'heat': custom_round_up(max_p * 0.0002), 'loan_cap': 0.0})
+                'heat': custom_round_up(max_p * 0.0002), 'loan_cap': 0})
     if st.session_state.get("is_logged_in"):
         supabase.table("user_vault").upsert({"id": st.session_state.username, "data": st.session_state.app_db}).execute()
 
-# --- 6. PRE-CALCULATION FOR CAP NOTE ---
+# --- 6. PRE-CALCULATION ---
 monthly_inc_pre = (aff.get('combined_t4', 0) + aff.get('combined_bonus', 0) + (aff.get('rental', 0)*0.80)) / 12
 s_rate_pre = max(5.25, aff.get('bank_rate', 4.26) + 2.0)
-gds_pre = (monthly_inc_pre * 0.39) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12)
-tds_pre = (monthly_inc_pre * 0.44) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12) - aff.get('combined_debt', 0)
-max_pi_pre = min(gds_pre, tds_pre)
+max_pi_pre = min(
+    (monthly_inc_pre * 0.39) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12), 
+    (monthly_inc_pre * 0.44) - aff.get('heat', 0) - (aff.get('prop_taxes', 0)/12) - aff.get('combined_debt', 0)
+)
 r_mo_pre = (s_rate_pre/100)/12
-qual_loan_pre = custom_round_up(max_pi_pre * (1 - (1+r_mo_pre)**-300) / r_mo_pre) if r_mo_pre > 0 else 0.0
+qual_loan_pre = custom_round_up(max_pi_pre * (1 - (1+r_mo_pre)**-300) / r_mo_pre) if r_mo_pre > 0 else 0
 
-# --- 7. HEADER & STORYTELLING BOX ---
+# --- 7. HEADER ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
 with header_col1:
     if os.path.exists("logo.png"): st.image("logo.png", width=140)
 with header_col2:
     st.title("Mortgage Affordability Analysis")
 
-if is_renter:
-    story_headline = f"🚀 {household}: From Renting to Ownership"
-    story_body = f"This is the moment where your monthly rent becomes an investment in your future. Based on your current profile, we're mapping out the exact math needed to secure your first home in <b>{province}</b>."
-else:
-    story_headline = f"📈 {household}: Planning Your Next Move"
-    story_body = f"Scaling up or relocating is a strategic play. We’ve analyzed your current income to determine how much house your wealth can truly buy in today's <b>{province}</b> market."
-
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 5px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">{story_headline}</h3>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">{story_body}</p>
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.5em;">{household}</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">Affordability Analysis for <b>{province}</b>.</p>
 </div>
 """, unsafe_allow_html=True)
-
-if not is_renter:
-    st.markdown(f"""
-        <p style="font-size: 0.85em; color: {SLATE_ACCENT}; margin-top: 15px; margin-bottom: 15px; margin-left: 25px;">
-            <i>Note: This model assumes an <b>upgrade scenario</b> where your current property is sold; existing mortgage balances are not factored into this specific qualification limit.</i>
-        </p>
-    """, unsafe_allow_html=True)
 
 # --- 8. UNDERWRITING ASSUMPTIONS ---
 st.subheader("⚙️ Underwriting Assumptions")
 uw_col1, uw_col2, uw_col3 = st.columns(3)
 with uw_col1:
+    # STEP is Float -> Forces Float Widget
     c_rate = cloud_input("Bank Contract Rate %", "affordability", "bank_rate", step=0.01)
     s_rate = max(5.25, c_rate + 2.0)
     st.markdown(f"**Qualifying Rate:** {s_rate:.2f}%")
 with uw_col2:
-    f_dp = cloud_input("Down Payment ($)", "affordability", "down_payment", step=1000.0)
-    loan_cap = cloud_input("Manual Loan Cap (Optional)", "affordability", "loan_cap", step=5000.0)
+    # STEP is Integer -> Forces Integer Widget
+    f_dp = cloud_input("Down Payment ($)", "affordability", "down_payment", step=1000)
+    loan_cap = cloud_input("Manual Loan Cap (Optional)", "affordability", "loan_cap", step=5000)
     st.caption(f"Note: Max Qualified Loan: **${qual_loan_pre:,.0f}**")
 with uw_col3:
-    f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100.0)
-    f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10.0)
+    f_ptax = cloud_input("Annual Property Taxes", "affordability", "prop_taxes", step=100)
+    f_heat = cloud_input("Monthly Heat", "affordability", "heat", step=10)
     prop_type = st.selectbox("Property Type", ["House / Freehold", "Condo / Townhome"], 
                              index=0 if aff.get('prop_type') == "House / Freehold" else 1,
                              key="affordability:prop_type", on_change=sync_widget, args=("affordability:prop_type",))
-    strata = cloud_input("Monthly Strata", "affordability", "strata", step=10.0) if prop_type == "Condo / Townhome" else 0
+    strata = cloud_input("Monthly Strata", "affordability", "strata", step=10) if prop_type == "Condo / Townhome" else 0
 
 st.divider()
 
@@ -186,29 +173,22 @@ st.divider()
 col_1, col_2, col_3 = st.columns([1.2, 1.2, 1.5])
 with col_1:
     st.subheader("💰 Income Summary")
-    i_t4 = cloud_input("Combined T4 Income", "affordability", "combined_t4", step=1000.0)
-    i_bonus = cloud_input("Total Additional Income", "affordability", "combined_bonus", step=500.0)
-    i_rental = cloud_input("Joint Rental Income", "affordability", "rental", step=100.0)
+    i_t4 = cloud_input("Combined T4 Income", "affordability", "combined_t4", step=1000)
+    i_bonus = cloud_input("Total Additional Income", "affordability", "combined_bonus", step=500)
+    i_rental = cloud_input("Joint Rental Income", "affordability", "rental", step=100)
     total_qualifying = i_t4 + i_bonus + (i_rental * 0.80)
     st.markdown(f"**Qualifying Income:** ${total_qualifying:,.0f}")
 
 with col_2:
     st.subheader("💳 Debt & Status")
-    i_debt = cloud_input("Monthly Debts", "affordability", "combined_debt", step=50.0)
+    i_debt = cloud_input("Monthly Debts", "affordability", "combined_debt", step=50)
     f_fthb = st.checkbox("First-Time Home Buyer?", value=aff.get('is_fthb', False), key="affordability:is_fthb", on_change=sync_widget, args=("affordability:is_fthb",))
     f_toronto = st.checkbox("Toronto Limits?", key="affordability:is_toronto") if province == "Ontario" else False
 
 with col_3:
-    # UPDATED UNDERWRITING INSIGHTS
-    st.info("""
-    **💡 Underwriting Insights:**
-    * **T4:** Qualified at **100%** of base salary.
-    * **Additional Income:** Bonuses use a **2-yr average**.
-    * **Rental Income:** Typically 'haircut' to **80%** for expenses.
-    * **Liabilities:** LOCs stressed at **3% of limit**.
-    """)
+    st.info("**Underwriting Insights:**\n* **T4:** 100% of base salary.\n* **Rental:** 80% offset.\n* **Debts:** LOCs stressed at 3%.")
 
-# --- 10. DASHBOARD CALCULATIONS & VISUALS ---
+# --- 10. DASHBOARD CALCULATIONS ---
 monthly_inc = total_qualifying / 12
 gds_max = (monthly_inc * 0.39) - f_heat - (f_ptax/12) - (strata*0.5)
 tds_max = (monthly_inc * 0.44) - f_heat - (f_ptax/12) - (strata*0.5) - i_debt
@@ -218,26 +198,12 @@ if max_pi_stress > 0:
     r_mo_stress = (s_rate/100)/12
     raw_loan = max_pi_stress * (1 - (1+r_mo_stress)**-300) / r_mo_stress if r_mo_stress > 0 else max_pi_stress * 300
     
-    # Qualified Loan & Application of Loan Cap
     qualified_loan = custom_round_up(raw_loan)
     loan_amt = min(qualified_loan, loan_cap) if loan_cap > 0 else qualified_loan
     max_purchase = loan_amt + f_dp
     
-    # Contract Rate P&I for display
     r_mo_contract = (c_rate/100)/12
     contract_pi = (loan_amt * r_mo_contract) / (1 - (1+r_mo_contract)**-300) if r_mo_contract > 0 else loan_amt / 300
-
-    # VALIDATION: Downpayment Check
-    min_required = calculate_min_downpayment(max_purchase)
-    if f_dp < (min_required - 0.99):
-        st.error(f"#### 🛑 Down Payment Too Low")
-        st.markdown(f"""
-        <div style="background-color: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; border: 1px solid #ffeeba;">
-            The minimum requirement for a purchase price of <strong>${max_purchase:,.0f}</strong> is <strong>${min_required:,.0f}</strong>.<br><br>
-            Please <b>increase your downpayment</b> or <b>adjust the loan size</b> by using the <b>Manual Loan Cap</b> box above.
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
 
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
@@ -266,17 +232,6 @@ if max_pi_stress > 0:
             {"Item": "Legal / Misc", "Cost": 2350}
         ]
         st.table(pd.DataFrame(breakdown).assign(Cost=lambda x: x['Cost'].map('${:,.0f}'.format)))
-        
-        st.markdown(f"""
-        <div style="background-color: {PRIMARY_GOLD}; color: white; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 10px;">
-            <p style="margin: 0; font-size: 0.8em;">TOTAL CASH TO CLOSE</p>
-            <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${total_cash:,.0f}</p>
-        </div>
-        <div style="background-color: #C0C0C0; color: white; padding: 10px; border-radius: 8px; text-align: center;">
-            <p style="margin: 0; font-size: 0.8em;">MONTHLY HOME COST</p>
-            <p style="margin: 0; font-size: 1.5em; font-weight: 800;">${monthly_cost:,.0f}</p>
-        </div>
-        """, unsafe_allow_html=True)
 else:
     st.error("Approval amount is $0.")
 
