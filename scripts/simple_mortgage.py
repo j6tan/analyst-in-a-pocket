@@ -95,7 +95,7 @@ p1 = prof.get('p1_name', 'Client')
 p2 = prof.get('p2_name', '')
 household = f"{p1} & {p2}" if p2 else p1
 
-# --- 7. HEADER & STORY (FIXED BOLDING) ---
+# --- 7. HEADER & STORY ---
 st.title("The Interest Curve")
 
 st.markdown(f"""
@@ -107,7 +107,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 8. INPUTS (FIXED: Integers) ---
+# --- 8. INPUTS ---
 c1, c2, c3 = st.columns(3)
 with c1:
     price = cloud_input("Purchase Price ($)", "simple_mortgage", "purchase_price", step=5000)
@@ -119,20 +119,21 @@ with c3:
     prepay = cloud_input("Monthly Prepayment ($)", "simple_mortgage", "prepayment", step=50)
     freq = st.selectbox("Payment Frequency", ["Monthly", "Bi-Weekly Accelerated"], key="sm_freq")
 
-# --- 9. CALCULATIONS (FIXED: ZeroDivisionError) ---
+# --- 9. CALCULATIONS ---
 loan_amount = price - dp
 monthly_rate = (rate / 100) / 12
 n_months = int(amort * 12)
 
-# FIX: Check if Rate is 0 to avoid Division by Zero
+# --- FIX: ZERO DIVISION ERROR HANDLER ---
 if loan_amount > 0:
     if monthly_rate > 0:
         monthly_pmt = loan_amount * (monthly_rate * (1 + monthly_rate)**n_months) / ((1 + monthly_rate)**n_months - 1)
     else:
-        # Simple division if rate is 0%
+        # If Rate is 0%, simple division
         monthly_pmt = loan_amount / n_months if n_months > 0 else 0
 else:
     monthly_pmt = 0
+# ----------------------------------------
 
 # Accelerated Bi-Weekly Logic
 if freq == "Bi-Weekly Accelerated":
