@@ -22,9 +22,9 @@ st.divider()
 
 # --- 2. THEME & UTILS ---
 PRIMARY_GOLD = "#CEB36F"
+CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
-THEME_BROWN = "#8B4513" # Updated theme color for Option B
 
 def get_marginal_tax_rate(income):
     if income <= 55867: return 20.06
@@ -39,10 +39,6 @@ p1_name = prof.get('p1_name', 'Dori')
 p2_name = prof.get('p2_name', 'Kevin')
 p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
-
-if 'pay_vs_invest' not in st.session_state.app_db:
-    st.session_state.app_db['pay_vs_invest'] = {}
-pvi_data = st.session_state.app_db['pay_vs_invest']
 
 # --- 4. HEADER ---
 st.title("Debt vs. Equity: The Wealth Choice")
@@ -70,16 +66,22 @@ with col2:
     
     st.markdown("**Whose tax bracket applies?**")
     t1, t2 = get_marginal_tax_rate(p1_inc), get_marginal_tax_rate(p2_inc)
-    tax_map = {f"{p1_name} ({t1}%)": t1, f"{p2_name} ({p2_inc/1000:,.0f}k → {t2}%)": t2}
+    tax_map = {f"{p1_name} ({t1}%)": t1, f"{p2_name} ({t2}%)": t2}
     tax_owner = st.radio("Select Owner", list(tax_map.keys()), horizontal=True, key="pvi_tax_owner")
     marginal_tax = tax_map[tax_owner]
 
-# --- 6. CORE MATH ENGINE ---
+# --- 6. CORE MATH ENGINE (THE FIX) ---
 n_months = int(amort * 12)
+
+# Path A: Mortgage Paydown
 r_m_mo = (m_rate / 100) / 12
-fv_mortgage = extra_amt * (((1 + r_m_mo)**n_months - 1) / r_m_mo)
+if r_m_mo > 0:
+    fv_mortgage = extra_amt * (((1 + r_m_mo)**n_months - 1) / r_m_mo)
+else:
+    fv_mortgage = extra_amt * n_months # The Fix for 0%
 interest_saved = fv_mortgage - (extra_amt * n_months)
 
+# Path B: Stock Market
 if acc_type == "TFSA":
     net_growth_ann = stock_return
 elif acc_type == "Non-Registered":
@@ -89,7 +91,11 @@ else: # RRSP
 
 r_s_mo = (net_growth_ann / 100) / 12
 effective_monthly_dep = extra_amt / (1 - (marginal_tax/100)) if acc_type == "RRSP" else extra_amt
-fv_stock = effective_monthly_dep * (((1 + r_s_mo)**n_months - 1) / r_s_mo)
+
+if r_s_mo > 0:
+    fv_stock = effective_monthly_dep * (((1 + r_s_mo)**n_months - 1) / r_s_mo)
+else:
+    fv_stock = effective_monthly_dep * n_months # The Fix for 0% growth
 
 if acc_type == "RRSP":
     fv_stock *= (1 - (marginal_tax / 100))
@@ -106,15 +112,22 @@ with k3:
 
 history = []
 for m in range(1, n_months + 1):
-    val_m = extra_amt * (((1 + r_m_mo)**m - 1) / r_m_mo)
-    val_s = effective_monthly_dep * (((1 + r_s_mo)**m - 1) / r_s_mo)
+    if r_m_mo > 0:
+        val_m = extra_amt * (((1 + r_m_mo)**m - 1) / r_m_mo)
+    else:
+        val_m = extra_amt * m
+        
+    if r_s_mo > 0:
+        val_s = effective_monthly_dep * (((1 + r_s_mo)**m - 1) / r_s_mo)
+    else:
+        val_s = effective_monthly_dep * m
+        
     if acc_type == "RRSP": val_s *= (1 - (marginal_tax / 100))
     history.append({"Year": m/12, "Mortgage Path": val_m, "Stock Path": val_s})
 
 df = pd.DataFrame(history)
 fig = go.Figure()
-# CHANGED: Stock Portfolio color is now Brown
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Stock Path'], name='Option B: Stock Portfolio', line=dict(color=THEME_BROWN, width=4)))
+fig.add_trace(go.Scatter(x=df['Year'], y=df['Stock Path'], name='Option B: Stock Portfolio', line=dict(color=CHARCOAL, width=4)))
 fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage Path'], name='Option A: Mortgage Savings', line=dict(color=PRIMARY_GOLD, width=4)))
 fig.update_layout(xaxis_title="Years", yaxis_title="Accumulated Wealth ($)", height=400, margin=dict(l=0,r=0,t=20,b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
@@ -135,7 +148,6 @@ st.markdown(f"""
 # --- 9. STRATEGIC INSIGHTS ---
 st.subheader("💡 Strategic Verdict")
 i_col1, i_col2 = st.columns(2)
-
 with i_col1:
     st.markdown(f"""
     **🏠 Mortgage: The Guaranteed Path**
@@ -143,7 +155,6 @@ with i_col1:
     * **Impact:** Every $1,000 paid now kills interest for the next {amort} years.
     * **Downside:** Capital is **trapped** in the house.
     """)
-
 with i_col2:
     st.markdown(f"""
     **📈 Stocks: The Growth Path**
@@ -154,7 +165,7 @@ with i_col2:
 
 st.info(f"""
 **The "Acceleration" Myth:** Paying down a mortgage feels faster because the balance drops, but mathematically, 
-it is identical to compounding wealth in a TFSA. If the rates were equal, the outcome is the same.
+it is identical to compounding wealth. If the rates were equal, the outcome is the same.
 """)
 
 show_disclaimer()
