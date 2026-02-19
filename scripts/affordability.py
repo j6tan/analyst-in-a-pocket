@@ -5,7 +5,16 @@ import os
 import json
 import math
 from style_utils import inject_global_css, show_disclaimer
-from data_handler import cloud_input, sync_widget, supabase
+# ADDED: load_user_data, init_session_state
+from data_handler import cloud_input, sync_widget, supabase, load_user_data, init_session_state
+
+# --- UNIVERSAL LOADER START ---
+init_session_state()
+if not st.session_state.app_db.get('profile') and st.session_state.get('username'):
+    with st.spinner("🔄 Hydrating Data..."):
+        load_user_data(st.session_state.username)
+        st.rerun()
+# --- UNIVERSAL LOADER END ---
 
 # 1. Inject Style
 inject_global_css()
