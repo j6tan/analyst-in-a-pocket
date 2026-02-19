@@ -12,7 +12,8 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 1. THEME & BRANDING (Must be defined first to avoid NameError) ---
+# --- 1. THEME & BRANDING ---
+# These MUST be defined here before being used in the HTML strings below
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
@@ -31,31 +32,22 @@ if 'buy_vs_rent' not in st.session_state.app_db:
     st.session_state.app_db['buy_vs_rent'] = {}
 br_store = st.session_state.app_db['buy_vs_rent']
 
-# FIX: Only reset defaults if initialized flag is missing OR data is clearly empty (price=0)
+# FIX: Only reset defaults if never initialized or if price is suspiciously 0
 if not br_store.get('initialized') or br_store.get('price', 0) == 0:
     profile_rent = float(prof.get('current_rent', 2500.0)) if is_renter else 2500.0
     br_store.update({
-        "price": 800000.0, 
-        "dp": 200000.0, 
-        "rate": 4.0, 
-        "ann_tax": 2000.0,
-        "mo_maint": 500.0, 
-        "apprec": 1.5, 
-        "rent": profile_rent, 
-        "rent_inc": 2.5,
-        "stock_ret": 8.0, 
-        "years": 15.0,
-        "initialized": True # Logic Lock
+        "price": 800000.0, "dp": 200000.0, "rate": 4.0, "ann_tax": 2000.0,
+        "mo_maint": 500.0, "apprec": 1.5, "rent": profile_rent, "rent_inc": 2.5,
+        "stock_ret": 8.0, "years": 15.0, "initialized": True
     })
-    # Force Save to Cloud
+    # Force Cloud Save
     if st.session_state.get("is_logged_in") and st.session_state.get("username"):
         try:
             supabase.table("user_vault").upsert({
                 "id": st.session_state.username, 
                 "data": st.session_state.app_db
             }).execute()
-        except:
-            pass
+        except: pass
 
 # --- 4. CALCULATION ENGINE ---
 def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
