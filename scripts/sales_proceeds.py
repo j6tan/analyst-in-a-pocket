@@ -43,9 +43,9 @@ with c1:
         "Property Type", 
         prop_types, 
         index=prop_types.index(curr_type), 
-        key="sp_prop_type_widget" # Unique widget key
+        key="sp_prop_type_widget"
     )
-    # Manual Sync for Selectbox
+    # Sync Selectbox
     if prop_type != curr_type:
         st.session_state.app_db['sales_proceeds']['prop_type'] = prop_type
         sync_widget("sales_proceeds:prop_type")
@@ -57,7 +57,6 @@ with c1:
     mort_bal = cloud_input("Remaining Mortgage Balance ($)", "sales_proceeds", "mort_bal", step=1000.0)
     
     if mort_bal > 0:
-        # --- FIX 2: SAVE MORTGAGE TYPE ---
         m_types = ["Variable", "Fixed"]
         saved_m_type = st.session_state.app_db['sales_proceeds'].get('mort_type', 'Variable')
         if saved_m_type not in m_types: saved_m_type = 'Variable'
@@ -72,12 +71,10 @@ with c1:
         if mort_type != saved_m_type:
             st.session_state.app_db['sales_proceeds']['mort_type'] = mort_type
             sync_widget("sales_proceeds:mort_type")
-        # ---------------------------------
 
         mort_rate = cloud_input("Current Interest Rate (%)", "sales_proceeds", "mort_rate", step=0.1)
         
         if mort_type == "Fixed":
-            # Using cloud_input for persistence on months left too
             months_left = cloud_input("Months Remaining in Term", "sales_proceeds", "months_left", step=1.0)
         else:
             months_left = 0
@@ -96,19 +93,33 @@ with c2:
     adjustments = cloud_input("Closing Adjustments (Prop Tax/Strata) ($)", "sales_proceeds", "adjustments", step=100.0)
     staging = cloud_input("Staging & Prep Costs ($)", "sales_proceeds", "staging", step=500.0)
     
-    # Capital Gains Setup (Hidden for Primary unless Flipping)
+    # Capital Gains Setup
     adjusted_cost_base = 0.0
     marginal_tax_rate = 0.0
+    
     if prop_type == "Secondary / Investment" or is_flip:
-        st.markdown("**Tax Details**")
+        st.markdown("---")
+        st.markdown("**🏛️ Capital Gains / Tax Details**")
         adjusted_cost_base = cloud_input("Original Purchase Price + Renos (ACB) $", "sales_proceeds", "acb", step=5000.0)
-        marginal_tax_rate = st.slider("Est. Marginal Tax Rate (%)", 20, 54, 45, key="sp_tax_rate")
+        
+        # SMART TAX SELECTION
+        prof = st.session_state.app_db.get('profile', {})
+        p1 = prof.get('p1_name', 'Client 1')
+        p2 = prof.get('p2_name', 'Client 2')
+        t1 = float(prof.get('p1_tax_rate', 35.0))
+        t2 = float(prof.get('p2_tax_rate', 35.0))
+        
+        tax_map = {f"{p1} ({t1}%)": t1, f"{p2} ({t2}%)": t2}
+        
+        st.caption("Whose marginal tax bracket applies?")
+        sel_owner = st.radio("Registered Owner", list(tax_map.keys()), key="sp_tax_owner_radio")
+        marginal_tax_rate = tax_map[sel_owner]
 
 # --- 3. CALCULATION ENGINE ---
 def calculate_proceeds(sale_price):
     if sale_price == 0: return {}
     
-    # 1. Commission (Standard First 100k Split)
+    # 1. Commission
     c1_amt = 100000 * (comm_tier1_pct / 100) if sale_price >= 100000 else sale_price * (comm_tier1_pct / 100)
     c2_amt = max(0, sale_price - 100000) * (comm_rem_pct / 100)
     total_comm = c1_amt + c2_amt
@@ -117,7 +128,6 @@ def calculate_proceeds(sale_price):
     # 2. Mortgage Penalty
     penalty = 0
     if mort_bal > 0:
-        # --- FIX 1: ZERO PENALTY IF 0 MONTHS LEFT ---
         if mort_type == "Fixed" and months_left <= 0:
             penalty = 0
         else:
@@ -127,21 +137,24 @@ def calculate_proceeds(sale_price):
             else:
                 ird_est = (mort_bal * 0.015) * (months_left / 12) 
                 penalty = max(penalty_3mo, ird_est)
-        # --------------------------------------------
 
-    # 3. Capital Gains / Tax
+    # 3. Capital Gains / Flipping Tax (Split Logic)
     cap_gains_tax = 0
+    flipping_tax = 0
+    
     if (prop_type == "Secondary / Investment" or is_flip) and sale_price > adjusted_cost_base:
         net_gain = (sale_price - total_comm - gst_on_comm - lawyer_fees - staging) - adjusted_cost_base
         if net_gain > 0:
             if is_flip:
-                cap_gains_tax = net_gain * (marginal_tax_rate / 100)
+                # Anti-Flipping Tax: 100% Inclusion as Business Income
+                flipping_tax = net_gain * (marginal_tax_rate / 100)
             else:
+                # Standard Capital Gains: 50% Inclusion
                 inclusion_amt = net_gain * 0.50
                 cap_gains_tax = inclusion_amt * (marginal_tax_rate / 100)
 
     # 4. Total Costs
-    total_costs = (total_comm + gst_on_comm + penalty + lawyer_fees + adjustments + staging + cap_gains_tax)
+    total_costs = (total_comm + gst_on_comm + penalty + lawyer_fees + adjustments + staging + cap_gains_tax + flipping_tax)
     
     # 5. Net Proceeds
     net_proceeds = sale_price - mort_bal - total_costs
@@ -151,7 +164,8 @@ def calculate_proceeds(sale_price):
         "comm": total_comm,
         "gst": gst_on_comm,
         "penalty": penalty,
-        "tax": cap_gains_tax,
+        "cap_gains_tax": cap_gains_tax,
+        "flipping_tax": flipping_tax,
         "fees": lawyer_fees + adjustments + staging,
         "total_costs": total_costs,
         "net": net_proceeds
@@ -220,8 +234,13 @@ if target_price > 0:
     
     rows_html += f'<div class="net-sheet-row"><span class="net-sheet-label">Legal & Adjustments</span><span class="net-sheet-val negative">-${target_res["fees"]:,.2f}</span></div>'
     
-    if target_res['tax'] > 0:
-        rows_html += f'<div class="net-sheet-row"><span class="net-sheet-label">Capital Gains / Flipping Tax</span><span class="net-sheet-val negative">-${target_res["tax"]:,.2f}</span></div>'
+    # --- SEPARATE LINES FOR TAXES ---
+    if target_res['cap_gains_tax'] > 0:
+        rows_html += f'<div class="net-sheet-row"><span class="net-sheet-label">Capital Gains Tax (Est.)</span><span class="net-sheet-val negative">-${target_res["cap_gains_tax"]:,.2f}</span></div>'
+    
+    if target_res['flipping_tax'] > 0:
+        rows_html += f'<div class="net-sheet-row"><span class="net-sheet-label">Anti-Flipping Tax (100% Inclusion)</span><span class="net-sheet-val negative">-${target_res["flipping_tax"]:,.2f}</span></div>'
+    # --------------------------------
 
     rows_html += f'<div class="net-sheet-row total"><span class="net-sheet-label">ESTIMATED NET PROCEEDS</span><span class="net-sheet-val positive">${target_res["net"]:,.2f}</span></div>'
 
