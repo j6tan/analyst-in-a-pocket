@@ -9,7 +9,6 @@ from data_handler import init_session_state, load_user_data
 init_session_state()
 inject_global_css()
 
-# geopy is required in requirements.txt
 try:
     from geopy.geocoders import Nominatim
     geolocator = Nominatim(user_agent="analyst_in_a_pocket_v1")
@@ -52,7 +51,7 @@ if 'rental_listings' not in st.session_state:
         {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
     ]
 
-# FIXED: Added st.rerun() to ensure the map updates immediately
+# The Fix: Explicitly updating the specific index and forcing a state save
 def geocode_address(index):
     if not geolocator:
         st.error("Geocoder service not found.")
@@ -62,11 +61,12 @@ def geocode_address(index):
         try:
             location = geolocator.geocode(addr)
             if location:
+                # Update the specific index only
                 st.session_state.rental_listings[index]['lat'] = location.latitude
                 st.session_state.rental_listings[index]['lon'] = location.longitude
                 st.session_state.rental_listings[index]['address'] = location.address
-                st.toast(f"📍 Mapped: {location.address}")
-                st.rerun() # Forces the map to render the new pin
+                st.toast(f"📍 Mapped #{index+1}: {location.address}")
+                # No st.rerun here to avoid breaking the input loop, Streamlit handles the update on next interaction
             else:
                 st.warning("Address not found. Please try adding City and Province.")
         except Exception:
@@ -75,7 +75,7 @@ def geocode_address(index):
 st.subheader("🏠 Property Underwriting")
 
 for i, listing in enumerate(st.session_state.rental_listings):
-    with st.expander(f"Listing #{i+1}: {listing['address'][:25]}...", expanded=(i==0)):
+    with st.expander(f"Listing #{i+1}: {listing['address'][:25]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
         
         # Row 1: Address, Add to Map, Remove
         r1_c1, r1_c2, r1_c3 = st.columns([2, 1, 1])
@@ -109,7 +109,8 @@ if len(st.session_state.rental_listings) < 10:
 # --- 5. CALCULATIONS ---
 results = []
 for l in st.session_state.rental_listings:
-    if l['price'] > 0 and l['lat'] != 0.0:
+    # IMPORTANT: Filter for all valid lat/lon pairs to show multiple pins
+    if l['price'] > 0 and l.get('lat') and l.get('lon'):
         mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
         gross_inc = l['rent'] * 12
@@ -137,7 +138,8 @@ if results:
     df_res = pd.DataFrame(results)
     st.divider()
     st.subheader("🗺️ Portfolio Map")
-    st.map(df_res) # Plots markers based on 'lat' and 'lon' columns
+    # st.map will plot a pin for every row in the DataFrame
+    st.map(df_res)
 
     st.subheader("📊 Comparative Ranking")
     sort_by = st.radio("Metric:", ["CoC %", "Cap Rate %", "Net $"], horizontal=True)
@@ -150,6 +152,7 @@ if results:
                        "Cap Rate %": st.column_config.NumberColumn(format="%.2f%%"), "CoC %": st.column_config.ProgressColumn(min_value=0, max_value=15, format="%.2f%%")}
     )
 
+    # Summary metrics for top pick
     top = df_ranked.iloc[0]
     st.success(f"🏆 **Top Underwritten Selection:** {top['Address']}")
     r1, r2, r3, r4 = st.columns(4)
