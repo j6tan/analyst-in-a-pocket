@@ -65,12 +65,12 @@ if not br_store.get('initialized'):
 
 # --- 4. CALCULATION ENGINE ---
 def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
-    # SAFETY: Ensure years is at least 1 to prevent empty dataframe crash
+    # SAFETY: Ensure years is at least 1
     if years < 1: years = 1
     
     loan = price - dp
     m_rate = (rate/100)/12
-    n_months = 30 * 12 # Standard 30 year amort for calc
+    n_months = 30 * 12 
     monthly_pi = loan * (m_rate * (1+m_rate)**n_months) / ((1+m_rate)**n_months - 1) if m_rate > 0 else loan / n_months
     
     data = []
@@ -132,7 +132,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. INPUTS ---
+# --- 6. INPUTS (FIXED: Integers) ---
 col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("🏠 Homeownership Path")
@@ -148,12 +148,9 @@ with col_right:
     rent = cloud_input("Current Monthly Rent ($)", "buy_vs_rent", "rent", step=100)
     rent_inc = cloud_input("Annual Rent Increase (%)", "buy_vs_rent", "rent_inc", step=0.1)
     stock_ret = cloud_input("Target Stock Return (%)", "buy_vs_rent", "stock_ret", step=0.1)
-    # FIX: Added min_value=1 to prevent crash
     years = cloud_input("Analysis Horizon (Years)", "buy_vs_rent", "years", step=1, min_value=1)
 
-# Ensure years is at least 1 even if DB says 0
 if years < 1: years = 1
-
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
 # --- 7. VISUALS ---
@@ -185,10 +182,8 @@ with v_col2:
     )
     st.plotly_chart(fig_wealth, use_container_width=True)
 
-# --- 8. THE MISSING CHART: WEALTH TRAJECTORY ---
+# --- 8. WEALTH TRAJECTORY (The Chart I added) ---
 st.subheader("📈 The Break-Even Timeline")
-st.caption("Track how your Net Worth changes year over year. The crossing point is your break-even year.")
-
 fig_line = go.Figure()
 fig_line.add_trace(go.Scatter(x=df['Year'], y=df['Owner Net Wealth'], mode='lines', name='Homeowner Wealth', line=dict(color=PRIMARY_GOLD, width=4)))
 fig_line.add_trace(go.Scatter(x=df['Year'], y=df['Renter Wealth'], mode='lines', name='Renter Wealth', line=dict(color=CHARCOAL, width=3, dash='dash')))
@@ -201,7 +196,7 @@ fig_line.update_layout(
 )
 st.plotly_chart(fig_line, use_container_width=True)
 
-# --- 9. STRATEGIC VERDICT ---
+# --- 9. STRATEGIC VERDICT (RESTORED) ---
 st.divider()
 st.subheader("🎯 Strategic Verdict")
 ins_col1, ins_col2 = st.columns(2)
@@ -219,18 +214,26 @@ with ins_col1:
         st.info(f"✨ **Efficiency Champion: Renter**\n\nRenting wastes **${sunk_diff:,.0f} less** money than Buying.")
 
 with ins_col2:
-    ahead_mask = df['Owner Net Wealth'] > df['Renter Wealth']
-    
-    # Check if lines ever cross
-    if ahead_mask.all():
-         st.write("**Analysis:** Buying is immediately wealthier than renting (usually due to high starting equity).")
-    elif not ahead_mask.any():
-         st.write("**Analysis:** Renting stays ahead the entire time. The stock market return is outpacing the real estate leverage.")
+    # --- THIS LOGIC IS NOW RESTORED FROM YOUR OLD SCRIPT ---
+    if (renter_wealth > owner_wealth) and (owner_unrec < renter_unrec):
+        # The Investor's Paradox Case
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; border: 1px solid #d1d5db;">
+        <b>🔍 The Investor's Paradox:</b><br>
+        Even though Ownership has lower sunk costs, the Renter is wealthier. <br><br>
+        This happens because your <b>{stock_ret}% Stock Return</b> is working harder on your initial capital than your <b>{apprec}% Home Appreciation</b>.
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        # Find first year where Owner > Renter
-        be_year = int(df[ahead_mask].iloc[0]['Year'])
-        st.write(f"### ⏳ Break-Even: Year {be_year}")
-        st.write(f"It takes **{be_year} years** for the Homeowner's equity to catch up to the Renter's portfolio.")
-        st.caption("If you plan to move before this year, you are mathematically better off renting.")
+        # The Break-Even / Growth Outlook Case
+        ahead_mask = df['Owner Net Wealth'] > df['Renter Wealth']
+        be_year = int(df[ahead_mask].iloc[0]['Year']) if ahead_mask.any() else None
+        
+        if be_year:
+            st.write(f"### ⏳ Break-Even: Year {be_year}")
+            st.write(f"This is when equity build-up finally overcomes the high friction costs of interest and taxes.")
+        else:
+            st.write("### 📉 Growth Outlook")
+            st.write("Under current market settings, the home is not projected to catch up in net worth.")
 
 show_disclaimer()
