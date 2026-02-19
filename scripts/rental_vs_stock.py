@@ -26,23 +26,8 @@ aff_sec = st.session_state.app_db.get('affordability_second', {})
 p1_name = prof.get('p1_name', 'Client 1')
 p2_name = prof.get('p2_name', 'Client 2')
 household = f"{p1_name} & {p2_name}" if p2_name else p1_name
-
-# --- DYNAMIC TAX LOGIC START ---
-def get_marginal_tax_rate(income):
-    # BC 2025 Combined Federal/Provincial Estimates
-    if income <= 55867: return 20.06
-    elif income <= 111733: return 31.00
-    elif income <= 173205: return 40.70
-    elif income <= 246752: return 45.80
-    else: return 53.50
-
-# Calculate Real-Time Income Sums from Profile
-p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
-p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
-
-p1_tax = get_marginal_tax_rate(p1_inc)
-p2_tax = get_marginal_tax_rate(p2_inc)
-# --- DYNAMIC TAX LOGIC END ---
+p1_tax = float(prof.get('p1_tax_rate', 35.0))
+p2_tax = float(prof.get('p2_tax_rate', 35.0))
 
 # --- 3. PERSISTENCE & INITIALIZATION ---
 if 'rental_vs_stock' not in st.session_state.app_db:
@@ -186,7 +171,7 @@ w1.metric("Total Rental Wealth Outcome", f"${re_tot:,.0f}")
 w2.metric("Total Stock Wealth Outcome", f"${st_tot:,.0f}")
 
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 18px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
+<div style="background-color: {OFF_WHITE}; padding: 18px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 6px solid {PRIMARY_GOLD};">
     <h3 style="color: {CHARCOAL}; margin-top: 0; margin-bottom: 8px; font-size: 1.2em;">🏆 Strategic Verdict</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; margin-bottom: 0;">
         The <b>{"🏠 Rental Property" if re_tot > st_tot else "📈 Stock Portfolio"}</b> generates <b>${abs(re_tot - st_tot):,.0f}</b> more in total take-home wealth over {years} years.
