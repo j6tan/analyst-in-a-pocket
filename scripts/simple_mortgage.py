@@ -37,10 +37,11 @@ prof = st.session_state.app_db.get('profile', {})
 p1_name = prof.get('p1_name')
 p2_name = prof.get('p2_name')
 
+# FIX 1: Use HTML <b> tags instead of Markdown ** for the intro text
 if p1_name:
     household_name = f"{p1_name} & {p2_name}" if p2_name else p1_name
     intro_header = f"Strategy for {household_name}"
-    intro_text = f"**{household_name}**, most people focus on the monthly payment. Wealthy investors focus on the **Interest Curve**. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
+    intro_text = f"<b>{household_name}</b>, most people focus on the monthly payment. Wealthy investors focus on the <b>Interest Curve</b>. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
 else:
     intro_header = "Strategy First, Math Second"
     intro_text = "Most people focus on the monthly payment. Wealthy investors focus on the <b>Interest Curve</b>. Use this tool to see how small 'micro-payments' can destroy your debt years ahead of schedule."
@@ -51,9 +52,12 @@ aff_data = st.session_state.app_db.get('affordability', {})
 
 # 1. Pull Price & Down Payment (Only if empty)
 if 'price' not in sm_data or sm_data['price'] == 0:
+    # Try max purchase first, otherwise try loan_cap logic
     aff_price = aff_data.get('max_purchase', 0)
     if aff_price == 0:
         aff_price = aff_data.get('loan_cap', 0) + aff_data.get('down_payment', 0)
+    
+    # Only overwrite if we found real data
     if aff_price > 0: sm_data['price'] = int(aff_price)
 
 if 'down' not in sm_data or sm_data['down'] == 0:
