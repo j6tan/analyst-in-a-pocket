@@ -2,28 +2,20 @@ import streamlit as st
 from supabase import create_client, Client
 
 # --- 1. DEFAULT DATABASE (Fallback System) ---
-# If Supabase is empty or keys are missing, these values will load.
 DEFAULT_DB = {
     "profile": {
-        "province": "BC",
+        "province": "BC", 
         "housing_status": "Renting",
-        "p1_t4": 0.0,
-        "p2_t4": 0.0,
-        "m_rate": 4.5,
-        "m_amort": 25.0,
-        "p1_name": "Client",
+        "p1_t4": 0, "p2_t4": 0, 
+        "m_rate": 4.5, "m_amort": 25.0
     },
     "budget": {
-        "groceries": 600.0,
-        "dining": 300.0,
-        "utilities": 150.0,
-        "gas_transit": 200.0,
-        "misc": 100.0
+        "groceries": 600, "dining": 300, 
+        "utilities": 150, "gas_transit": 200
     },
     "affordability": {
-        "bank_rate": 4.5,
-        "prop_taxes": 3000.0,
-        "heat": 150.0
+        "bank_rate": 4.5, 
+        "prop_taxes": 3000, "heat": 150
     }
 }
 
@@ -75,10 +67,6 @@ def sync_widget(key_path):
         
         if widget_id in st.session_state:
             val = st.session_state[widget_id]
-            # Ensure we save as standard types to avoid JSON issues
-            if isinstance(val, (int, float)):
-                val = float(val)
-            
             if section not in st.session_state.app_db:
                 st.session_state.app_db[section] = {}
             st.session_state.app_db[section][key] = val
@@ -101,18 +89,13 @@ def load_user_data(user_id):
                     if isinstance(content, dict):
                         for key, value in content.items():
                             widget_id = f"{section}_{key}"
-                            
-                            # Pre-convert to float to help widgets
-                            if isinstance(value, int):
-                                value = float(value)
-                                
                             st.session_state[widget_id] = value
                             
                 st.toast(f"✅ Data Loaded", icon="📂")
     except Exception as e:
         st.error(f"Sync Error: {e}")
 
-# --- 6. SMART INPUT (THE FIX) ---
+# --- 6. SMART INPUT (INTEGER / FLOAT DETECTOR) ---
 def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     init_session_state()
     if section not in st.session_state.app_db: st.session_state.app_db[section] = {}
@@ -122,51 +105,39 @@ def cloud_input(label, section, key, input_type="number", step=None, **kwargs):
     # 1. FETCH SOURCES
     state_val = st.session_state.get(widget_id)
     db_val = st.session_state.app_db[section].get(key)
-    default_val = DEFAULT_DB.get(section, {}).get(key) # Fallback
+    default_val = DEFAULT_DB.get(section, {}).get(key)
     
-    # 2. DETERMINE "TRUE" VALUE (Priority: DB > Default)
+    # 2. DETERMINE "TRUE" VALUE
     final_val = None
-    
-    # Priority A: Database Value
     if db_val is not None and str(db_val).strip() != "":
-        try:
-            final_val = float(db_val) if input_type == "number" else str(db_val)
-        except: pass
-        
-    # Priority B: Default Value (Only if DB is empty/missing)
-    if final_val is None:
+        final_val = db_val
+    elif final_val is None:
         if default_val is not None:
-            final_val = float(default_val) if input_type == "number" else str(default_val)
+            final_val = default_val
 
-    # 3. TYPE ENFORCEMENT (STRICT)
-    # This logic forces the session state to match the widget type exactly.
-    if final_val is not None:
-        should_update = False
-        
-        if input_type == "number":
-             final_val = float(final_val) # Ensure Float
-             
-             # Case 1: State is missing
-             if state_val is None: 
-                 should_update = True
-             # Case 2: State is wrong Type (e.g. Int instead of Float)
-             elif not isinstance(state_val, float): 
-                 should_update = True
-             # Case 3: Values differ
-             elif state_val != final_val: 
-                 should_update = True
-        else:
-             final_val = str(final_val)
-             if state_val != final_val: 
-                 should_update = True
-                 
-        if should_update:
-            st.session_state[widget_id] = final_val
+    # 3. TYPE ENFORCEMENT BASED ON STEP
+    # If step is Float (0.1), we force Float.
+    # If step is Int (100) or None, we force Int.
+    if input_type == "number" and final_val is not None:
+        try:
+            is_float_mode = isinstance(step, float)
+            
+            if is_float_mode:
+                final_val = float(final_val)
+            else:
+                final_val = int(float(final_val)) # Handle "100.0" -> 100
+                
+            # Update Session State if mismatched
+            if state_val != final_val:
+                st.session_state[widget_id] = final_val
+        except:
+            pass
 
     # 4. RENDER WIDGET
     if input_type == "number":
-        # Final safety: if still missing, default to 0.0
-        if widget_id not in st.session_state: st.session_state[widget_id] = 0.0
+        # Default fallback
+        if widget_id not in st.session_state: 
+            st.session_state[widget_id] = 0.0 if isinstance(step, float) else 0
         
         st.number_input(
             label, step=step, key=widget_id, 
