@@ -91,6 +91,7 @@ pages = {
         st.Page("scripts/renewal_scenario.py", title=renewal_label, icon=renewal_icon),
         st.Page("scripts/rental_vs_stock.py", title=duel_label, icon=duel_icon),
         st.Page("scripts/smith_maneuver.py", title=smith_label, icon=smith_icon),
+        st.Page("scripts/rental_analyzer.py", title=rental_label, icon=rental_icon),
     ],
     "Account": [
         st.Page("scripts/membership.py", title="Membership 💎", icon="💎"),
@@ -142,3 +143,4 @@ if pg.title in pro_titles and not is_pro:
         st.markdown(card_html, unsafe_allow_html=True)
 
 pg.run()
+
