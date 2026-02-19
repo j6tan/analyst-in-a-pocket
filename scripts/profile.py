@@ -1,24 +1,19 @@
 import streamlit as st
 import time
 from style_utils import inject_global_css
-from data_handler import cloud_input, load_user_data, supabase, sync_widget
+from data_handler import cloud_input, load_user_data, supabase, sync_widget, init_session_state
 
-# 1. Inject Style
+# --- 1. UNIVERSAL AUTO-LOADER (CRITICAL) ---
+init_session_state()
+# If we have a username but the DB is empty, FORCE A LOAD
+if st.session_state.get('username') and not st.session_state.app_db.get('profile', {}).get('p1_name'):
+    with st.spinner("🔄 restoring your data..."):
+        load_user_data(st.session_state.username)
+        time.sleep(0.1)
+        st.rerun()
+
+# 2. Inject Style
 inject_global_css()
-
-# --- 2. SMART DATA LOADER ---
-if 'app_db' not in st.session_state:
-    st.session_state.app_db = {}
-
-profile_data = st.session_state.app_db.get('profile', {})
-is_empty = not profile_data.get('p1_name')
-
-if is_empty and st.session_state.get('username'):
-    user_id = st.session_state.username
-    with st.spinner(f"🔄 Fetching data for {user_id}..."):
-        load_user_data(user_id)
-        time.sleep(0.5) 
-        st.rerun() 
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
@@ -26,30 +21,27 @@ st.divider()
 
 st.title("👤 General Client Information")
 
-if supabase:
-    st.caption("🟢 Cloud Status: **Online & Synced**")
-else:
-    st.error("🔴 Cloud Status: **Offline** (Check Secrets)")
-
 # --- SECTION 1: INCOME ---
 st.subheader("👥 Household Income Details")
 c1, c2 = st.columns(2)
 with c1:
     st.markdown("### Primary Client")
+    # TEXT INPUTS for Names
     cloud_input("Full Name", "profile", "p1_name", input_type="text")
-    cloud_input("T4 (Employment Income)", "profile", "p1_t4", step=1000.0)
-    cloud_input("Bonuses / Performance Pay", "profile", "p1_bonus", step=500.0)
-    cloud_input("Commissions", "profile", "p1_commission", step=500.0)
-    cloud_input("Pension / CPP / OAS", "profile", "p1_pension", step=100.0)
+    # INTEGER INPUTS for Salary (step=1000)
+    cloud_input("T4 (Employment Income)", "profile", "p1_t4", step=1000)
+    cloud_input("Bonuses / Performance Pay", "profile", "p1_bonus", step=500)
+    cloud_input("Commissions", "profile", "p1_commission", step=500)
+    cloud_input("Pension / CPP / OAS", "profile", "p1_pension", step=100)
 with c2:
     st.markdown("### Co-Owner / Partner")
     cloud_input("Full Name ", "profile", "p2_name", input_type="text")
-    cloud_input("T4 (Employment Income) ", "profile", "p2_t4", step=1000.0)
-    cloud_input("Bonuses / Performance Pay ", "profile", "p2_bonus", step=500.0)
-    cloud_input("Commissions ", "profile", "p2_commission", step=500.0)
-    cloud_input("Pension / CPP / OAS ", "profile", "p2_pension", step=100.0)
+    cloud_input("T4 (Employment Income) ", "profile", "p2_t4", step=1000)
+    cloud_input("Bonuses / Performance Pay ", "profile", "p2_bonus", step=500)
+    cloud_input("Commissions ", "profile", "p2_commission", step=500)
+    cloud_input("Pension / CPP / OAS ", "profile", "p2_pension", step=100)
 
-cloud_input("Joint Rental Income (Current Portfolio)", "profile", "inv_rental_income", step=100.0)
+cloud_input("Joint Rental Income (Current Portfolio)", "profile", "inv_rental_income", step=100)
 st.divider()
 
 # --- SECTION 2: HOUSING ---
@@ -58,6 +50,7 @@ h_toggle, h_data = st.columns([1, 2])
 
 with h_toggle:
     status_options = ["Renting", "Owning"]
+    # Manual sync for Radio Button
     curr_status = st.session_state.app_db['profile'].get('housing_status', 'Renting')
     if curr_status not in status_options: curr_status = "Renting"
     
@@ -72,16 +65,17 @@ with h_toggle:
 
 with h_data:
     if st.session_state.app_db['profile'].get('housing_status') == "Renting":
-        cloud_input("Monthly Rent ($)", "profile", "rent_pmt", step=50.0)
+        cloud_input("Monthly Rent ($)", "profile", "rent_pmt", step=50)
     else:
         sub_c1, sub_c2 = st.columns(2)
         with sub_c1:
-            cloud_input("Current Mortgage Balance ($)", "profile", "m_bal", step=1000.0)
+            cloud_input("Current Mortgage Balance ($)", "profile", "m_bal", step=1000)
+            # FLOAT for Rate (step=0.1)
             cloud_input("Current Interest Rate (%)", "profile", "m_rate", step=0.1)
         with sub_c2:
             cloud_input("Remaining Amortization (Years)", "profile", "m_amort", step=1.0)
-            cloud_input("Annual Property Taxes ($)", "profile", "prop_taxes", step=100.0)
-            cloud_input("Estimated Monthly Heating ($)", "profile", "heat_pmt", step=10.0)
+            cloud_input("Annual Property Taxes ($)", "profile", "prop_taxes", step=100)
+            cloud_input("Estimated Monthly Heating ($)", "profile", "heat_pmt", step=10)
 
 st.divider()
 
@@ -89,17 +83,16 @@ st.divider()
 st.subheader("💳 Monthly Liabilities")
 l1, l2, l3 = st.columns(3)
 with l1:
-    cloud_input("Car Loan Payments (Monthly)", "profile", "car_loan", step=50.0)
-    cloud_input("Student Loan Payments (Monthly)", "profile", "student_loan", step=50.0)
+    cloud_input("Car Loan Payments (Monthly)", "profile", "car_loan", step=50)
+    cloud_input("Student Loan Payments (Monthly)", "profile", "student_loan", step=50)
 with l2:
-    cloud_input("Credit Card Payments (Monthly)", "profile", "cc_pmt", step=50.0)
-    cloud_input("Total LOC Balance ($)", "profile", "loc_balance", step=500.0)
+    cloud_input("Credit Card Payments (Monthly)", "profile", "cc_pmt", step=50)
+    cloud_input("Total LOC Balance ($)", "profile", "loc_balance", step=500)
 with l3:
     prov_options = ["Ontario", "BC", "Alberta", "Quebec", "Manitoba", "Saskatchewan", "Nova Scotia", "NB", "PEI", "NL"]
     curr_prov = st.session_state.app_db['profile'].get('province', 'Ontario')
     if curr_prov not in prov_options: curr_prov = "Ontario"
     
-    # FIXED: Uses standard key 'profile_province' to match Sync Engine
     st.selectbox(
         "Province", 
         prov_options, 
@@ -109,13 +102,4 @@ with l3:
         args=("profile:province",)
     )
 
-st.success("✅ Financial Passport updated and synchronized with Cloud Vault.")
-
-# --- DEBUG SECTION ---
-with st.expander("🕵️ Data Debugger (Use this to check values)"):
-    st.markdown("### Raw Database Record (app_db)")
-    st.json(st.session_state.app_db.get("profile", "No Data Loaded"))
-    
-    st.markdown("### Widget State (What you see)")
-    debug_keys = ["profile_p1_t4", "profile_p1_name", "profile_m_bal"]
-    st.write({k: st.session_state.get(k, "Not in State") for k in debug_keys})
+st.success("✅ Profile Updated.")
