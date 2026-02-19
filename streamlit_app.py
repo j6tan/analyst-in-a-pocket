@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import os
+import textwrap
 from style_utils import inject_global_css
 from data_handler import init_session_state
 
@@ -16,19 +17,16 @@ inject_global_css()
 # --- 2. DATA INIT ---
 init_session_state()
 
-# --- 3. AUTHENTICATION SYSTEM (Multi-User Test Registry) ---
-# Define your verified test accounts
+# --- 3. AUTHENTICATION SYSTEM ---
 VALID_USERS = {
     "dori": "pass123",
     "kevin": "pass456",
     "analyst_test": "paid123"
 }
 
-# --- 3. AUTHENTICATION SYSTEM (Sidebar) ---
 with st.sidebar:
     st.image("logo.png", width=100) if os.path.exists("logo.png") else None
     
-    # Block A: Login Form
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
         with st.form("login_form"):
@@ -44,8 +42,6 @@ with st.sidebar:
                     st.rerun()
                 else:
                     st.error("Invalid Username or Password")
-    
-    # Block B: Logout View
     else:
         st.success(f"Welcome, {st.session_state.username.capitalize()}")
         if st.button("Logout"):
@@ -55,22 +51,25 @@ with st.sidebar:
                 del st.session_state['app_db']
             st.rerun()
 
-    # --- THE FIX: THIS PART IS NOW INDEPENDENT ---
     st.divider() 
 
-# --- 4. DYNAMIC NAVIGATION SETUP (Option A) ---
+# --- 4. DYNAMIC NAVIGATION SETUP ---
 is_pro = st.session_state.get("is_pro", False)
 
 # Helper to create Pro labels and icons
 def get_pro_meta(label, icon, is_pro):
     return (label if is_pro else f"{label} 🔒"), (icon if is_pro else "🔒")
 
-# Define Dynamic Metadata for Pro Tools
+# FIXED: DEFINE ALL LABELS BEFORE THE PAGES DICTIONARY
 mort_label, mort_icon = get_pro_meta("Mortgage Scenarios", "📈", is_pro)
 smith_label, smith_icon = get_pro_meta("Smith Maneuver", "💰", is_pro)
 second_label, second_icon = get_pro_meta("Secondary Property", "🏢", is_pro)
 renewal_label, renewal_icon = get_pro_meta("Renewal Scenario", "🔄", is_pro)
 duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
+
+# Define label and icon for the new free tool
+pvi_label = "Debt vs. Equity"
+pvi_icon = "📉"
 
 pages = {
     "Overview": [
@@ -82,11 +81,11 @@ pages = {
         st.Page("scripts/buy_vs_rent.py", title="Buy vs Rent", icon="⚖️"),
         st.Page("scripts/affordability.py", title="Simple Affordability", icon="🤔"),
         st.Page("scripts/simple_mortgage.py", title="Mortgage Calculator", icon="🏠"),
-        st.Page("scripts/pay_vs_invest.py", title="Debt vs. Equity", icon="📉"),
         st.Page("scripts/sales_proceeds.py", title="Seller Proceeds", icon="💰"),
+        # INTEGRATED AS A FREE TOOL
+        st.Page("scripts/pay_vs_invest.py", title=pvi_label, icon=pvi_icon), 
     ],
     "Advanced Wealth Strategy": [
-        st.Page("scripts/pay_vs_invest.py", title=pvi_label, icon=pvi_icon),
         st.Page("scripts/mortgage_scenario.py", title=mort_label, icon=mort_icon),
         st.Page("scripts/affordability_second.py", title=second_label, icon=second_icon),
         st.Page("scripts/renewal_scenario.py", title=renewal_label, icon=renewal_icon),
@@ -101,14 +100,10 @@ pages = {
 
 pg = st.navigation(pages)
 
-# --- 5. THE "SIDEBAR INJECTION" PAYWALL (Formatting Fixed) ---
-import textwrap # Import this to fix indentation issues
-
+# --- 5. THE "SIDEBAR INJECTION" PAYWALL ---
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label]
 
 if pg.title in pro_titles and not is_pro:
-    
-    # 1. CSS: Blur the background
     st.markdown("""
         <style>
             [data-testid="stMain"] {
@@ -121,10 +116,7 @@ if pg.title in pro_titles and not is_pro:
         </style>
     """, unsafe_allow_html=True)
 
-    # 2. HTML: The Membership Card (Using dedent to fix the raw text error)
     clean_title = pg.title.replace(' 🔒', '')
-    
-    # We strip all indentation from this string so Markdown doesn't treat it as code
     card_html = textwrap.dedent(f"""
         <div style="position: fixed; top: 50%; left: 55%; transform: translate(-50%, -50%); z-index: 999999; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 25px 50px rgba(0,0,0,0.5); text-align: center; width: 500px; border: 2px solid #CEB36F; pointer-events: auto; font-family: sans-serif;">
             <div style="font-size: 60px; margin-bottom: 15px;">💎</div>
@@ -146,26 +138,7 @@ if pg.title in pro_titles and not is_pro:
         </div>
     """)
 
-    # 3. Inject it via Sidebar (Safe from the blur)
     with st.sidebar:
         st.markdown(card_html, unsafe_allow_html=True)
 
-    # The script continues running below, generating the blurred charts in the background.
-
 pg.run()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
