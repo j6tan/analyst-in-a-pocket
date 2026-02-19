@@ -65,6 +65,9 @@ if not br_store.get('initialized'):
 
 # --- 4. CALCULATION ENGINE ---
 def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
+    # SAFETY: Ensure years is at least 1 to prevent empty dataframe crash
+    if years < 1: years = 1
+    
     loan = price - dp
     m_rate = (rate/100)/12
     n_months = 30 * 12 # Standard 30 year amort for calc
@@ -129,7 +132,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 6. INPUTS (FIXED: Integers for Money, Floats for Rates) ---
+# --- 6. INPUTS ---
 col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("🏠 Homeownership Path")
@@ -145,7 +148,11 @@ with col_right:
     rent = cloud_input("Current Monthly Rent ($)", "buy_vs_rent", "rent", step=100)
     rent_inc = cloud_input("Annual Rent Increase (%)", "buy_vs_rent", "rent_inc", step=0.1)
     stock_ret = cloud_input("Target Stock Return (%)", "buy_vs_rent", "stock_ret", step=0.1)
-    years = cloud_input("Analysis Horizon (Years)", "buy_vs_rent", "years", step=1)
+    # FIX: Added min_value=1 to prevent crash
+    years = cloud_input("Analysis Horizon (Years)", "buy_vs_rent", "years", step=1, min_value=1)
+
+# Ensure years is at least 1 even if DB says 0
+if years < 1: years = 1
 
 df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
