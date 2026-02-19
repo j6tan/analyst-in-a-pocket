@@ -128,39 +128,45 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 9. STRATEGIC COMMENTARY (NEW SECTION) ---
-st.subheader("💡 Strategic Insights: Beyond the Numbers")
-st_col1, st_col2 = st.columns(2)
+# --- 9. STRATEGIC INSIGHTS: THE SHORT VERSION ---
+st.divider()
+st.subheader("💡 Strategic Verdict")
 
-with st_col1:
-    st.markdown("### 🔄 The Acceleration Factor")
-    st.write(f"""
-    Many people feel that paying down a mortgage "accelerates" faster because it reduces the balance. 
-    Mathematically, **this is identical to compounding.** * Paying down a **{m_rate}%** mortgage is a **guaranteed {m_rate}% return**. 
-    * Investing in a TFSA at **{stock_return}%** is a **projected {stock_return}% return**. 
-    If the mortgage and stock rates were the same, your net worth would be identical in both paths.
-    """)
-    
-    st.markdown("### 🛡️ The Risk Premium")
-    st.write(f"""
-    The "Spread" is the extra return you get for taking on market risk. 
-    In your case, the stock market is projected to outperform the mortgage by **{abs(net_growth_ann - m_rate):.1f}%** annually. 
-    Is that extra profit worth the fact that stocks can go down, while your mortgage interest is a certain cost?
+# Using a Grid for scannability
+i_col1, i_col2 = st.columns(2)
+
+with i_col1:
+    st.markdown(f"""
+    **🏠 Mortgage: The Guaranteed Path**
+    * **Return:** Fixed at **{m_rate}%** (Tax-Free).
+    * **Impact:** Every $1,000 paid now kills interest for the next {amort} years.
+    * **Downside:** Capital is **trapped** in the house.
     """)
 
-with st_col2:
-    st.markdown("### 💧 Liquidity & Flexibility")
-    st.write("""
-    **Mortgage paydown is "trapped" wealth.** Once money is in the house, you usually need a loan (HELOC) or a sale to get it back. 
-    **Stocks are liquid wealth.** In a TFSA or Non-Reg account, you can access your cash in days for emergencies or opportunities. 
-    Even if the math favors the mortgage, many keep a stock portfolio for the flexibility it provides.
+with i_col2:
+    st.markdown(f"""
+    **📈 Stocks: The Growth Path**
+    * **Return:** Projected **{stock_return}%** (**{net_growth_ann:.2f}%** After-Tax).
+    * **Spread:** You earn an extra **{abs(net_growth_ann - m_rate):.1f}%** for taking market risk.
+    * **Upside:** Capital is **liquid** and accessible in days.
     """)
-    
-    st.markdown("### 🏛️ The Tax Reality")
-    st.write(f"""
-    Mortgage payoff is a **tax-free return**. 
-    In a {acc_type} account, your 8.0% return becomes **{net_growth_ann:.2f}%** after the CRA takes their share. 
-    The tool has automatically adjusted for your marginal tax bracket of **{marginal_tax}%** to ensure a true comparison.
-    """)
+
+st.info(f"""
+**The "Acceleration" Myth:** Paying down a mortgage feels faster because the balance drops, but mathematically, 
+it is identical to compounding wealth in a TFSA. If the rates were equal, the outcome is the same.
+""")
+
+# --- 10. RESILIENCE CHECK ---
+st.write("")
+r_col1, r_col2 = st.columns(2)
+with r_col1:
+    if fv_stock > fv_mortgage:
+        st.success(f"✅ **Math Favors Stocks:** You gain **${abs(fv_stock - fv_mortgage):,.0f}** extra by chasing the market spread.")
+    else:
+        st.success(f"✅ **Math Favors Mortgage:** High taxes or low returns make the guaranteed payoff the winner.")
+
+with r_col2:
+    # Adding a psychological sanity check
+    st.warning(f"⚠️ **Psychology Check:** If market volatility makes you lose sleep, the **{m_rate}% guaranteed return** of debt-paydown is a massive emotional win.")
 
 show_disclaimer()
