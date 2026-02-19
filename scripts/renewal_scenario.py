@@ -7,7 +7,7 @@ import json
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase
 
-# 1. Inject the Wealthsimple-inspired Editorial CSS
+# 1. Inject Style
 inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
@@ -35,13 +35,12 @@ name1 = prof.get('p1_name', 'Client')
 name2 = prof.get('p2_name', '')
 household = f"{name1} & {name2}" if name2 else name1
 
-# --- 3. PERSISTENCE & INITIALIZATION (SYNCED TO PROFILE) ---
+# --- 3. PERSISTENCE & INITIALIZATION ---
 if "renewal_analysis" not in st.session_state.app_db:
     st.session_state.app_db['renewal_analysis'] = {}
 
 ren_store = st.session_state.app_db['renewal_analysis']
 
-# FORCE RE-SYNC FROM PROFILE IF VALUES ARE MISSING OR ZERO
 if not ren_store.get('initialized'):
     ren_store.update({
         "balance": float(prof.get('m_bal', 500000.0)),
@@ -55,13 +54,10 @@ if not ren_store.get('initialized'):
 
 # --- 4. PAGE HEADER ---
 header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col1:
-    if os.path.exists("logo.png"):
-        st.image("logo.png", width=140)
 with header_col2:
     st.title("Renewal Strategy: Fixed vs. Variable")
 
-# --- 5. STORYTELLING SECTION ---
+# --- 5. STORYTELLING ---
 name1_only = name1.split()[0]
 name2_only = name2.split()[0] if name2 else "the market"
 
@@ -110,11 +106,10 @@ def simulate_renewal_v3(balance, amort_rem, fixed_rate, var_start, target_rate, 
         })
     return history
 
-# --- 7. INPUTS (SYNCED TO PROFILE & RENAMED) ---
+# --- 7. INPUTS ---
 col1, col2 = st.columns(2)
 with col1:
     st.subheader("🏦 Current Mortgage")
-    # RENAMED LABELS & PROFILE DEFAULTS
     balance = cloud_input("Remaining Mortgage Balance ($)", "renewal_analysis", "balance", step=1000.0) 
     amort = cloud_input("Remaining Am (Years)", "renewal_analysis", "amort", step=1.0) 
     fixed_quote = cloud_input("Fixed Rate Quote (%)", "renewal_analysis", "fixed_quote", step=0.01)
@@ -124,18 +119,15 @@ with col2:
     var_start = cloud_input("Current Variable Rate (%)", "renewal_analysis", "var_start", step=0.01)
     target_rate = cloud_input("I expect the rate to reach (%)", "renewal_analysis", "target_rate", step=0.25)
     
-    st.write("")
     months_to_reach = st.slider("Months until it hits that target?", 1, 60, value=int(ren_store.get('months_to_reach', 12)), key="renewal_analysis:months_to_reach", on_change=sync_widget, args=("renewal_analysis:months_to_reach",))
-    
-    st.write("")
     worst_case = st.toggle("🔥 Stress Test: 'Stay-High' Scenario", help="Simulates variable rates never dropping.")
 
-# Execute Logic
 final_target = var_start if worst_case else target_rate
 history = simulate_renewal_v3(balance, amort, fixed_quote, var_start, final_target, months_to_reach)
 df = pd.DataFrame(history)
+df["Year"] = df["Month"] / 12 # Convert for plotting
 
-# --- 8. METRICS & VERDICT ---
+# --- 8. METRICS ---
 st.divider()
 final = history[-1]
 res1, res2 = st.columns(2)
@@ -144,38 +136,37 @@ res2.metric("Final Variable Payment (Forecast)", f"${final['V_Pmt']:,.2f}")
 
 if final['Cum_V_Int'] < final['Cum_F_Int']:
     diff = final['Cum_F_Int'] - final['Cum_V_Int']
-    st.success(f"🎯 **The Verdict: The Variable Path Wins.** Based on this forecast, **{name2_only}** is correct. Total interest savings: **${diff:,.0f}**.")
+    st.success(f"🎯 **The Verdict: The Variable Path Wins.** Total interest savings: **${diff:,.0f}**.")
 else:
     diff = final['Cum_V_Int'] - final['Cum_F_Int']
-    st.error(f"🛡️ **The Verdict: The Fixed Path Wins.** **{name1_only}** is correct. The Variable path costs **${diff:,.0f}** MORE in interest.")
+    st.error(f"🛡️ **The Verdict: The Fixed Path Wins.** The Variable path costs **${diff:,.0f}** MORE in interest.")
 
-# --- 9. CHARTS ---
+# --- 9. CHARTS (UPDATED TO YEARS) ---
 st.markdown("### 📊 Deep Dive Analysis")
 tab1, tab2, tab3 = st.tabs(["Rate Path", "Payment Change", "Cumulative Interest"])
 
 with tab1:
     fig_rate = go.Figure()
-    fig_rate.add_trace(go.Scatter(x=df["Month"], y=df["V_Rate"], name="Variable Rate", line=dict(color=PRIMARY_GOLD, width=3)))
-    fig_rate.add_trace(go.Scatter(x=df["Month"], y=df["F_Rate"], name="Fixed Rate", line=dict(color=CHARCOAL, dash='dash')))
-    fig_rate.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
+    fig_rate.add_trace(go.Scatter(x=df["Year"], y=df["V_Rate"], name="Variable Rate", line=dict(color=PRIMARY_GOLD, width=3), hovertemplate='Year %{x:.1f}: %{y:.2f}%'))
+    fig_rate.add_trace(go.Scatter(x=df["Year"], y=df["F_Rate"], name="Fixed Rate", line=dict(color=CHARCOAL, dash='dash')))
+    fig_rate.update_layout(plot_bgcolor="white", height=350, xaxis_title="Years", margin=dict(t=20, b=20))
     fig_rate.update_yaxes(ticksuffix="%")
     st.plotly_chart(fig_rate, use_container_width=True)
 
 with tab2:
     fig_pmt = go.Figure()
-    fig_pmt.add_trace(go.Scatter(x=df["Month"], y=df["V_Pmt"], name="Variable Payment", line=dict(color=PRIMARY_GOLD, width=3)))
-    fig_pmt.add_trace(go.Scatter(x=df["Month"], y=df["F_Pmt"], name="Fixed Payment", line=dict(color=CHARCOAL, dash='dash')))
-    fig_pmt.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
+    fig_pmt.add_trace(go.Scatter(x=df["Year"], y=df["V_Pmt"], name="Variable Payment", line=dict(color=PRIMARY_GOLD, width=3), hovertemplate='Year %{x:.1f}: $%{y:,.0f}'))
+    fig_pmt.add_trace(go.Scatter(x=df["Year"], y=df["F_Pmt"], name="Fixed Payment", line=dict(color=CHARCOAL, dash='dash')))
+    fig_pmt.update_layout(plot_bgcolor="white", height=350, xaxis_title="Years", margin=dict(t=20, b=20))
     fig_pmt.update_yaxes(tickprefix="$")
     st.plotly_chart(fig_pmt, use_container_width=True)
 
 with tab3:
     fig_int = go.Figure()
-    fig_int.add_trace(go.Scatter(x=df["Month"], y=df["Cum_V_Int"], name="Total Var Interest", fill='tozeroy', line=dict(color=PRIMARY_GOLD)))
-    fig_int.add_trace(go.Scatter(x=df["Month"], y=df["Cum_F_Int"], name="Total Fixed Interest", line=dict(color=CHARCOAL, width=2)))
-    fig_int.update_layout(plot_bgcolor="white", height=350, margin=dict(t=20, b=20))
+    fig_int.add_trace(go.Scatter(x=df["Year"], y=df["Cum_V_Int"], name="Total Var Interest", fill='tozeroy', line=dict(color=PRIMARY_GOLD), hovertemplate='Year %{x:.1f}: $%{y:,.0f}'))
+    fig_int.add_trace(go.Scatter(x=df["Year"], y=df["Cum_F_Int"], name="Total Fixed Interest", line=dict(color=CHARCOAL, width=2)))
+    fig_int.update_layout(plot_bgcolor="white", height=350, xaxis_title="Years", margin=dict(t=20, b=20))
     fig_int.update_yaxes(tickprefix="$")
     st.plotly_chart(fig_int, use_container_width=True)
 
 show_disclaimer()
-
