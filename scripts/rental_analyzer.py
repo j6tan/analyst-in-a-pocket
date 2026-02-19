@@ -20,8 +20,8 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 2. BRANDING COLORS ---
-PRIMARY_GOLD_RGBA = [206, 179, 111, 255] 
-CHARCOAL_RGBA = [46, 43, 40, 255]       
+PRIMARY_GOLD_RGBA = [206, 179, 111, 255] # #CEB36F
+CHARCOAL_RGBA = [46, 43, 40, 255]       # #2E2B28
 DARK_RED = "#8B0000"
 SUCCESS_GREEN = "#28a745"
 
@@ -98,9 +98,9 @@ full_analysis_list = []
 for idx, l in enumerate(st.session_state.rental_listings):
     if l.get('lat') and l.get('lon'):
         noi, dp_amt, ann_mtg, net_cf, coc_ret, psf = 0, 0, 0, 0, 0, 0
+        gross_inc = l['rent'] * 12
         mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
-        gross_inc = l['rent'] * 12
         op_ex = l['tax'] + (l['strata'] * 12) + (l['ins'] * 12) + mgmt_cost + reserves
         
         if l['price'] > 0:
@@ -114,9 +114,7 @@ for idx, l in enumerate(st.session_state.rental_listings):
             coc_ret = (net_cf / dp_amt) * 100 if dp_amt > 0 else 0
             psf = l['price'] / l['sqft'] if l.get('sqft', 0) > 0 else 0
 
-        # Create Short Label for Map
         short_addr = l['address'].split(',')[0]
-
         full_analysis_list.append({
             "Address": l['address'], "ShortLabel": short_addr, "Price": l['price'], "Area (sqft)": l.get('sqft', 0),
             "PSF": psf, "Gross Annual Rent": gross_inc, "Annual OpEx": op_ex,
@@ -136,58 +134,41 @@ if full_analysis_list:
     with l_col2:
         st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 10px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
+    # Pydeck with Overlays
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
-    
     view_state = pdk.ViewState(latitude=df_results['lat'].mean(), longitude=df_results['lon'].mean(), zoom=11)
-    
-    # Layer 1: The Pins
-    scatter_layer = pdk.Layer(
-        "ScatterplotLayer", 
-        df_results, 
-        get_position='[lon, lat]', 
-        get_color='color', 
-        get_radius=150, 
-        pickable=True
-    )
-    
-    # Layer 2: The Text Labels
-    text_layer = pdk.Layer(
-        "TextLayer",
-        df_results,
-        get_position='[lon, lat]',
-        get_text="ShortLabel",
-        get_size=15,
-        get_color=CHARCOAL_RGBA,
-        get_alignment_baseline="'bottom'",
-        get_pixel_offset=[0, -15] # Move text above the pin
-    )
     
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
-        layers=[scatter_layer, text_layer],
+        layers=[
+            pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=150, pickable=True),
+            pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="ShortLabel", get_size=15, get_color=CHARCOAL_RGBA, get_alignment_baseline="'bottom'", get_pixel_offset=[0, -15])
+        ],
         tooltip={"text": "{Address}\nPrice: ${Price:,.0f}"}
     ))
 
-    # --- RANKING TABLE ---
+    # --- UPDATED RANKING TABLE (Stable Formatting) ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
         display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'ShortLabel', 'color'], errors='ignore')
+        
         st.dataframe(
             display_df, use_container_width=True, hide_index=True,
             column_config={
-                "Price": st.column_config.NumberColumn(format="$%,d"),
-                "Area (sqft)": st.column_config.NumberColumn(format="%,d"),
-                "PSF": st.column_config.NumberColumn(format="$%,d"),
-                "Gross Annual Rent": st.column_config.NumberColumn(format="$%,d"),
-                "Annual OpEx": st.column_config.NumberColumn(format="$%,d"),
-                "Annual Mortg": st.column_config.NumberColumn(format="$%,d"),
-                "Annual Net Cash Flow": st.column_config.NumberColumn(format="$%,d"),
+                "Price": st.column_config.NumberColumn(format="$%d"),
+                "Area (sqft)": st.column_config.NumberColumn(format="%d"),
+                "PSF": st.column_config.NumberColumn(format="$%d"),
+                "Gross Annual Rent": st.column_config.NumberColumn(format="$%d"),
+                "Annual OpEx": st.column_config.NumberColumn(format="$%d"),
+                "Annual Mortg": st.column_config.NumberColumn(format="$%d"),
+                "Annual Net Cash Flow": st.column_config.NumberColumn(format="$%d"),
                 "Cap Rate %": st.column_config.NumberColumn(format="%.2f%%"),
                 "CoC %": st.column_config.NumberColumn(format="%.2f%%")
             }
         )
 
+        # --- DEEP UNDERWRITING SUMMARY (Top Selection) ---
         st.subheader("💰 Deep Underwriting (Top Selection)")
         top = df_ranked.iloc[0]
         st.markdown(f"**Selected Listing:** {top['Address']}")
