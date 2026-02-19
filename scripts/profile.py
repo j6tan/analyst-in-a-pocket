@@ -110,3 +110,12 @@ with l3:
     )
 
 st.success("✅ Financial Passport updated and synchronized with Cloud Vault.")
+
+# --- DEBUG SECTION ---
+with st.expander("🕵️ Data Debugger (Use this to check values)"):
+    st.markdown("### Raw Database Record (app_db)")
+    st.json(st.session_state.app_db.get("profile", "No Data Loaded"))
+    
+    st.markdown("### Widget State (What you see)")
+    debug_keys = ["profile_p1_t4", "profile_p1_name", "profile_m_bal"]
+    st.write({k: st.session_state.get(k, "Not in State") for k in debug_keys})
