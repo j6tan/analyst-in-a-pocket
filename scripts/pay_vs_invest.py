@@ -40,6 +40,14 @@ p2_name = prof.get('p2_name', 'Kevin')
 p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
 
+if 'pay_vs_invest' not in st.session_state.app_db:
+    st.session_state.app_db['pay_vs_invest'] = {}
+pvi_data = st.session_state.app_db['pay_vs_invest']
+
+# Initialize default to 5 years to prevent "cut off" feeling
+if not pvi_data.get('initialized'):
+    pvi_data.update({"amort": 5, "initialized": True})
+
 # --- 4. HEADER ---
 st.title("Debt vs. Equity: The Wealth Choice")
 st.markdown(f"""
@@ -70,18 +78,15 @@ with col2:
     tax_owner = st.radio("Select Owner", list(tax_map.keys()), horizontal=True, key="pvi_tax_owner")
     marginal_tax = tax_map[tax_owner]
 
-# --- 6. CORE MATH ENGINE (THE FIX) ---
+# --- 6. CORE MATH ENGINE (Fixed for 0%) ---
 n_months = int(amort * 12)
-
-# Path A: Mortgage Paydown
 r_m_mo = (m_rate / 100) / 12
 if r_m_mo > 0:
     fv_mortgage = extra_amt * (((1 + r_m_mo)**n_months - 1) / r_m_mo)
 else:
-    fv_mortgage = extra_amt * n_months # The Fix for 0%
+    fv_mortgage = extra_amt * n_months # Fix for 0%
 interest_saved = fv_mortgage - (extra_amt * n_months)
 
-# Path B: Stock Market
 if acc_type == "TFSA":
     net_growth_ann = stock_return
 elif acc_type == "Non-Registered":
@@ -95,7 +100,7 @@ effective_monthly_dep = extra_amt / (1 - (marginal_tax/100)) if acc_type == "RRS
 if r_s_mo > 0:
     fv_stock = effective_monthly_dep * (((1 + r_s_mo)**n_months - 1) / r_s_mo)
 else:
-    fv_stock = effective_monthly_dep * n_months # The Fix for 0% growth
+    fv_stock = effective_monthly_dep * n_months # Fix for 0% growth
 
 if acc_type == "RRSP":
     fv_stock *= (1 - (marginal_tax / 100))
@@ -112,34 +117,27 @@ with k3:
 
 history = []
 for m in range(1, n_months + 1):
-    if r_m_mo > 0:
-        val_m = extra_amt * (((1 + r_m_mo)**m - 1) / r_m_mo)
-    else:
-        val_m = extra_amt * m
-        
-    if r_s_mo > 0:
-        val_s = effective_monthly_dep * (((1 + r_s_mo)**m - 1) / r_s_mo)
-    else:
-        val_s = effective_monthly_dep * m
-        
+    val_m = extra_amt * (((1 + r_m_mo)**m - 1) / r_m_mo) if r_m_mo > 0 else extra_amt * m
+    val_s = effective_monthly_dep * (((1 + r_s_mo)**m - 1) / r_s_mo) if r_s_mo > 0 else effective_monthly_dep * m
     if acc_type == "RRSP": val_s *= (1 - (marginal_tax / 100))
     history.append({"Year": m/12, "Mortgage Path": val_m, "Stock Path": val_s})
 
 df = pd.DataFrame(history)
 fig = go.Figure()
+# Synced with your brand's color palette
 fig.add_trace(go.Scatter(x=df['Year'], y=df['Stock Path'], name='Option B: Stock Portfolio', line=dict(color=CHARCOAL, width=4)))
 fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage Path'], name='Option A: Mortgage Savings', line=dict(color=PRIMARY_GOLD, width=4)))
 fig.update_layout(xaxis_title="Years", yaxis_title="Accumulated Wealth ($)", height=400, margin=dict(l=0,r=0,t=20,b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
 
-# --- 8. THE VERDICT ---
+# --- 8. THE VERDICT (Condensed & Corrected Font) ---
 winner = "Stock Market" if fv_stock > fv_mortgage else "Mortgage Paydown"
 diff = abs(fv_stock - fv_mortgage)
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 12px; border: 2px solid {PRIMARY_GOLD}; text-align: center; margin-bottom: 20px;">
     <h3 style="margin: 0; color: #2E2B28; font-size: 1.25em;">🏆 The Wealth Winner: {winner}</h3>
-    <p style="font-size: 1.0em; color: #4A4E5A; margin: 5px 0 0 0; line-height: 1.2;">
+    <p style="font-size: 0.95em; color: #4A4E5A; margin: 5px 0 0 0; line-height: 1.2;">
         Choosing the {winner} path creates <b>${diff:,.0f} more</b> in total wealth over {amort} years.
     </p>
 </div>
@@ -148,6 +146,7 @@ st.markdown(f"""
 # --- 9. STRATEGIC INSIGHTS ---
 st.subheader("💡 Strategic Verdict")
 i_col1, i_col2 = st.columns(2)
+
 with i_col1:
     st.markdown(f"""
     **🏠 Mortgage: The Guaranteed Path**
@@ -155,11 +154,12 @@ with i_col1:
     * **Impact:** Every $1,000 paid now kills interest for the next {amort} years.
     * **Downside:** Capital is **trapped** in the house.
     """)
+
 with i_col2:
     st.markdown(f"""
     **📈 Stocks: The Growth Path**
     * **Return:** Projected **{stock_return}%** (**{net_growth_ann:.2f}%** After-Tax).
-    * **Spread:** You earn an extra **{abs(net_growth_ann - m_rate):.1f}%** for taking market risk.
+    * **Spread:** You earn a premium for taking on market risk.
     * **Upside:** Capital is **liquid** and accessible in days.
     """)
 
