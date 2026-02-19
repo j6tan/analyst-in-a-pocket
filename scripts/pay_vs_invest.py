@@ -24,6 +24,7 @@ st.divider()
 PRIMARY_GOLD = "#CEB36F"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
+THEME_BROWN = "#8B4513" # Updated theme color for Option B
 
 def get_marginal_tax_rate(income):
     if income <= 55867: return 20.06
@@ -38,6 +39,10 @@ p1_name = prof.get('p1_name', 'Dori')
 p2_name = prof.get('p2_name', 'Kevin')
 p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
+
+if 'pay_vs_invest' not in st.session_state.app_db:
+    st.session_state.app_db['pay_vs_invest'] = {}
+pvi_data = st.session_state.app_db['pay_vs_invest']
 
 # --- 4. HEADER ---
 st.title("Debt vs. Equity: The Wealth Choice")
@@ -65,7 +70,7 @@ with col2:
     
     st.markdown("**Whose tax bracket applies?**")
     t1, t2 = get_marginal_tax_rate(p1_inc), get_marginal_tax_rate(p2_inc)
-    tax_map = {f"{p1_name} ({t1}%)": t1, f"{p2_name} ({t2}%)": t2}
+    tax_map = {f"{p1_name} ({t1}%)": t1, f"{p2_name} ({p2_inc/1000:,.0f}k → {t2}%)": t2}
     tax_owner = st.radio("Select Owner", list(tax_map.keys()), horizontal=True, key="pvi_tax_owner")
     marginal_tax = tax_map[tax_owner]
 
@@ -108,12 +113,13 @@ for m in range(1, n_months + 1):
 
 df = pd.DataFrame(history)
 fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['Year'], y=df['Stock Path'], name='Option B: Stock Portfolio', line=dict(color="#16A34A", width=4)))
+# CHANGED: Stock Portfolio color is now Brown
+fig.add_trace(go.Scatter(x=df['Year'], y=df['Stock Path'], name='Option B: Stock Portfolio', line=dict(color=THEME_BROWN, width=4)))
 fig.add_trace(go.Scatter(x=df['Year'], y=df['Mortgage Path'], name='Option A: Mortgage Savings', line=dict(color=PRIMARY_GOLD, width=4)))
-fig.update_layout(xaxis_title="Years", yaxis_title="Accumulated Wealth ($)", height=400, margin=dict(l=0,r=0,t=20,b=20))
+fig.update_layout(xaxis_title="Years", yaxis_title="Accumulated Wealth ($)", height=400, margin=dict(l=0,r=0,t=20,b=20), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 st.plotly_chart(fig, use_container_width=True)
 
-# --- 8. THE VERDICT (SHRUNK & REFINED) ---
+# --- 8. THE VERDICT ---
 winner = "Stock Market" if fv_stock > fv_mortgage else "Mortgage Paydown"
 diff = abs(fv_stock - fv_mortgage)
 
