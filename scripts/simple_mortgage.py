@@ -81,12 +81,12 @@ if 'rate' not in sm_data:
 # --- 2. TITLE SECTION ---
 st.title("🏡 Mortgage Strategy Calculator")
 st.markdown(f"""
-    <div style="background-color: #F8F9FA; padding: 20px; border-radius: 10px; border-left: 5px solid #CEB36F; margin-bottom: 25px;">
-        <h4 style="color: #4A4E5A; margin: 0 0 5px 0;">{intro_header}</h4>
-        <p style="color: #6C757D; font-size: 1.05em; margin: 0; line-height: 1.5;">
-            {intro_text}
-        </p>
-    </div>
+<div style="background-color: #F8F9FA; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid #CEB36F; margin-bottom: 25px;">
+    <h3 style="color: #4A4E5A; margin-top: 0; font-size: 1.4em;">⏱️ Strategic Brief: {intro_header}</h3>
+    <p style="color: #4A4E5A; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        {intro_text}
+    </p>
+</div>
 """, unsafe_allow_html=True)
 
 # --- 3. CALCULATION ENGINE ---
