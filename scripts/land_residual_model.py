@@ -31,6 +31,15 @@ BORDER_GREY = "#DEE2E6"
 SUCCESS_GREEN = "#16A34A"
 DANGER_RED = "#DC2626"
 
+# DYNAMIC CURRENCY FORMATTER
+def format_money(val):
+    sign = "-" if val < 0 else ""
+    val = abs(val)
+    if val >= 1_000_000:
+        return f"{sign}${val/1_000_000:,.2f}M"
+    else:
+        return f"{sign}${val:,.0f}"
+
 # --- 3. DATABASE INITIALIZATION ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
@@ -60,7 +69,6 @@ def load_market_intel():
     return {}
 
 intel = load_market_intel()
-# Includes the dynamic sell-out periods you requested
 default_costs = {
     "Single Family (Custom)": {"fsr": 0.6, "cost": 400, "sell_months": 6},
     "Multiplex / Missing Middle": {"fsr": 1.0, "cost": 320, "sell_months": 6},
@@ -93,7 +101,6 @@ with z_col1:
 with z_col2:
     prod_type = st.selectbox("Proposed Product Type", list(BUILD_COSTS.keys()))
 with z_col3:
-    # Auto-fill FSR based on product type, but allow override
     default_fsr = BUILD_COSTS[prod_type].get("fsr", 1.0)
     fsr = st.number_input("Floor Space Ratio (FSR/FAR)", value=default_fsr, step=0.1, help="Multiplier that determines max buildable square footage.")
 
@@ -172,13 +179,13 @@ st.divider()
 st.subheader("📊 The Verdict: Project Feasibility")
 
 if residual_land_value <= 0:
-    st.error(f"❌ **Project is unviable.** Under these assumptions, the land has negative value (${residual_land_value:,.0f}). You would need the seller to pay you to develop this lot.")
+    st.error(f"❌ **Project is unviable.** Under these assumptions, the land has negative value ({format_money(residual_land_value)}). You would need the seller to pay you to develop this lot.")
 else:
-    # Top Line Metrics
+    # Top Line Metrics (Now using the dynamic formatting function)
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Max Land Purchase Price", f"${residual_land_value/1000000:.2f}M", help=f"${residual_land_value:,.0f} exact")
-    m2.metric("Peak Capital Exposure", f"${peak_exposure/1000000:.2f}M", delta="Max Cash/Debt Needed", delta_color="inverse")
-    m3.metric("Projected Developer Profit", f"${target_profit/1000000:.2f}M", delta=f"{profit_margin}% Margin")
+    m1.metric("Max Land Purchase Price", format_money(residual_land_value), help=f"${residual_land_value:,.0f} exact")
+    m2.metric("Peak Capital Exposure", format_money(peak_exposure), delta="Max Cash/Debt Needed", delta_color="inverse")
+    m3.metric("Projected Developer Profit", format_money(target_profit), delta=f"{profit_margin}% Margin")
     m4.metric("Land Cost per Buildable SF", f"${rlv_per_buildable:,.0f}/SF")
 
     st.write("")
@@ -202,11 +209,11 @@ else:
         fillcolor='rgba(206, 179, 111, 0.2)'
     ))
     
-    # Add Peak Exposure Marker
+    # Add Peak Exposure Marker (Now using the dynamic formatting function)
     fig.add_annotation(
         x=const_months,
         y=peak_exposure,
-        text=f"Peak Exposure (-${abs(peak_exposure)/1000000:.1f}M)",
+        text=f"Peak Exposure ({format_money(peak_exposure)})",
         showarrow=True,
         arrowhead=2,
         arrowsize=1,
