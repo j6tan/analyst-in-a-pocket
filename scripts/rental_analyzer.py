@@ -54,7 +54,24 @@ def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     force_cloud_save()
 
-# --- 4. GLOBAL SETTINGS ---
+# --- 4. PERSONALIZED STORYTELLING ---
+# Dynamically pull names from the profile database
+p1 = st.session_state.app_db.get('profile', {}).get('p1_name', 'Client 1')
+p2 = st.session_state.app_db.get('profile', {}).get('p2_name', 'Client 2')
+
+# Create a clean, professional advisory message
+st.markdown(f"""
+<div style="background-color: #f8f9fa; border-left: 5px solid #CEB36F; padding: 20px; border-radius: 5px; margin-bottom: 25px;">
+    <h4 style="margin-top: 0; color: #2E2B28;">Building Your Real Estate Empire</h4>
+    <p style="margin-bottom: 0; font-size: 1.05rem; color: #4a4a4a;">
+        Welcome to the underwriting lab, <strong>{p1} and {p2}</strong>. This tool is designed to cut through the noise of the real estate market. 
+        By mapping prospective properties alongside key rental drivers like SkyTrains and grocery stores, we can instantly visualize which assets command the highest tenant demand. 
+        Adjust your global financing below, and the engine will automatically rank your prospective listings by <strong>Cash-on-Cash Return</strong>, stripping away emotion to highlight the absolute best mathematical fit for your portfolio.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 5. GLOBAL SETTINGS ---
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
     g_col1, g_col2, g_col3, g_col4 = st.columns(4)
@@ -81,7 +98,7 @@ with st.container(border=True):
         if curr_mgmt:
             cloud_input("Management Fee (%)", "rental_analyzer", "mgmt_fee", step=0.5)
 
-# --- 5. LISTING MANAGEMENT UI ---
+# --- 6. LISTING MANAGEMENT UI ---
 def geocode_address(index):
     if not geolocator: return
     addr = st.session_state.rental_listings[index]['address']
@@ -100,7 +117,6 @@ def geocode_address(index):
                 st.session_state.rental_listings[index]['address'] = clean_addr
                 force_cloud_save() 
                 st.toast(f"📍 Mapped & Saved: {clean_addr}")
-                # Removed redundant st.rerun() here to fix the "no-op" warning
         except Exception as e:
             st.warning(f"Map Service Error: {e}")
 
@@ -142,7 +158,7 @@ if len(st.session_state.rental_listings) < 10:
         force_cloud_save()
         st.rerun()
 
-# --- 6. CALCULATIONS ENGINE ---
+# --- 7. CALCULATIONS ENGINE ---
 full_analysis_list = []
 gs = st.session_state.app_db['rental_analyzer']
 calc_dp_mode, calc_dp_val, calc_m_rate, calc_m_amort = gs.get('dp_mode', 'Percentage (%)'), float(gs.get('dp_val', 20)), float(gs.get('m_rate', 5.1)), float(gs.get('m_amort', 25))
@@ -175,7 +191,7 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 7. FAST POI FETCHER ---
+# --- 8. FAST POI FETCHER ---
 @st.cache_data(ttl=86400, show_spinner=False) 
 def pull_osm_data(lat, lon, radius, poi_type):
     headers = {"User-Agent": "AnalystInAPocket/1.0"}
@@ -197,7 +213,7 @@ def pull_osm_data(lat, lon, radius, poi_type):
     except:
         return pd.DataFrame()
 
-# --- 8. VISUALS & RANKING ---
+# --- 9. VISUALS & RANKING ---
 if full_analysis_list:
     df_results = pd.DataFrame(full_analysis_list)
     df_ranked = df_results[df_results['Price'] > 0].sort_values(by="CoC %", ascending=False).reset_index(drop=True)
@@ -251,7 +267,7 @@ if full_analysis_list:
         tooltip={"text": "{HoverText}"} 
     ))
 
-    # --- RANKING TABLE ---
+    # --- 10. RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
         display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
