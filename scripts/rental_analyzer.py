@@ -6,6 +6,12 @@ import requests
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import init_session_state, load_user_data
 
+# FIX 1: Import the save function to push to Supabase
+try:
+    from data_handler import save_user_data
+except ImportError:
+    save_user_data = None
+
 # --- 1. CONFIG & AUTH ---
 init_session_state()
 inject_global_css()
@@ -28,12 +34,11 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS & DATABASE PERSISTENCE ---
-# Safety fallback for the app database
+# --- 3. GLOBAL SETTINGS & DATABASE SYNC ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Load directly from the core app database so it survives log-outs
+# Pull from database if it exists, otherwise use defaults
 if 'global_settings' not in st.session_state:
     st.session_state.global_settings = st.session_state.app_db.get('rental_globals', {
         'dp_mode': "Percentage (%)", 'dp_val': 20.0, 'm_rate': 5.1,
@@ -45,7 +50,6 @@ if 'rental_listings' not in st.session_state:
         {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
     ])
 
-# Callback functions now save directly to `app_db`
 def sync_global(field, key):
     st.session_state.global_settings[field] = st.session_state[key]
     st.session_state.app_db['rental_globals'] = st.session_state.global_settings
@@ -53,6 +57,16 @@ def sync_global(field, key):
 def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
+
+# EXPLICIT SAVE BUTTON: Prevents database spam and guarantees persistence
+if st.button("💾 Save Portfolio to Database", type="primary", use_container_width=True):
+    st.session_state.app_db['rental_globals'] = st.session_state.global_settings
+    st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
+    if save_user_data:
+        save_user_data(st.session_state.app_db)
+        st.success("✅ Portfolio successfully synced to your profile!")
+    else:
+        st.warning("Data saved to active session, but Supabase connection is offline.")
 
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
@@ -99,7 +113,7 @@ def geocode_address(index):
                 
                 clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
                 st.session_state.rental_listings[index]['address'] = clean_addr
-                st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings # Save coordinates to DB
+                st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
                 st.toast(f"📍 Added: {clean_addr}")
                 st.rerun()
         except Exception as e:
@@ -172,11 +186,8 @@ def fetch_investor_pois(lat, lon, radius, poi_type):
     headers = {"User-Agent": "AnalystInAPocket/1.0"}
     overpass_url = "http://overpass-api.de/api/interpreter"
     
-    query_map = {
-        "SkyTrain": '"railway"="station"',
-        "Grocery": '"shop"="supermarket"'
-    }
-    icon_map = {"SkyTrain": "🚆", "Grocery": "🛒"}
+    query_map = {"SkyTrain": '"railway"="station"', "Grocery": '"shop"="supermarket"'}
+    icon_map = {"SkyTrain": "T", "Grocery": "G"} # Reverted to bulletproof letter strings
     
     if poi_type not in query_map: return pd.DataFrame()
     tag = query_map[poi_type]
@@ -212,19 +223,16 @@ if full_analysis_list:
     st.divider()
     st.subheader("🗺️ Geographic Portfolio Distribution")
     
-    layer_col1, layer_col2, layer_col3, layer_col4 = st.columns([1.5, 1.5, 1.5, 2])
-    with layer_col1: show_skytrain = st.checkbox("🚆 SkyTrain Stations")
+    layer_col1, layer_col2, layer_col3, layer_col4 = st.columns([1.5, 1.5, 1, 2])
+    with layer_col1: show_skytrain = st.checkbox("🚇 SkyTrain Stations")
     with layer_col2: show_grocery = st.checkbox("🛒 Grocery Stores")
-    with layer_col3: show_catchments = st.checkbox("🎒 School Catchments")
     with layer_col4:
-        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="font-size:1.2em">🥇</span> Top Pick <span style="font-size:1.2em">🏠</span> Others</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
-    
-    # Generate the custom House Shapes
-    df_results['shape_icon'] = df_results.apply(lambda row: "🥇" if row['Address'] == best_addr else "🏠", axis=1)
-    df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
+    df_results['Rank_str'] = df_results['Rank'].astype(str) 
+    df_results['color_fill'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
     df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
 
     center_lat, center_lon = df_results['lat'].mean(), df_results['lon'].mean()
@@ -232,64 +240,26 @@ if full_analysis_list:
     
     map_layers = []
 
-    # 1. School Catchment Polygons (Fix: List parsing and Pickable=False)
-    if show_catchments:
-        mock_geojson = {
-            "type": "FeatureCollection",
-            "features": [{
-                "type": "Feature",
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [center_lon - 0.02, center_lat - 0.02],
-                        [center_lon + 0.02, center_lat - 0.02],
-                        [center_lon + 0.02, center_lat + 0.02],
-                        [center_lon - 0.02, center_lat + 0.02],
-                        [center_lon - 0.02, center_lat - 0.02]
-                    ]]
-                }
-            }]
-        }
-        
-        map_layers.append(pdk.Layer(
-            "GeoJsonLayer",
-            mock_geojson,
-            opacity=0.2,
-            stroked=True,
-            filled=True,
-            get_fill_color=[206, 179, 111, 80], # Fixed from string to list!
-            get_line_color=[46, 43, 40, 255],
-            line_width_min_pixels=3,
-            pickable=False # Fixes the weird hover box issue!
-        ))
-
-    # 2. Add POI Shapes (Scatterplot handles hover, TextLayer handles the shape)
-    def add_poi_badge(df, radius, color):
+    # THE FIX: Dual Layer Stacking (Circle + Text Overlay)
+    def add_bulletproof_badge(df, radius, color_rgb):
         if not df.empty:
-            df['color_col'] = [color] * len(df)
+            df['color_col'] = [color_rgb] * len(df)
+            # Bottom Layer: The colored circle (handles the hover tooltip)
             map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+            # Top Layer: The text letter/number perfectly centered (unpickable so it doesn't block hover)
+            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
+    # Add POI Badges
     if show_skytrain:
         df_train = fetch_investor_pois(center_lat, center_lon, 5000, "SkyTrain")
-        add_poi_badge(df_train, 150, [0, 102, 204, 220]) 
+        add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) # Solid Blue T
     if show_grocery:
         df_groc = fetch_investor_pois(center_lat, center_lon, 3000, "Grocery")
-        add_poi_badge(df_groc, 100, [40, 167, 69, 220])
+        add_bulletproof_badge(df_groc, 120, [40, 167, 69, 255]) # Solid Green G
 
-    # 3. Property House Shapes 
-    # The ScatterplotLayer is invisible (opacity 0) but holds the HoverText data securely.
-    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color=[0,0,0,0], get_radius=200, pickable=True))
-    map_layers.append(pdk.Layer(
-        "TextLayer", 
-        df_results, 
-        get_position='[lon, lat]', 
-        get_text="shape_icon", 
-        get_size=40, 
-        get_alignment_baseline="'center'", 
-        get_text_anchor="'middle'",
-        pickable=False
-    ))
+    # Property Layers
+    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color_fill', get_radius=200, pickable=True))
+    map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=22, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
@@ -300,7 +270,7 @@ if full_analysis_list:
     # --- RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
-        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'shape_icon', 'Rank', 'HoverText', 'color'], errors='ignore')
+        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'color_fill', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
         
         st.dataframe(
             display_df, use_container_width=True, hide_index=True,
