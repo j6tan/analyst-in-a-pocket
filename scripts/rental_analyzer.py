@@ -6,7 +6,7 @@ import requests
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import init_session_state, load_user_data
 
-# FIX 1: Import the save function to push to Supabase
+# Import the save function to push to Supabase automatically
 try:
     from data_handler import save_user_data
 except ImportError:
@@ -34,11 +34,10 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS & DATABASE SYNC ---
+# --- 3. GLOBAL SETTINGS & AUTO-SAVE DATABASE SYNC ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Pull from database if it exists, otherwise use defaults
 if 'global_settings' not in st.session_state:
     st.session_state.global_settings = st.session_state.app_db.get('rental_globals', {
         'dp_mode': "Percentage (%)", 'dp_val': 20.0, 'm_rate': 5.1,
@@ -50,23 +49,29 @@ if 'rental_listings' not in st.session_state:
         {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
     ])
 
+# THE FIX: Auto-trigger save_user_data() in the background on every change
 def sync_global(field, key):
     st.session_state.global_settings[field] = st.session_state[key]
     st.session_state.app_db['rental_globals'] = st.session_state.global_settings
+    if save_user_data: save_user_data(st.session_state.app_db)
 
 def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
+    if save_user_data: save_user_data(st.session_state.app_db)
 
-# EXPLICIT SAVE BUTTON: Prevents database spam and guarantees persistence
-if st.button("💾 Save Portfolio to Database", type="primary", use_container_width=True):
-    st.session_state.app_db['rental_globals'] = st.session_state.global_settings
+def add_new_listing():
+    st.session_state.rental_listings.append({
+        "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
+        "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
+    })
     st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
-    if save_user_data:
-        save_user_data(st.session_state.app_db)
-        st.success("✅ Portfolio successfully synced to your profile!")
-    else:
-        st.warning("Data saved to active session, but Supabase connection is offline.")
+    if save_user_data: save_user_data(st.session_state.app_db)
+
+def remove_listing(index):
+    st.session_state.rental_listings.pop(index)
+    st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
+    if save_user_data: save_user_data(st.session_state.app_db)
 
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
@@ -113,7 +118,11 @@ def geocode_address(index):
                 
                 clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
                 st.session_state.rental_listings[index]['address'] = clean_addr
+                
+                # Auto-save coordinates to Supabase
                 st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
+                if save_user_data: save_user_data(st.session_state.app_db)
+                
                 st.toast(f"📍 Added: {clean_addr}")
                 st.rerun()
         except Exception as e:
@@ -125,11 +134,7 @@ for i, listing in enumerate(st.session_state.rental_listings):
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
         with r1_c1: st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
         with r1_c2: st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
-        with r1_c3: 
-            if st.button("🗑️ Remove", key=f"del_{i}", use_container_width=True):
-                st.session_state.rental_listings.pop(i)
-                st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
-                st.rerun()
+        with r1_c3: st.button("🗑️ Remove", key=f"del_{i}", on_click=remove_listing, args=(i,), use_container_width=True)
 
         r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([2.6, 0.6, 0.6, 1, 1])
         with r2_c1: st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
@@ -145,7 +150,7 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with r3_c4: st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
 if len(st.session_state.rental_listings) < 10:
-    st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({"address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100}))
+    st.button("➕ Add Another Listing", on_click=add_new_listing)
 
 # --- 5. CALCULATIONS ENGINE ---
 full_analysis_list = []
@@ -187,7 +192,7 @@ def fetch_investor_pois(lat, lon, radius, poi_type):
     overpass_url = "http://overpass-api.de/api/interpreter"
     
     query_map = {"SkyTrain": '"railway"="station"', "Grocery": '"shop"="supermarket"'}
-    icon_map = {"SkyTrain": "T", "Grocery": "G"} # Reverted to bulletproof letter strings
+    icon_map = {"SkyTrain": "T", "Grocery": "G"} 
     
     if poi_type not in query_map: return pd.DataFrame()
     tag = query_map[poi_type]
@@ -240,24 +245,19 @@ if full_analysis_list:
     
     map_layers = []
 
-    # THE FIX: Dual Layer Stacking (Circle + Text Overlay)
     def add_bulletproof_badge(df, radius, color_rgb):
         if not df.empty:
             df['color_col'] = [color_rgb] * len(df)
-            # Bottom Layer: The colored circle (handles the hover tooltip)
             map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
-            # Top Layer: The text letter/number perfectly centered (unpickable so it doesn't block hover)
             map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
-    # Add POI Badges
     if show_skytrain:
         df_train = fetch_investor_pois(center_lat, center_lon, 5000, "SkyTrain")
-        add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) # Solid Blue T
+        add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) 
     if show_grocery:
         df_groc = fetch_investor_pois(center_lat, center_lon, 3000, "Grocery")
-        add_bulletproof_badge(df_groc, 120, [40, 167, 69, 255]) # Solid Green G
+        add_bulletproof_badge(df_groc, 120, [40, 167, 69, 255]) 
 
-    # Property Layers
     map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color_fill', get_radius=200, pickable=True))
     map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=22, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
