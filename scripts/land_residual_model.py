@@ -28,7 +28,6 @@ CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
-DANGER_RED = "#DC2626"
 
 def format_money(val):
     sign = "-" if val < 0 else ""
@@ -36,7 +35,7 @@ def format_money(val):
     if val >= 1_000_000: return f"{sign}${val/1_000_000:,.2f}M"
     return f"{sign}${val:,.0f}"
 
-# --- 3. MARKET INTEL & VELOCITY MAPPING ---
+# --- 3. MARKET INTEL & VELOCITY ---
 def load_market_intel():
     for fname in ["market_intel.json", "market_intel (7).json"]:
         if os.path.exists(fname):
@@ -49,8 +48,6 @@ intel = load_market_intel()
 current_prime = intel.get("rates", {}).get("bank_prime", 4.45)
 default_finance_rate = current_prime + 2.0
 
-# Fixed velocity rules per your requirements: 
-# single/duplex (6mo), multiple/townhouse (12mo), condo/high-rise (18mo)
 BUILD_DATA = {
     "Single Family (Custom)": {"fsr": 0.6, "cost": 450, "sell_months": 6},
     "Duplex / Semi-Detached": {"fsr": 0.8, "cost": 380, "sell_months": 6},
@@ -61,12 +58,13 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
-# --- 4. BALANCED HEADER ---
+# --- 4. THE FIXED STORYTELLING BOX ---
 st.title("🏗️ Land Residual Model")
 
 prof = st.session_state.app_db.get('profile', {})
 p1_name = prof.get('p1_name', "Dori")
 
+# Note: Double curly braces {{ }} are used here to prevent f-string SyntaxErrors
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
     <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.4; margin-bottom: 15px;">
@@ -100,7 +98,6 @@ with z_col2:
     active_defaults = BUILD_DATA[prod_type]
     sell_months = active_defaults["sell_months"]
 with z_col3:
-    # Key update forces reset when home type changes
     fsr = st.number_input("Floor Space Ratio (FSR)", value=active_defaults["fsr"], step=0.1, key=f"fsr_{prod_type}")
 
 buildable_sf = lot_size * fsr
@@ -116,16 +113,14 @@ with f_col1:
     profit_margin = cloud_input("Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
 
 with f_col2:
-    # Key update forces reset when home type changes
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
     city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
     soft_cost_pct = cloud_input("Soft Costs (%)", "land_residual", "soft_cost_pct", step=1.0)
 
 with f_col3:
     finance_rate = cloud_input("Loan Rate (%)", "land_residual", "finance_rate", step=0.25)
-    st.caption(f"Bank Prime + 2% Rate: {current_prime + 2}%")
     ltc_pct = cloud_input("Loan-to-Cost %", "land_residual", "ltc_pct", step=5.0)
-    project_months = cloud_input("Build Duration (Months)", "land_residual", "project_months", step=1.0)
+    project_months = cloud_input("Build Months", "land_residual", "project_months", step=1.0)
 
 # --- 6. CALCULATIONS ---
 gdv = buildable_sf * sell_psf
@@ -134,8 +129,6 @@ total_hard = buildable_sf * hard_cost_psf
 total_city_fees = buildable_sf * city_fees_psf
 total_soft = (total_hard * (soft_cost_pct / 100)) + total_city_fees
 total_construction = total_hard + total_soft
-
-# Finance costs on average draw
 finance_cost = (total_construction * 0.5) * (finance_rate / 100) * (project_months / 12)
 
 residual_land_value = gdv - target_profit - total_construction - finance_cost
@@ -151,7 +144,7 @@ st.divider()
 st.subheader("📊 Acquisition Verdict")
 
 if residual_land_value <= 0:
-    st.error(f"⚠️ **Unviable Deal:** Land value is negative ({format_money(residual_land_value)}). Costs exceed revenue.")
+    st.error(f"⚠️ **Unviable Deal:** Land value is negative. Costs exceed revenue.")
 else:
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Max Land Price", format_money(residual_land_value))
@@ -159,25 +152,7 @@ else:
     m3.metric("Projected Profit", format_money(target_profit))
     m4.metric("ROE", f"{roe:.1f}%")
 
-    # --- S-CURVE CASH FLOW ---
-    const_months = int(project_months)
-    total_timeline = const_months + sell_months
-    monthly_rev = gdv / sell_months if sell_months > 0 else 0
-    monthly_out = (total_construction + finance_cost) / const_months if const_months > 0 else 0
-
-    cf_months = [0]
-    cumulative_cash = [-residual_land_value]
-    for m in range(1, total_timeline + 1):
-        net = -monthly_out if m <= const_months else monthly_rev
-        cf_months.append(m)
-        cumulative_cash.append(cumulative_cash[-1] + net)
-
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=cf_months, y=cumulative_cash, fill='tozeroy', line=dict(color=PRIMARY_GOLD, width=3)))
-    fig.update_layout(title=f"Capital Timeline ({total_timeline} Months)", xaxis_title="Timeline (Months)", height=350, plot_bgcolor='rgba(0,0,0,0)')
-    st.plotly_chart(fig, use_container_width=True)
-
-    # --- SENSITIVITY HEATMAP ---
+    # --- SENSITIVITY MATRIX ---
     st.subheader("🌡️ Risk Matrix: Price vs Cost Sensitivity")
     sale_steps = [sell_psf * 0.9, sell_psf * 0.95, sell_psf, sell_psf * 1.05, sell_psf * 1.1]
     cost_steps = [hard_cost_psf * 0.9, hard_cost_psf * 0.95, hard_cost_psf, hard_cost_psf * 1.05, hard_cost_psf * 1.1]
@@ -199,17 +174,5 @@ else:
     ))
     fig2.update_layout(xaxis_title="Final Sale Price ($/SF)", yaxis_title="Hard Costs ($/SF)", height=450)
     st.plotly_chart(fig2, use_container_width=True)
-
-    # --- DETAILED PRO FORMA ---
-    with st.expander("📄 Full Pro Forma Breakdown"):
-        df_pf = pd.DataFrame([
-            {"Item": "Gross Development Value (GDV)", "Value": format_money(gdv)},
-            {"Item": "(-) Target Profit", "Value": format_money(-target_profit)},
-            {"Item": "(-) Hard Construction Costs", "Value": format_money(-total_hard)},
-            {"Item": "(-) Soft Costs & Fees", "Value": format_money(-total_soft)},
-            {"Item": "(-) Financing Costs", "Value": format_money(-finance_cost)},
-            {"Item": "RESIDUAL LAND VALUE", "Value": format_money(residual_land_value)}
-        ])
-        st.table(df_pf.set_index("Item"))
 
 show_disclaimer()
