@@ -26,6 +26,12 @@ CHARCOAL_RGBA = [46, 43, 40, 255]
 DARK_RED = "#8B0000"
 SUCCESS_GREEN = "#28a745"
 
+PRIMARY_GOLD = "#CEB36F"
+CHARCOAL = "#2E2B28"
+OFF_WHITE = "#F8F9FA"
+SLATE_ACCENT = "#4A4E5A"
+BORDER_GREY = "#DEE2E6"
+
 st.title("Pro Rental Portfolio Analyzer")
 
 # --- 3. DATABASE INITIALIZATION ---
@@ -54,19 +60,20 @@ def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     force_cloud_save()
 
-# --- 4. PERSONALIZED STORYTELLING ---
-# Dynamically pull names from the profile database
-p1 = st.session_state.app_db.get('profile', {}).get('p1_name', 'Client 1')
-p2 = st.session_state.app_db.get('profile', {}).get('p2_name', 'Client 2')
+# --- 4. PERSONALIZED STORYTELLING (STYLED TO MATCH AFFORDABILITY PAGE) ---
+prof = st.session_state.app_db.get('profile', {})
+name1 = prof.get('p1_name') or "Primary Client"
+name2 = prof.get('p2_name') or ""
+household = f"{name1} and {name2}" if name2 else name1
 
-# Create a clean, professional advisory message
+# EXACT styling match from your affordability_second.py
 st.markdown(f"""
-<div style="background-color: #f8f9fa; border-left: 5px solid #CEB36F; padding: 20px; border-radius: 5px; margin-bottom: 25px;">
-    <h4 style="margin-top: 0; color: #2E2B28;">Building Your Real Estate Empire</h4>
-    <p style="margin-bottom: 0; font-size: 1.05rem; color: #4a4a4a;">
-        Welcome to the underwriting lab, <strong>{p1} and {p2}</strong>. This tool is designed to cut through the noise of the real estate market. 
+<div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🏗️ Strategic Brief: Building Your Real Estate Empire</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Welcome to the underwriting lab, <b>{household}</b>. This tool is designed to cut through the noise of the real estate market. 
         By mapping prospective properties alongside key rental drivers like SkyTrains and grocery stores, we can instantly visualize which assets command the highest tenant demand. 
-        Adjust your global financing below, and the engine will automatically rank your prospective listings by <strong>Cash-on-Cash Return</strong>, stripping away emotion to highlight the absolute best mathematical fit for your portfolio.
+        Adjust your global financing below, and the engine will automatically rank your prospective listings by <b>Cash-on-Cash Return</b>, stripping away emotion to highlight the absolute best mathematical fit for your portfolio.
     </p>
 </div>
 """, unsafe_allow_html=True)
