@@ -84,12 +84,18 @@ def geocode_address(index):
             if location:
                 st.session_state.rental_listings[index]['lat'] = location.latitude
                 st.session_state.rental_listings[index]['lon'] = location.longitude
+                
+                # FIXED ADDRESS FORMATTING: Extract ONLY street and city.
                 raw_addr = location.raw.get('address', {})
                 h_num = raw_addr.get('house_number', '')
                 road = raw_addr.get('road', '')
-                city = raw_addr.get('city', raw_addr.get('town', raw_addr.get('village', raw_addr.get('municipality', ''))))
+                city = raw_addr.get('city', raw_addr.get('town', raw_addr.get('suburb', raw_addr.get('municipality', ''))))
                 
-                clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
+                if road and city:
+                    clean_addr = f"{h_num} {road}, {city}".strip()
+                else:
+                    clean_addr = ", ".join(location.address.split(",")[:2]) # Safe fallback
+                
                 st.session_state.rental_listings[index]['address'] = clean_addr
                 st.toast(f"📍 Added: {clean_addr}")
                 st.rerun()
@@ -161,11 +167,11 @@ def fetch_investor_pois(lat, lon, radius, poi_type):
     headers = {"User-Agent": "AnalystInAPocket/1.0"}
     overpass_url = "http://overpass-api.de/api/interpreter"
     
-    # Skytrain stations and Grocery Stores (Supermarkets)
     query_map = {
         "SkyTrain": '"railway"="station"',
         "Grocery": '"shop"="supermarket"'
     }
+    # Using Train and Cart shapes instead of circles
     icon_map = {"SkyTrain": "🚆", "Grocery": "🛒"}
     
     if poi_type not in query_map: return pd.DataFrame()
@@ -207,55 +213,77 @@ if full_analysis_list:
     with layer_col2: show_grocery = st.checkbox("🛒 Grocery Stores")
     with layer_col3: show_catchments = st.checkbox("🎒 School Catchments")
     with layer_col4:
-        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="font-size:1.2em">🥇</span> Top Pick <span style="font-size:1.2em">🏠</span> Others</div>', unsafe_allow_html=True)
 
+    # SHAPE LOGIC: Replaced circle colors with House and Trophy Emojis
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
-    df_results['Rank_str'] = df_results['Rank'].astype(str) 
-    df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
+    
+    # Generate the custom House Shapes
+    df_results['shape_icon'] = df_results.apply(lambda row: f"🥇 {row['Rank']}" if row['Address'] == best_addr else f"🏠 {row['Rank']}", axis=1)
     df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
 
     center_lat, center_lon = df_results['lat'].mean(), df_results['lon'].mean()
-    view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=12)
+    view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=13)
     
     map_layers = []
 
-    # 1. School Catchment Polygons (GeoJSON)
+    # 1. School Catchment Polygons (Dynamic Mock Polygon)
     if show_catchments:
-        # Note: To use EXACT Burnaby catchments, you must download the GeoJSON from Burnaby Open Data 
-        # For now, this loads a visual example so the layer doesn't crash.
-        CATCHMENT_GEOJSON = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/vancouver.geojson"
+        # A dynamic GeoJSON rectangle that guarantees visibility exactly where your properties are located
+        mock_geojson = {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [center_lon - 0.02, center_lat - 0.02],
+                        [center_lon + 0.02, center_lat - 0.02],
+                        [center_lon + 0.02, center_lat + 0.02],
+                        [center_lon - 0.02, center_lat + 0.02],
+                        [center_lon - 0.02, center_lat - 0.02]
+                    ]]
+                },
+                "properties": {"name": "Simulated Burnaby Catchment Zone"}
+            }]
+        }
         
         map_layers.append(pdk.Layer(
             "GeoJsonLayer",
-            CATCHMENT_GEOJSON,
+            mock_geojson,
             opacity=0.2,
             stroked=True,
             filled=True,
-            extruded=False,
-            get_fill_color="[206, 179, 111, 50]", # Gold Tint
-            get_line_color="[46, 43, 40, 255]", # Charcoal Borders
-            line_width_min_pixels=2,
+            get_fill_color="[206, 179, 111, 80]", # Gold Tint
+            get_line_color="[46, 43, 40, 255]",
+            line_width_min_pixels=3,
             pickable=True
         ))
 
-    # 2. Add POI Badges
-    def add_poi_badge(df, radius, color):
-        if not df.empty:
-            df['color_col'] = [color] * len(df)
-            map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_alignment_baseline="'center'", get_text_anchor="'middle'"))
-
+    # 2. Add POI Shapes (No more colored circles behind them)
     if show_skytrain:
         df_train = fetch_investor_pois(center_lat, center_lon, 5000, "SkyTrain")
-        add_poi_badge(df_train, 150, [0, 102, 204, 220]) # Blue
+        if not df_train.empty:
+            map_layers.append(pdk.Layer("TextLayer", df_train, get_position='[lon, lat]', get_text='icon', get_size=35, pickable=True))
+            
     if show_grocery:
         df_groc = fetch_investor_pois(center_lat, center_lon, 3000, "Grocery")
-        add_poi_badge(df_groc, 100, [40, 167, 69, 220]) # Green
+        if not df_groc.empty:
+            map_layers.append(pdk.Layer("TextLayer", df_groc, get_position='[lon, lat]', get_text='icon', get_size=30, pickable=True))
 
-    # 3. Properties (Placed last so they render on top of the catchments)
-    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color', get_radius=180, pickable=True))
-    map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
+    # 3. Property House Shapes (Placed last so they render on top)
+    map_layers.append(pdk.Layer(
+        "TextLayer", 
+        df_results, 
+        get_position='[lon, lat]', 
+        get_text="shape_icon", 
+        get_size=35, 
+        get_color=[46, 43, 40, 255], 
+        get_alignment_baseline="'center'", 
+        get_text_anchor="'middle'",
+        pickable=True
+    ))
 
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
@@ -266,7 +294,7 @@ if full_analysis_list:
     # --- RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
-        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'color', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
+        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'shape_icon', 'Rank', 'HoverText'], errors='ignore')
         
         st.dataframe(
             display_df, use_container_width=True, hide_index=True,
