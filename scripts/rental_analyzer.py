@@ -5,8 +5,8 @@ import pydeck as pdk
 import requests 
 from style_utils import inject_global_css, show_disclaimer
 
-# FIX 1: Explicitly import supabase from data_handler to force cloud saving
-from data_handler import init_session_state, load_user_data, supabase
+# FIX 1: Import the EXACT native functions used by profile.py
+from data_handler import cloud_input, sync_widget, init_session_state, load_user_data
 
 # --- 1. CONFIG & AUTH ---
 init_session_state()
@@ -30,86 +30,67 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. DATABASE INITIALIZATION & SYNC LOGIC ---
+# --- 3. DATABASE INITIALIZATION (NATIVE METHOD) ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Ensure the rental_analyzer object exists in the database
+# Ensure the rental_analyzer block exists in Supabase memory
 if 'rental_analyzer' not in st.session_state.app_db:
     st.session_state.app_db['rental_analyzer'] = {
-        'globals': {
-            'dp_mode': "Percentage (%)", 'dp_val': 20.0, 'm_rate': 5.1,
-            'm_amort': 25, 'use_mgmt': False, 'mgmt_fee': 8.0
-        },
+        'dp_val': 20.0,
+        'm_rate': 5.1,
+        'm_amort': 25.0,
+        'mgmt_fee': 8.0,
+        'dp_mode': "Percentage (%)",
+        'use_mgmt': False,
+        'sync': "sync", # Dummy key to trigger background saves
         'listings': [
             {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850}
         ]
     }
 
-# Local session links to the database
-st.session_state.global_settings = st.session_state.app_db['rental_analyzer']['globals']
-st.session_state.rental_listings = st.session_state.app_db['rental_analyzer']['listings']
+# Sync session lists to the active database
+if 'rental_listings' not in st.session_state:
+    st.session_state.rental_listings = st.session_state.app_db['rental_analyzer'].get('listings', [])
 
-# THE FIX: Direct Supabase Push Function
+# THE FIX: Piggyback on data_handler's sync_widget to force a Supabase save
 def force_cloud_save():
-    st.session_state.app_db['rental_analyzer'] = {
-        'globals': st.session_state.global_settings,
-        'listings': st.session_state.rental_listings
-    }
-    # Actually write to the Supabase backend
-    if st.session_state.get('username') and supabase:
-        try:
-            supabase.table('users').update({'app_db': st.session_state.app_db}).eq('username', st.session_state.username).execute()
-        except Exception as e:
-            pass # Fails silently so it doesn't interrupt your workflow
-
-def sync_global(field, key):
-    st.session_state.global_settings[field] = st.session_state[key]
-    force_cloud_save()
+    st.session_state.app_db['rental_analyzer']['listings'] = st.session_state.rental_listings
+    st.session_state['rental_analyzer_sync'] = "trigger"
+    sync_widget("rental_analyzer:sync")
 
 def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     force_cloud_save()
 
-def add_new_listing():
-    st.session_state.rental_listings.append({
-        "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
-        "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
-    })
-    force_cloud_save()
-
-def remove_listing(index):
-    st.session_state.rental_listings.pop(index)
-    force_cloud_save()
-
-# --- 4. GLOBAL SETTINGS UI ---
+# --- 4. GLOBAL SETTINGS (POWERED BY CLOUD_INPUT) ---
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
     g_col1, g_col2, g_col3, g_col4 = st.columns(4)
     with g_col1:
+        # Native Radio Sync
+        curr_dp_mode = st.session_state.app_db['rental_analyzer'].get('dp_mode', "Percentage (%)")
         st.radio("DP Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
-                 key="g_dp_mode", index=0 if "Percent" in st.session_state.global_settings['dp_mode'] else 1,
-                 on_change=sync_global, args=('dp_mode', 'g_dp_mode'))
+                 key="rental_analyzer_dp_mode", index=0 if "Percent" in curr_dp_mode else 1,
+                 on_change=sync_widget, args=('rental_analyzer:dp_mode',))
     with g_col2:
-        lbl = f"Down Payment ({'%' if 'Percent' in st.session_state.global_settings['dp_mode'] else '$'})"
-        st.number_input(lbl, value=float(st.session_state.global_settings['dp_val']), 
-                        key="g_dp_val", on_change=sync_global, args=('dp_val', 'g_dp_val'))
+        # Native Cloud Input automatically saves to Supabase
+        lbl = f"Down Payment ({'%' if 'Percent' in curr_dp_mode else '$'})"
+        cloud_input(lbl, "rental_analyzer", "dp_val", step=1.0)
     with g_col3:
-        st.number_input("Interest Rate (%)", value=float(st.session_state.global_settings['m_rate']), step=0.1, 
-                        key="g_m_rate", on_change=sync_global, args=('m_rate', 'g_m_rate'))
+        cloud_input("Interest Rate (%)", "rental_analyzer", "m_rate", step=0.1)
     with g_col4:
-        st.number_input("Amortization (Yrs)", value=int(st.session_state.global_settings['m_amort']), step=1, 
-                        key="g_m_amort", on_change=sync_global, args=('m_amort', 'g_m_amort'))
+        cloud_input("Amortization (Yrs)", "rental_analyzer", "m_amort", step=1.0)
     
     st.divider() 
     g_col5, g_col6, g_col7 = st.columns([1.5, 1.5, 2])
     with g_col5:
-        st.checkbox("Use Property Manager?", value=st.session_state.global_settings['use_mgmt'], 
-                    key="g_use_mgmt", on_change=sync_global, args=('use_mgmt', 'g_use_mgmt'))
+        curr_mgmt = st.session_state.app_db['rental_analyzer'].get('use_mgmt', False)
+        st.checkbox("Use Property Manager?", value=curr_mgmt, 
+                    key="rental_analyzer_use_mgmt", on_change=sync_widget, args=('rental_analyzer:use_mgmt',))
     with g_col6:
-        if st.session_state.global_settings['use_mgmt']:
-            st.number_input("Management Fee (%)", value=float(st.session_state.global_settings['mgmt_fee']), step=0.5, 
-                            key="g_mgmt_fee", on_change=sync_global, args=('mgmt_fee', 'g_mgmt_fee'))
+        if curr_mgmt:
+            cloud_input("Management Fee (%)", "rental_analyzer", "mgmt_fee", step=0.5)
 
 # --- 5. LISTING MANAGEMENT UI ---
 def geocode_address(index):
@@ -128,7 +109,7 @@ def geocode_address(index):
                 
                 clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
                 st.session_state.rental_listings[index]['address'] = clean_addr
-                force_cloud_save() # Auto-save coordinates to Supabase
+                force_cloud_save() 
                 st.toast(f"📍 Mapped & Saved: {clean_addr}")
                 st.rerun()
         except Exception as e:
@@ -140,7 +121,11 @@ for i, listing in enumerate(st.session_state.rental_listings):
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
         with r1_c1: st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
         with r1_c2: st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
-        with r1_c3: st.button("🗑️ Remove", key=f"del_{i}", on_click=remove_listing, args=(i,), use_container_width=True)
+        with r1_c3: 
+            if st.button("🗑️ Remove", key=f"del_{i}", use_container_width=True):
+                st.session_state.rental_listings.pop(i)
+                force_cloud_save()
+                st.rerun()
 
         r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([2.6, 0.6, 0.6, 1, 1])
         with r2_c1: st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
@@ -156,13 +141,19 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with r3_c4: st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
 if len(st.session_state.rental_listings) < 10:
-    st.button("➕ Add Another Listing", on_click=add_new_listing)
+    if st.button("➕ Add Another Listing"):
+        st.session_state.rental_listings.append({
+            "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
+            "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
+        })
+        force_cloud_save()
+        st.rerun()
 
 # --- 6. CALCULATIONS ENGINE ---
 full_analysis_list = []
-gs = st.session_state.global_settings
-calc_dp_mode, calc_dp_val, calc_m_rate, calc_m_amort = gs['dp_mode'], gs['dp_val'], gs['m_rate'], gs['m_amort']
-calc_mgmt_fee = gs['mgmt_fee'] if gs['use_mgmt'] else 0.0
+gs = st.session_state.app_db['rental_analyzer']
+calc_dp_mode, calc_dp_val, calc_m_rate, calc_m_amort = gs.get('dp_mode', 'Percentage (%)'), float(gs.get('dp_val', 20)), float(gs.get('m_rate', 5.1)), float(gs.get('m_amort', 25))
+calc_mgmt_fee = float(gs.get('mgmt_fee', 8.0)) if gs.get('use_mgmt', False) else 0.0
 
 for idx, l in enumerate(st.session_state.rental_listings):
     if l.get('lat') and l.get('lon'):
@@ -191,38 +182,25 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 7. BULLETPROOF POI FETCHING ---
-# Renamed function to instantly break any broken caches from previous versions
+# --- 7. FAST POI FETCHER (FIXED FOR STABILITY) ---
 @st.cache_data(ttl=86400, show_spinner=False) 
 def pull_osm_data(lat, lon, radius, poi_type):
     headers = {"User-Agent": "AnalystInAPocket/1.0"}
-    overpass_url = "https://overpass-api.de/api/interpreter"
-    
+    # Simplified node-only query prevents timeouts and blocks
     query_map = {"SkyTrain": '"railway"="station"', "Grocery": '"shop"="supermarket"'}
-    icon_map = {"SkyTrain": "T", "Grocery": "G"} 
     
     if poi_type not in query_map: return pd.DataFrame()
     tag = query_map[poi_type]
     
-    overpass_query = f"""
-    [out:json][timeout:25];
-    (
-      node[{tag}](around:{radius},{lat},{lon});
-      way[{tag}](around:{radius},{lat},{lon});
-      relation[{tag}](around:{radius},{lat},{lon});
-    );
-    out center;
-    """
+    query = f'[out:json][timeout:10];node[{tag}](around:{radius},{lat},{lon});out;'
     try:
-        response = requests.get(overpass_url, params={'data': overpass_query}, headers=headers, timeout=10)
+        response = requests.get("https://overpass-api.de/api/interpreter", params={'data': query}, headers=headers, timeout=5)
         data = response.json()
         pois = []
-        for element in data['elements']:
-            p_lat = element.get('lat', element.get('center', {}).get('lat'))
-            p_lon = element.get('lon', element.get('center', {}).get('lon'))
-            p_name = element.get('tags', {}).get('name', poi_type)
-            if p_lat and p_lon:
-                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type}: {p_name}", 'icon': icon_map[poi_type]})
+        for el in data.get('elements', []):
+            if 'lat' in el and 'lon' in el:
+                name = el.get('tags', {}).get('name', poi_type)
+                pois.append({'lat': el['lat'], 'lon': el['lon'], 'HoverText': f"{poi_type}: {name}", 'icon': "T" if poi_type == "SkyTrain" else "G"})
         return pd.DataFrame(pois)
     except:
         return pd.DataFrame()
@@ -235,43 +213,45 @@ if full_analysis_list:
     st.divider()
     st.subheader("🗺️ Geographic Portfolio Distribution")
     
-    layer_col1, layer_col2, layer_col3, layer_col4 = st.columns([1.5, 1.5, 1, 2])
+    layer_col1, layer_col2, layer_col3 = st.columns([1.5, 1.5, 3])
     with layer_col1: show_skytrain = st.checkbox("🚇 SkyTrain Stations")
     with layer_col2: show_grocery = st.checkbox("🛒 Grocery Stores")
-    with layer_col4:
+    with layer_col3:
         st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
-    best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
-    df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
-    df_results['Rank_str'] = df_results['Rank'].astype(str) 
-    df_results['color_fill'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
-    df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
+    df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else 99)
+    df_results['Rank_str'] = df_results['Rank'].apply(lambda x: str(x) if x != 99 else "-")
+    df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank_str']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
+
+    # Split properties into Gold (Best) and Charcoal (Others) for flawless rendering
+    df_best = df_results[df_results['Rank'] == 1].copy()
+    df_others = df_results[df_results['Rank'] > 1].copy()
 
     center_lat, center_lon = df_results['lat'].mean(), df_results['lon'].mean()
     view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=13)
     
     map_layers = []
 
-    # BULLETPROOF MAP LAYERS: Clean circles with a white letter inside
-    def add_bulletproof_badge(df, radius, color_rgb):
-        if not df.empty:
-            df['color_col'] = [color_rgb] * len(df)
-            map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
-
-    # SkyTrain (Blue Circle, White 'T')
+    # Hardcoded color mapping guarantees the background circles render
     if show_skytrain:
-        df_train = pull_osm_data(center_lat, center_lon, 5000, "SkyTrain")
-        add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) 
-    
-    # Grocery (Green Circle, White 'G')
-    if show_grocery:
-        df_groc = pull_osm_data(center_lat, center_lon, 3000, "Grocery")
-        add_bulletproof_badge(df_groc, 120, [40, 167, 69, 255]) 
+        df_train = pull_osm_data(center_lat, center_lon, 3000, "SkyTrain")
+        if not df_train.empty:
+            map_layers.append(pdk.Layer("ScatterplotLayer", df_train, get_position='[lon, lat]', get_fill_color=[0, 102, 204, 255], get_radius=120, pickable=True))
+            map_layers.append(pdk.Layer("TextLayer", df_train, get_position='[lon, lat]', get_text='icon', get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
-    # Properties (Gold/Charcoal Circle, White '1', '2', etc.)
-    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color_fill', get_radius=200, pickable=True))
-    map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=22, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+    if show_grocery:
+        df_groc = pull_osm_data(center_lat, center_lon, 2000, "Grocery")
+        if not df_groc.empty:
+            map_layers.append(pdk.Layer("ScatterplotLayer", df_groc, get_position='[lon, lat]', get_fill_color=[40, 167, 69, 255], get_radius=100, pickable=True))
+            map_layers.append(pdk.Layer("TextLayer", df_groc, get_position='[lon, lat]', get_text='icon', get_size=16, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+
+    if not df_best.empty:
+        map_layers.append(pdk.Layer("ScatterplotLayer", df_best, get_position='[lon, lat]', get_fill_color=[206, 179, 111, 255], get_radius=220, pickable=True))
+        map_layers.append(pdk.Layer("TextLayer", df_best, get_position='[lon, lat]', get_text="Rank_str", get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+
+    if not df_others.empty:
+        map_layers.append(pdk.Layer("ScatterplotLayer", df_others, get_position='[lon, lat]', get_fill_color=[46, 43, 40, 255], get_radius=180, pickable=True))
+        map_layers.append(pdk.Layer("TextLayer", df_others, get_position='[lon, lat]', get_text="Rank_str", get_size=16, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
@@ -282,7 +262,7 @@ if full_analysis_list:
     # --- RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
-        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'color_fill', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
+        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
         
         st.dataframe(
             display_df, use_container_width=True, hide_index=True,
