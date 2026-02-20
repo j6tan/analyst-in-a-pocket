@@ -57,31 +57,28 @@ BUILD_DATA = {
     "High-Rise Condo (Concrete)": {"fsr": 5.0, "cost": 450, "sell_months": 18}
 }
 
-# --- 4. HEADER & EXTENDED STORYTELLING ---
-st.title("🏗️ Land Residual Valuation")
+# --- 4. BALANCED HEADER ---
+st.title("🏗️ Land Residual Model") # Smaller title
 
 prof = st.session_state.app_db.get('profile', {})
 household = prof.get('p1_name', "Primary Client")
 
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 30px; border-radius: 15px; border: 1px solid {BORDER_GREY}; border-left: 10px solid {PRIMARY_GOLD};">
-    <h2 style="color: {CHARCOAL}; margin-top: 0;">📐 The Developer's Mandate: Highest & Best Use</h2>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.15em; line-height: 1.6;">
-        Welcome back, <b>{household}</b>. In real estate development, we don't value land by looking at comparable sales—we value it by looking at <b>potential</b>. 
-        This tool uses the <b>Residual Method of Valuation</b>. It works backward from the finished product's end value.
+<div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 15px;">
+        Welcome, <b>{household}</b>. We value land by calculating the <b>Residual</b>—the maximum price you can pay for a property while still hitting your profit targets.
     </p>
-    <div style="background-color: white; padding: 15px; border-radius: 10px; border: 1px solid #eee; margin: 20px 0;">
-        <h4 style="margin-top:0; color: {PRIMARY_GOLD};">How the "Residual" logic works:</h4>
-        <ol style="color: {SLATE_ACCENT}; font-size: 1.05em;">
-            <li><b>Gross Realization:</b> We calculate the total revenue from selling the finished homes.</li>
-            <li><b>Profit First:</b> We subtract your required 15-20% profit margin immediately (you don't work for free).</li>
-            <li><b>The Hard Truth:</b> We subtract every dollar of construction, city fees, and architecture.</li>
-            <li><b>The Residual:</b> Whatever is left over after all costs and profit are accounted for is the <b>Maximum Price</b> you can afford to pay for the land.</li>
-        </ol>
+    
+    <div style="background-color: white; padding: 15px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 10px;">
+        <h4 style="margin-top:0; color: {PRIMARY_GOLD}; font-size: 1em; text-transform: uppercase; letter-spacing: 1px;">The Residual Logic</h4>
+        <p style="color: {SLATE_ACCENT}; font-size: 0.95em; margin-bottom: 5px;">
+            <b>End Value</b> (Revenue) <br>
+            <span style="color: #888;">minus</span> <b>Target Profit</b> (15%+) <br>
+            <span style="color: #888;">minus</span> <b>Total Costs</b> (Hard + Soft + Finance) <br>
+            <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ddd;">
+            <b>= MAX LAND PRICE</b>
+        </p>
     </div>
-    <p style="color: {SLATE_ACCENT}; font-style: italic; font-size: 1em;">
-        "If you pay more than the Residual Value, you are effectively eating into your own profit margin."
-    </p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -89,43 +86,39 @@ st.markdown(f"""
 
 # --- 5. INPUTS ---
 st.write("")
-st.subheader("1. Site Potential & Product Velocity")
+st.subheader("1. Site & Product Velocity")
 z_col1, z_col2, z_col3 = st.columns(3)
 
 with z_col1:
     lot_size = cloud_input("Lot Size (Sq.Ft.)", "land_residual", "lot_size", step=500)
 with z_col2:
-    prod_type = st.selectbox("Proposed Product Type", list(BUILD_DATA.keys()))
+    prod_type = st.selectbox("Product Type", list(BUILD_DATA.keys()))
     active_defaults = BUILD_DATA[prod_type]
     sell_months = active_defaults["sell_months"]
 with z_col3:
     fsr = st.number_input("Floor Space Ratio (FSR)", value=active_defaults["fsr"], step=0.1, key=f"fsr_{prod_type}")
 
 buildable_sf = lot_size * fsr
-st.info(f"📐 **Max Buildable:** {buildable_sf:,.0f} SF | ⏳ **Market Velocity:** {sell_months} Month Sell-Out Phase")
+st.info(f"📐 **Buildable:** {buildable_sf:,.0f} SF | ⏳ **Sales Velocity:** {sell_months} Month Sell-Out")
 
 st.divider()
 
-st.subheader("2. Financial Underwriting & Capital Stack")
+st.subheader("2. Underwriting & Financing")
 f_col1, f_col2, f_col3 = st.columns(3)
 
 with f_col1:
-    st.markdown("**Revenue Targets**")
-    sell_psf = cloud_input("Projected Sale Price ($/SF)", "land_residual", "sell_psf", step=50)
-    profit_margin = cloud_input("Target Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
+    sell_psf = cloud_input("Sale Price ($/SF)", "land_residual", "sell_psf", step=50)
+    profit_margin = cloud_input("Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
 
 with f_col2:
-    st.markdown("**Costs & City Fees**")
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
     city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
     soft_cost_pct = cloud_input("Soft Costs (%)", "land_residual", "soft_cost_pct", step=1.0)
 
 with f_col3:
-    st.markdown("**Financing (Debt)**")
-    finance_rate = cloud_input("Bank Loan Rate (%)", "land_residual", "finance_rate", step=0.25)
-    ltc_pct = cloud_input("Loan-to-Cost (LTC) %", "land_residual", "ltc_pct", step=5.0)
-    project_months = cloud_input("Build Duration (Months)", "land_residual", "project_months", step=1.0)
-    st.caption(f"Interest calculated on {finance_rate}% (Prime + 2%)")
+    finance_rate = cloud_input("Loan Rate (%)", "land_residual", "finance_rate", step=0.25)
+    ltc_pct = cloud_input("Loan-to-Cost %", "land_residual", "ltc_pct", step=5.0)
+    project_months = cloud_input("Build Months", "land_residual", "project_months", step=1.0)
 
 # --- 6. CALCULATIONS ---
 gdv = buildable_sf * sell_psf
@@ -150,14 +143,12 @@ st.divider()
 st.subheader("📊 Acquisition Verdict")
 
 if residual_land_value <= 0:
-    st.error(f"⚠️ **Deal is Dead:** At these costs, the land has zero value. You must lower costs or increase sale prices.")
+    st.error(f"⚠️ **Unviable Deal:** Land value is negative. High costs or low revenue are eating your profit.")
 else:
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Max Purchase Price", format_money(residual_land_value))
-    m2.metric("Developer Equity", format_money(equity_required))
+    m1.metric("Max Land Price", format_money(residual_land_value))
+    m2.metric("Equity Needed", format_money(equity_required))
     m3.metric("Projected Profit", format_money(target_profit))
     m4.metric("ROE", f"{roe:.1f}%")
 
-    # Add a visual "Residual Ladder" chart here in future...
-    
 show_disclaimer()
