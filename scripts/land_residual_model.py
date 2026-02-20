@@ -49,10 +49,12 @@ intel = load_market_intel()
 current_prime = intel.get("rates", {}).get("bank_prime", 4.45)
 default_finance_rate = current_prime + 2.0
 
+# Fixed velocity rules per your requirements: 
+# single/duplex (6mo), multiple/townhouse (12mo), condo/high-rise (18mo)
 BUILD_DATA = {
     "Single Family (Custom)": {"fsr": 0.6, "cost": 450, "sell_months": 6},
     "Duplex / Semi-Detached": {"fsr": 0.8, "cost": 380, "sell_months": 6},
-    "Multiplex / Row House": {"fsr": 1.2, "cost": 320, "sell_months": 12},
+    "Multiplex / Missing Middle": {"fsr": 1.2, "cost": 320, "sell_months": 12},
     "Townhouse (Woodframe)": {"fsr": 1.4, "cost": 300, "sell_months": 12},
     "Mid-Rise Condo (Woodframe)": {"fsr": 2.5, "cost": 330, "sell_months": 18},
     "High-Rise Condo (Concrete)": {"fsr": 5.0, "cost": 450, "sell_months": 18},
@@ -63,12 +65,12 @@ BUILD_DATA = {
 st.title("🏗️ Land Residual Model")
 
 prof = st.session_state.app_db.get('profile', {})
-household = prof.get('p1_name', "Investor")
+p1_name = prof.get('p1_name', "Dori")
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
     <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.4; margin-bottom: 15px;">
-        Welcome, <b>{household}</b>. This tool determines the maximum price you can pay for land while protecting your target returns.
+        Welcome, <b>{p1_name}</b>. This tool determines the maximum price you can pay for land while protecting your target returns.
     </p>
     
     <div style="background-color: white; padding: 18px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 5px;">
@@ -84,8 +86,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
-
 # --- 5. INPUTS ---
 st.write("")
 st.subheader("1. Site & Product Velocity")
@@ -98,6 +98,7 @@ with z_col2:
     active_defaults = BUILD_DATA[prod_type]
     sell_months = active_defaults["sell_months"]
 with z_col3:
+    # Key update forces reset when home type changes
     fsr = st.number_input("Floor Space Ratio (FSR)", value=active_defaults["fsr"], step=0.1, key=f"fsr_{prod_type}")
 
 buildable_sf = lot_size * fsr
@@ -113,16 +114,16 @@ with f_col1:
     profit_margin = cloud_input("Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
 
 with f_col2:
-    # Fixed Syntax Error below: added opening quote to f-string key
+    # FIXED Syntax Error here: f"hc_{prod_type}"
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
     city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
     soft_cost_pct = cloud_input("Soft Costs (%)", "land_residual", "soft_cost_pct", step=1.0)
 
 with f_col3:
     finance_rate = cloud_input("Loan Rate (%)", "land_residual", "finance_rate", step=0.25)
-    st.caption(f"Prime + 2% Default: {current_prime + 2}%")
+    st.caption(f"Bank Prime + 2% Rate: {current_prime + 2}%")
     ltc_pct = cloud_input("Loan-to-Cost %", "land_residual", "ltc_pct", step=5.0)
-    project_months = cloud_input("Build Months", "land_residual", "project_months", step=1.0)
+    project_months = cloud_input("Build Duration (Months)", "land_residual", "project_months", step=1.0)
 
 # --- 6. CALCULATIONS ---
 gdv = buildable_sf * sell_psf
@@ -132,7 +133,7 @@ total_city_fees = buildable_sf * city_fees_psf
 total_soft = (total_hard * (soft_cost_pct / 100)) + total_city_fees
 total_construction = total_hard + total_soft
 
-# Finance costs on 50% average draw
+# Finance costs on average draw
 finance_cost = (total_construction * 0.5) * (finance_rate / 100) * (project_months / 12)
 
 residual_land_value = gdv - target_profit - total_construction - finance_cost
@@ -171,7 +172,7 @@ else:
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=cf_months, y=cumulative_cash, fill='tozeroy', line=dict(color=PRIMARY_GOLD, width=3)))
-    fig.update_layout(title="Capital Absorption Timeline", xaxis_title="Months", height=350, plot_bgcolor='rgba(0,0,0,0)')
+    fig.update_layout(title=f"Capital Timeline ({total_timeline} Months)", xaxis_title="Timeline (Months)", height=350, plot_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig, use_container_width=True)
 
     # --- SENSITIVITY HEATMAP ---
