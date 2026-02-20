@@ -4,8 +4,6 @@ import numpy as np
 import pydeck as pdk 
 import requests 
 from style_utils import inject_global_css, show_disclaimer
-
-# FIX 1: Import the EXACT native functions used by profile.py
 from data_handler import cloud_input, sync_widget, init_session_state, load_user_data
 
 # --- 1. CONFIG & AUTH ---
@@ -30,11 +28,11 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. DATABASE INITIALIZATION (NATIVE METHOD) ---
+# --- 3. DATABASE INITIALIZATION ---
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Ensure the rental_analyzer block exists in Supabase memory
+# Initialize with EMPTY listings (Clean Slate)
 if 'rental_analyzer' not in st.session_state.app_db:
     st.session_state.app_db['rental_analyzer'] = {
         'dp_val': 20.0,
@@ -43,38 +41,31 @@ if 'rental_analyzer' not in st.session_state.app_db:
         'mgmt_fee': 8.0,
         'dp_mode': "Percentage (%)",
         'use_mgmt': False,
-        'sync': "sync", # Dummy key to trigger background saves
-        'listings': [
-            {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850}
-        ]
+        'listings': [] # Removed default Noel Drive address
     }
 
-# Sync session lists to the active database
 if 'rental_listings' not in st.session_state:
     st.session_state.rental_listings = st.session_state.app_db['rental_analyzer'].get('listings', [])
 
-# THE FIX: Piggyback on data_handler's sync_widget to force a Supabase save
+# THE FIX: Route the save command through the exact same sync_widget used by profile.py
 def force_cloud_save():
-    st.session_state.app_db['rental_analyzer']['listings'] = st.session_state.rental_listings
-    st.session_state['rental_analyzer_sync'] = "trigger"
-    sync_widget("rental_analyzer:sync")
+    st.session_state['rental_analyzer_listings'] = st.session_state.rental_listings
+    sync_widget("rental_analyzer:listings")
 
 def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     force_cloud_save()
 
-# --- 4. GLOBAL SETTINGS (POWERED BY CLOUD_INPUT) ---
+# --- 4. GLOBAL SETTINGS ---
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
     g_col1, g_col2, g_col3, g_col4 = st.columns(4)
     with g_col1:
-        # Native Radio Sync
         curr_dp_mode = st.session_state.app_db['rental_analyzer'].get('dp_mode', "Percentage (%)")
         st.radio("DP Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
                  key="rental_analyzer_dp_mode", index=0 if "Percent" in curr_dp_mode else 1,
                  on_change=sync_widget, args=('rental_analyzer:dp_mode',))
     with g_col2:
-        # Native Cloud Input automatically saves to Supabase
         lbl = f"Down Payment ({'%' if 'Percent' in curr_dp_mode else '$'})"
         cloud_input(lbl, "rental_analyzer", "dp_val", step=1.0)
     with g_col3:
@@ -116,6 +107,10 @@ def geocode_address(index):
             st.warning(f"Map Service Error: {e}")
 
 st.subheader("🏠 Property Underwriting")
+
+if len(st.session_state.rental_listings) == 0:
+    st.info("No properties in your portfolio yet. Click below to start underwriting.")
+
 for i, listing in enumerate(st.session_state.rental_listings):
     with st.expander(f"Listing #{i+1}: {listing['address'][:30]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
@@ -141,7 +136,7 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with r3_c4: st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
 if len(st.session_state.rental_listings) < 10:
-    if st.button("➕ Add Another Listing"):
+    if st.button("➕ Add New Listing"):
         st.session_state.rental_listings.append({
             "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
             "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
@@ -182,11 +177,10 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 7. FAST POI FETCHER (FIXED FOR STABILITY) ---
+# --- 7. FAST POI FETCHER ---
 @st.cache_data(ttl=86400, show_spinner=False) 
 def pull_osm_data(lat, lon, radius, poi_type):
     headers = {"User-Agent": "AnalystInAPocket/1.0"}
-    # Simplified node-only query prevents timeouts and blocks
     query_map = {"SkyTrain": '"railway"="station"', "Grocery": '"shop"="supermarket"'}
     
     if poi_type not in query_map: return pd.DataFrame()
@@ -223,7 +217,6 @@ if full_analysis_list:
     df_results['Rank_str'] = df_results['Rank'].apply(lambda x: str(x) if x != 99 else "-")
     df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank_str']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
 
-    # Split properties into Gold (Best) and Charcoal (Others) for flawless rendering
     df_best = df_results[df_results['Rank'] == 1].copy()
     df_others = df_results[df_results['Rank'] > 1].copy()
 
@@ -232,18 +225,19 @@ if full_analysis_list:
     
     map_layers = []
 
-    # Hardcoded color mapping guarantees the background circles render
+    def add_bulletproof_badge(df, radius, color_rgb):
+        if not df.empty:
+            df['color_col'] = [color_rgb] * len(df)
+            map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
+            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+
     if show_skytrain:
         df_train = pull_osm_data(center_lat, center_lon, 3000, "SkyTrain")
-        if not df_train.empty:
-            map_layers.append(pdk.Layer("ScatterplotLayer", df_train, get_position='[lon, lat]', get_fill_color=[0, 102, 204, 255], get_radius=120, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df_train, get_position='[lon, lat]', get_text='icon', get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+        add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) 
 
     if show_grocery:
         df_groc = pull_osm_data(center_lat, center_lon, 2000, "Grocery")
-        if not df_groc.empty:
-            map_layers.append(pdk.Layer("ScatterplotLayer", df_groc, get_position='[lon, lat]', get_fill_color=[40, 167, 69, 255], get_radius=100, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df_groc, get_position='[lon, lat]', get_text='icon', get_size=16, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+        add_bulletproof_badge(df_groc, 100, [40, 167, 69, 255]) 
 
     if not df_best.empty:
         map_layers.append(pdk.Layer("ScatterplotLayer", df_best, get_position='[lon, lat]', get_fill_color=[206, 179, 111, 255], get_radius=220, pickable=True))
