@@ -32,7 +32,6 @@ st.title("Pro Rental Portfolio Analyzer")
 if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
-# Initialize with EMPTY listings (Clean Slate)
 if 'rental_analyzer' not in st.session_state.app_db:
     st.session_state.app_db['rental_analyzer'] = {
         'dp_val': 20.0,
@@ -41,13 +40,12 @@ if 'rental_analyzer' not in st.session_state.app_db:
         'mgmt_fee': 8.0,
         'dp_mode': "Percentage (%)",
         'use_mgmt': False,
-        'listings': [] # Removed default Noel Drive address
+        'listings': [] 
     }
 
 if 'rental_listings' not in st.session_state:
     st.session_state.rental_listings = st.session_state.app_db['rental_analyzer'].get('listings', [])
 
-# THE FIX: Route the save command through the exact same sync_widget used by profile.py
 def force_cloud_save():
     st.session_state['rental_analyzer_listings'] = st.session_state.rental_listings
     sync_widget("rental_analyzer:listings")
@@ -102,7 +100,7 @@ def geocode_address(index):
                 st.session_state.rental_listings[index]['address'] = clean_addr
                 force_cloud_save() 
                 st.toast(f"📍 Mapped & Saved: {clean_addr}")
-                st.rerun()
+                # Removed redundant st.rerun() here to fix the "no-op" warning
         except Exception as e:
             st.warning(f"Map Service Error: {e}")
 
