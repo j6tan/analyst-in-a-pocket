@@ -51,7 +51,7 @@ if 'land_residual' not in st.session_state.app_db:
         'soft_cost_pct': 20.0,
         'profit_margin': 15.0,
         'finance_rate': 7.5,
-        'project_years': 2.0
+        'project_months': 24.0  # Changed from project_years to project_months
     }
 
 prof = st.session_state.app_db.get('profile', {})
@@ -128,7 +128,8 @@ with f_col2:
 with f_col3:
     st.markdown("**Financing Assumptions**")
     finance_rate = cloud_input("Construction Loan Rate (%)", "land_residual", "finance_rate", step=0.5)
-    project_years = cloud_input("Construction Duration (Years)", "land_residual", "project_years", step=0.5)
+    # Changed to input Months instead of Years
+    project_months = cloud_input("Construction Duration (Months)", "land_residual", "project_months", step=1.0)
     st.caption("Time to build before sell-out phase begins.")
 
 # --- 7. CALCULATIONS ---
@@ -144,14 +145,15 @@ total_soft = total_hard * (soft_cost_pct / 100)
 total_construction = total_hard + total_soft
 
 # 4. Financing (Simplified linear draw assumption over construction period)
-finance_cost = (total_construction * 0.5) * (finance_rate / 100) * project_years
+# Rate is annual, so we divide project_months by 12 to calculate the total interest
+finance_cost = (total_construction * 0.5) * (finance_rate / 100) * (project_months / 12)
 
 # 5. The Residual Land Value
 residual_land_value = gdv - target_profit - total_construction - finance_cost
 rlv_per_buildable = residual_land_value / buildable_sf if buildable_sf > 0 else 0
 
 # 6. Cash Flow Trajectory (S-Curve)
-const_months = int(project_years * 12)
+const_months = int(project_months)
 sell_months = BUILD_COSTS[prod_type].get("sell_months", 12)
 total_months = const_months + sell_months
 
