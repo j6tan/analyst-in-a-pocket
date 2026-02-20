@@ -28,48 +28,46 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS (THE BULLETPROOF FIX) ---
-# We initialize a permanent dictionary in the session state for global settings
+# --- 3. GLOBAL SETTINGS (CLEAN LAYOUT) ---
 if 'global_settings' not in st.session_state:
     st.session_state.global_settings = {
-        'dp_mode': "Percentage (%)",
-        'dp_val': 20.0,
-        'm_rate': 5.1,
-        'm_amort': 25,
-        'use_mgmt': False,
-        'mgmt_fee': 8.0
+        'dp_mode': "Percentage (%)", 'dp_val': 20.0, 'm_rate': 5.1,
+        'm_amort': 25, 'use_mgmt': False, 'mgmt_fee': 8.0
     }
 
-# Callback to force-save global changes instantly
 def sync_global(field, key):
     st.session_state.global_settings[field] = st.session_state[key]
 
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
-    g_col1, g_col2, g_col3, g_col4 = st.columns([1.5, 1.5, 1, 1])
+    
+    # Row 1: Finance Logic
+    g_col1, g_col2, g_col3, g_col4 = st.columns(4)
     with g_col1:
-        st.radio("Down Payment Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
-                 key="g_dp_mode", 
-                 index=0 if "Percent" in st.session_state.global_settings['dp_mode'] else 1,
+        st.radio("DP Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
+                 key="g_dp_mode", index=0 if "Percent" in st.session_state.global_settings['dp_mode'] else 1,
                  on_change=sync_global, args=('dp_mode', 'g_dp_mode'))
     with g_col2:
         lbl = f"Down Payment ({'%' if 'Percent' in st.session_state.global_settings['dp_mode'] else '$'})"
         st.number_input(lbl, value=float(st.session_state.global_settings['dp_val']), 
                         key="g_dp_val", on_change=sync_global, args=('dp_val', 'g_dp_val'))
     with g_col3:
-        st.number_input("Mortgage Interest Rate (%)", value=float(st.session_state.global_settings['m_rate']), step=0.1, 
+        st.number_input("Interest Rate (%)", value=float(st.session_state.global_settings['m_rate']), step=0.1, 
                         key="g_m_rate", on_change=sync_global, args=('m_rate', 'g_m_rate'))
     with g_col4:
-        st.number_input("Amortization (Years)", value=int(st.session_state.global_settings['m_amort']), step=1, 
+        st.number_input("Amortization (Yrs)", value=int(st.session_state.global_settings['m_amort']), step=1, 
                         key="g_m_amort", on_change=sync_global, args=('m_amort', 'g_m_amort'))
     
-    g_col5, g_col6 = st.columns([2, 1])
+    st.divider() # Creates a clean break for organization
+    
+    # Row 2: Management Options
+    g_col5, g_col6, g_col7 = st.columns([1.5, 1.5, 2])
     with g_col5:
-        st.checkbox("Will you use a Property Manager?", value=st.session_state.global_settings['use_mgmt'], 
+        st.checkbox("Use Property Manager?", value=st.session_state.global_settings['use_mgmt'], 
                     key="g_use_mgmt", on_change=sync_global, args=('use_mgmt', 'g_use_mgmt'))
     with g_col6:
         if st.session_state.global_settings['use_mgmt']:
-            st.number_input("Property Management Fee (%)", value=float(st.session_state.global_settings['mgmt_fee']), step=0.5, 
+            st.number_input("Management Fee (%)", value=float(st.session_state.global_settings['mgmt_fee']), step=0.5, 
                             key="g_mgmt_fee", on_change=sync_global, args=('mgmt_fee', 'g_mgmt_fee'))
 
 # --- 4. LISTING MANAGEMENT ---
@@ -86,14 +84,28 @@ def geocode_address(index):
     addr = st.session_state.rental_listings[index]['address']
     if addr:
         try:
-            location = geolocator.geocode(addr)
+            # addressdetails=True pulls components to help us format cleanly
+            location = geolocator.geocode(addr, addressdetails=True)
             if location:
                 st.session_state.rental_listings[index]['lat'] = location.latitude
                 st.session_state.rental_listings[index]['lon'] = location.longitude
-                st.session_state.rental_listings[index]['address'] = location.address
-                st.toast(f"📍 Added to Map: {location.address}")
+                
+                # Format Address: 1234 Apple Ave, Burnaby
+                raw_addr = location.raw.get('address', {})
+                h_num = raw_addr.get('house_number', '')
+                road = raw_addr.get('road', '')
+                city = raw_addr.get('city', raw_addr.get('town', raw_addr.get('village', raw_addr.get('municipality', ''))))
+                
+                if road and city:
+                    clean_addr = f"{h_num} {road}, {city}".strip()
+                else:
+                    clean_addr = ", ".join(location.address.split(",")[:2]) # Fallback
+                
+                st.session_state.rental_listings[index]['address'] = clean_addr
+                st.toast(f"📍 Added: {clean_addr}")
                 st.rerun()
-        except: pass
+        except Exception as e:
+            st.warning(f"Map Service Error: {e}")
 
 st.subheader("🏠 Property Underwriting")
 for i, listing in enumerate(st.session_state.rental_listings):
@@ -137,13 +149,8 @@ if len(st.session_state.rental_listings) < 10:
 
 # --- 5. CALCULATIONS ENGINE ---
 full_analysis_list = []
-
-# Fetch the permanent globals to use in calculations
 gs = st.session_state.global_settings
-calc_dp_mode = gs['dp_mode']
-calc_dp_val = gs['dp_val']
-calc_m_rate = gs['m_rate']
-calc_m_amort = gs['m_amort']
+calc_dp_mode, calc_dp_val, calc_m_rate, calc_m_amort = gs['dp_mode'], gs['dp_val'], gs['m_rate'], gs['m_amort']
 calc_mgmt_fee = gs['mgmt_fee'] if gs['use_mgmt'] else 0.0
 
 for idx, l in enumerate(st.session_state.rental_listings):
@@ -152,7 +159,6 @@ for idx, l in enumerate(st.session_state.rental_listings):
         gross_inc = l['rent'] * 12
         mgmt_cost = (l['rent'] * 12 * (calc_mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
-        
         op_ex = l['tax'] + (l['strata'] * 12) + (l.get('ins', 100) * 12) + mgmt_cost + reserves
         
         if l['price'] > 0:
@@ -174,27 +180,34 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 6. POI MAP LAYER MATIC (WITH REAL ICONS) ---
-@st.cache_data(ttl=86400) 
+# --- 6. PROFESSIONAL POI BADGES (OVERPASS API FIX) ---
+@st.cache_data(ttl=86400, show_spinner=False) 
 def fetch_osm_pois(lat, lon, radius, poi_type):
+    # Added proper User-Agent to prevent silent blocking
+    headers = {"User-Agent": "AnalystInAPocket/1.0 (Contact: analyst@example.com)"}
     overpass_url = "http://overpass-api.de/api/interpreter"
+    
     query_map = {
-        "Schools": 'nwr["amenity"="school"]',
-        "Hospitals": 'nwr["amenity"="hospital"]',
-        "Bus Stops": 'node["highway"="bus_stop"]',
-        "Parks": 'nwr["leisure"="park"]'
+        "Schools": '"amenity"="school"',
+        "Hospitals": '"amenity"="hospital"',
+        "Bus Stops": '"highway"="bus_stop"',
+        "Parks": '"leisure"="park"'
     }
-    icon_map = {"Schools": "🏫", "Hospitals": "🏥", "Bus Stops": "🚌", "Parks": "🌲"}
     
     if poi_type not in query_map: return pd.DataFrame()
+    tag = query_map[poi_type]
     
     overpass_query = f"""
-    [out:json];
-    ({query_map[poi_type]}(around:{radius},{lat},{lon}););
+    [out:json][timeout:25];
+    (
+      node[{tag}](around:{radius},{lat},{lon});
+      way[{tag}](around:{radius},{lat},{lon});
+      relation[{tag}](around:{radius},{lat},{lon});
+    );
     out center;
     """
     try:
-        response = requests.get(overpass_url, params={'data': overpass_query})
+        response = requests.get(overpass_url, params={'data': overpass_query}, headers=headers, timeout=10)
         data = response.json()
         pois = []
         for element in data['elements']:
@@ -202,7 +215,7 @@ def fetch_osm_pois(lat, lon, radius, poi_type):
             p_lon = element.get('lon', element.get('center', {}).get('lon'))
             p_name = element.get('tags', {}).get('name', poi_type[:-1])
             if p_lat and p_lon:
-                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type[:-1]}: {p_name}", 'icon': icon_map[poi_type]})
+                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type[:-1]}: {p_name}"})
         return pd.DataFrame(pois)
     except:
         return pd.DataFrame()
@@ -215,7 +228,6 @@ if full_analysis_list:
     st.divider()
     st.subheader("🗺️ Geographic Portfolio Distribution")
     
-    # Layer Controls
     layer_col1, layer_col2, layer_col3, layer_col4, layer_col5 = st.columns(5)
     with layer_col1: show_schools = st.checkbox("🏫 Schools")
     with layer_col2: show_hospitals = st.checkbox("🏥 Hospitals")
@@ -224,7 +236,6 @@ if full_analysis_list:
     with layer_col5:
         st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
-    # Base Property Pins
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
     df_results['Rank_str'] = df_results['Rank'].astype(str) 
@@ -236,24 +247,31 @@ if full_analysis_list:
     
     map_layers = []
 
-    # Properties: Colored Circles
-    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=180, pickable=True))
-    # Properties: Centered White Rank Numbers
+    # Properties Layers
+    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color', get_radius=180, pickable=True))
     map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
 
-    # Dynamic POI Layers
+    # Dynamic POI Badge Setup (Guaranteed to render natively)
+    def add_poi_badge(df, radius, color, letter):
+        if not df.empty:
+            df['color_col'] = [color] * len(df)
+            df['letter_col'] = letter
+            map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
+            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='letter_col', get_size=14, get_color=[255,255,255,255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
+
+    # Build Map Badges
     if show_schools:
         df_sch = fetch_osm_pois(center_lat, center_lon, 3000, "Schools")
-        if not df_sch.empty: map_layers.append(pdk.Layer("TextLayer", df_sch, get_position='[lon, lat]', get_text='icon', get_size=25, pickable=True))
+        add_poi_badge(df_sch, 100, [0, 102, 204, 200], "S") # Blue S
     if show_hospitals:
         df_hos = fetch_osm_pois(center_lat, center_lon, 5000, "Hospitals")
-        if not df_hos.empty: map_layers.append(pdk.Layer("TextLayer", df_hos, get_position='[lon, lat]', get_text='icon', get_size=28, pickable=True))
+        add_poi_badge(df_hos, 120, [204, 0, 0, 200], "H") # Red H
     if show_transit:
         df_bus = fetch_osm_pois(center_lat, center_lon, 1500, "Bus Stops")
-        if not df_bus.empty: map_layers.append(pdk.Layer("TextLayer", df_bus, get_position='[lon, lat]', get_text='icon', get_size=20, pickable=True))
+        add_poi_badge(df_bus, 50, [255, 128, 0, 200], "B") # Orange B
     if show_parks:
         df_prk = fetch_osm_pois(center_lat, center_lon, 2000, "Parks")
-        if not df_prk.empty: map_layers.append(pdk.Layer("TextLayer", df_prk, get_position='[lon, lat]', get_text='icon', get_size=25, pickable=True))
+        add_poi_badge(df_prk, 100, [0, 153, 76, 200], "P") # Green P
 
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
