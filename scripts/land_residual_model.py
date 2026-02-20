@@ -49,7 +49,6 @@ intel = load_market_intel()
 current_prime = intel.get("rates", {}).get("bank_prime", 4.45)
 default_finance_rate = current_prime + 2.0
 
-# Fixed velocity rules: 6mo for small, 12mo for mid, 18mo for large
 BUILD_DATA = {
     "Single Family (Custom)": {"fsr": 0.6, "cost": 450, "sell_months": 6},
     "Duplex / Semi-Detached": {"fsr": 0.8, "cost": 380, "sell_months": 6},
@@ -114,7 +113,8 @@ with f_col1:
     profit_margin = cloud_input("Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
 
 with f_col2:
-    hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f_hc_{prod_type}")
+    # Fixed Syntax Error below: added opening quote to f-string key
+    hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
     city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
     soft_cost_pct = cloud_input("Soft Costs (%)", "land_residual", "soft_cost_pct", step=1.0)
 
@@ -174,7 +174,7 @@ else:
     fig.update_layout(title="Capital Absorption Timeline", xaxis_title="Months", height=350, plot_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- SENSITIVITY HEATMAP (RESTORED) ---
+    # --- SENSITIVITY HEATMAP ---
     st.subheader("🌡️ Risk Matrix: Price vs Cost Sensitivity")
     sale_steps = [sell_psf * 0.9, sell_psf * 0.95, sell_psf, sell_psf * 1.05, sell_psf * 1.1]
     cost_steps = [hard_cost_psf * 0.9, hard_cost_psf * 0.95, hard_cost_psf, hard_cost_psf * 1.05, hard_cost_psf * 1.1]
@@ -183,7 +183,6 @@ else:
     for c in cost_steps:
         row, t_row = [], []
         for s in sale_steps:
-            # Re-calc residual for matrix
             t_const = (buildable_sf * c) + (buildable_sf * c * (soft_cost_pct/100)) + total_city_fees
             rlv = (buildable_sf * s) - (buildable_sf * s * (profit_margin/100)) - t_const - (t_const * 0.5 * (finance_rate/100) * (project_months/12))
             row.append(rlv)
