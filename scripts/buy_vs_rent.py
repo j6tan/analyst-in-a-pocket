@@ -1,315 +1,239 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
-import pydeck as pdk 
-import requests 
+import plotly.graph_objects as go
+import os
 from style_utils import inject_global_css, show_disclaimer
-from data_handler import cloud_input, sync_widget, init_session_state, load_user_data
+from data_handler import cloud_input, sync_widget, supabase, load_user_data, init_session_state
+import time
 
-# --- 1. CONFIG & AUTH ---
+# --- UNIVERSAL AUTO-LOADER ---
 init_session_state()
-inject_global_css()
+if st.session_state.get('username') and not st.session_state.app_db.get('profile'):
+    with st.spinner("🔄 restoring your data..."):
+        load_user_data(st.session_state.username)
+        time.sleep(0.1)
+        st.rerun()
 
-try:
-    from geopy.geocoders import Nominatim
-    geolocator = Nominatim(user_agent="analyst_in_a_pocket_v1")
-except Exception:
-    geolocator = None
+# 1. Inject Style
+inject_global_css()
 
 if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-# --- 2. BRANDING COLORS (Unified with other pages) ---
-PRIMARY_GOLD_RGBA = [206, 179, 111, 255] 
-CHARCOAL_RGBA = [46, 43, 40, 255]       
-DARK_RED = "#8B0000"
-SUCCESS_GREEN = "#28a745"
-
+# --- 1. THEME & BRANDING ---
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
 
-st.title("Pro Rental Portfolio Analyzer")
-
-# --- 3. DATABASE INITIALIZATION ---
-if 'app_db' not in st.session_state:
-    st.session_state.app_db = {}
-
-if 'rental_analyzer' not in st.session_state.app_db:
-    st.session_state.app_db['rental_analyzer'] = {
-        'dp_val': 20.0,
-        'm_rate': 5.1,
-        'm_amort': 25.0,
-        'mgmt_fee': 8.0,
-        'dp_mode': "Percentage (%)",
-        'use_mgmt': False,
-        'listings': [] 
-    }
-
-if 'rental_listings' not in st.session_state:
-    st.session_state.rental_listings = st.session_state.app_db['rental_analyzer'].get('listings', [])
-
-def force_cloud_save():
-    st.session_state['rental_analyzer_listings'] = st.session_state.rental_listings
-    sync_widget("rental_analyzer:listings")
-
-def sync_listing(index, field, key):
-    st.session_state.rental_listings[index][field] = st.session_state[key]
-    force_cloud_save()
-
-# --- 4. PERSONALIZED STORYTELLING (Styled like buy_vs_rent) ---
+# --- 2. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {})
 name1 = prof.get('p1_name') or "Primary Client"
 name2 = prof.get('p2_name') or ""
 household = f"{name1} and {name2}" if name2 else name1
+is_renter = prof.get('housing_status') == "Renting"
+
+# --- 3. PERSISTENCE & INITIALIZATION ---
+if 'buy_vs_rent' not in st.session_state.app_db:
+    st.session_state.app_db['buy_vs_rent'] = {}
+br_store = st.session_state.app_db['buy_vs_rent']
+
+if not br_store.get('initialized'):
+    profile_rent = float(prof.get('rent_pmt', 2500)) if is_renter else 2500.0
+    br_store.update({
+        "price": 800000, 
+        "dp": 200000, 
+        "rate": 4.5, 
+        "ann_tax": 3000,
+        "mo_maint": 400, 
+        "apprec": 3.0, 
+        "rent": int(profile_rent), 
+        "rent_inc": 2.0,
+        "stock_ret": 6.0, 
+        "years": 25,
+        "initialized": True 
+    })
+    if st.session_state.get("is_logged_in") and st.session_state.get("username"):
+        try:
+            supabase.table("user_vault").upsert({
+                "id": st.session_state.username, 
+                "data": st.session_state.app_db
+            }).execute()
+        except: pass
+
+# --- 4. CALCULATION ENGINE ---
+def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years):
+    # SAFETY: Ensure years is at least 1
+    if years < 1: years = 1
+    
+    loan = price - dp
+    m_rate = (rate/100)/12
+    n_months = 30 * 12 
+    monthly_pi = loan * (m_rate * (1+m_rate)**n_months) / ((1+m_rate)**n_months - 1) if m_rate > 0 else loan / n_months
+    
+    data = []
+    total_owner_unrecoverable = 0
+    total_renter_unrecoverable = 0
+    curr_loan, curr_val, curr_rent, renter_portfolio = loan, price, rent, dp 
+    
+    for y in range(1, int(years) + 1):
+        annual_int = 0
+        for _ in range(12):
+            mo_interest = curr_loan * m_rate
+            mo_principal = monthly_pi - mo_interest
+            annual_int += mo_interest
+            curr_loan -= mo_principal
+        
+        # Sunk Costs
+        owner_lost_this_year = annual_int + ann_tax + (mo_maint * 12)
+        total_owner_unrecoverable += owner_lost_this_year
+        
+        # Value Growth
+        curr_val *= (1 + apprec/100)
+        
+        # Net Worth Calculation (Equity - Selling Costs)
+        owner_wealth_net = curr_val - max(0, curr_loan) - ((curr_val * 0.05)) # 5% Selling Cost
+        
+        # Renter Math
+        total_renter_unrecoverable += curr_rent * 12
+        owner_mo_outlay = monthly_pi + (ann_tax/12) + mo_maint
+        mo_savings_gap = owner_mo_outlay - curr_rent
+        
+        # Invest the difference (or withdraw from portfolio if rent > buy cost)
+        for _ in range(12):
+            renter_portfolio = (renter_portfolio + mo_savings_gap) * (1 + (stock_ret/100)/12)
+        
+        data.append({
+            "Year": y, 
+            "Owner Net Wealth": owner_wealth_net, 
+            "Renter Wealth": renter_portfolio,
+            "Owner Unrecoverable": total_owner_unrecoverable, 
+            "Renter Unrecoverable": total_renter_unrecoverable
+        })
+        curr_rent *= (1 + rent_inc/100)
+    
+    return pd.DataFrame(data)
+
+# --- 5. STORYBOX ---
+st.markdown("<style>div.block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
+header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
+with header_col2:
+    st.title("Rent vs. Own Analysis")
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
-    <h3 style="color: {CHARCOAL}; margin: 0 0 10px 0; font-size: 1.5em;">🏗️ {household}: The Underwriting Lab</h3>
+    <h3 style="color: {CHARCOAL}; margin: 0 0 10px 0; font-size: 1.5em;">🛑 {household}: The Homebuyer's Dilemma</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.4; margin: 0;">
-        Welcome to the portfolio analyzer, <b>{household}</b>. This tool is designed to cut through the noise of the real estate market. 
-        By mapping prospective properties alongside key rental drivers like SkyTrains and grocery stores, we can instantly visualize which assets command the highest tenant demand. 
-        Adjust your global financing below, and the engine will automatically rank your prospective listings by <b>Cash-on-Cash Return</b>, stripping away emotion to highlight the absolute best mathematical fit for your portfolio.
+        {name1} values the <b>equity growth</b> and stability of ownership, while {name2 if name2 else 'the household'} is focused on the <b>opportunity cost</b> of the stock market. 
+        Is the "forced savings" of a mortgage worth more than an optimized investment portfolio?
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. GLOBAL SETTINGS ---
-with st.container(border=True):
-    st.subheader("⚙️ Global Settings")
-    g_col1, g_col2, g_col3, g_col4 = st.columns(4)
-    with g_col1:
-        curr_dp_mode = st.session_state.app_db['rental_analyzer'].get('dp_mode', "Percentage (%)")
-        st.radio("DP Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
-                 key="rental_analyzer_dp_mode", index=0 if "Percent" in curr_dp_mode else 1,
-                 on_change=sync_widget, args=('rental_analyzer:dp_mode',))
-    with g_col2:
-        lbl = f"Down Payment ({'%' if 'Percent' in curr_dp_mode else '$'})"
-        cloud_input(lbl, "rental_analyzer", "dp_val", step=1.0)
-    with g_col3:
-        cloud_input("Interest Rate (%)", "rental_analyzer", "m_rate", step=0.1)
-    with g_col4:
-        cloud_input("Amortization (Yrs)", "rental_analyzer", "m_amort", step=1.0)
-    
-    st.divider() 
-    g_col5, g_col6, g_col7 = st.columns([1.5, 1.5, 2])
-    with g_col5:
-        curr_mgmt = st.session_state.app_db['rental_analyzer'].get('use_mgmt', False)
-        st.checkbox("Use Property Manager?", value=curr_mgmt, 
-                    key="rental_analyzer_use_mgmt", on_change=sync_widget, args=('rental_analyzer:use_mgmt',))
-    with g_col6:
-        if curr_mgmt:
-            cloud_input("Management Fee (%)", "rental_analyzer", "mgmt_fee", step=0.5)
+# --- 6. INPUTS (FIXED: Integers) ---
+col_left, col_right = st.columns(2)
+with col_left:
+    st.subheader("🏠 Homeownership Path")
+    price = cloud_input("Purchase Price ($)", "buy_vs_rent", "price", step=50000)
+    dp = cloud_input("Down Payment ($)", "buy_vs_rent", "dp", step=10000)
+    rate = cloud_input("Mortgage Rate (%)", "buy_vs_rent", "rate", step=0.1)
+    ann_tax = cloud_input("Annual Property Tax ($)", "buy_vs_rent", "ann_tax", step=100)
+    mo_maint = cloud_input("Monthly Maintenance ($)", "buy_vs_rent", "mo_maint", step=50)
+    apprec = cloud_input("Annual Appreciation (%)", "buy_vs_rent", "apprec", step=0.1)
 
-# --- 6. LISTING MANAGEMENT UI ---
-def geocode_address(index):
-    if not geolocator: return
-    addr = st.session_state.rental_listings[index]['address']
-    if addr:
-        try:
-            location = geolocator.geocode(addr, addressdetails=True)
-            if location:
-                st.session_state.rental_listings[index]['lat'] = location.latitude
-                st.session_state.rental_listings[index]['lon'] = location.longitude
-                raw_addr = location.raw.get('address', {})
-                h_num = raw_addr.get('house_number', '')
-                road = raw_addr.get('road', '')
-                city = raw_addr.get('city', raw_addr.get('town', raw_addr.get('suburb', raw_addr.get('municipality', ''))))
-                
-                clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
-                st.session_state.rental_listings[index]['address'] = clean_addr
-                force_cloud_save() 
-                st.toast(f"📍 Mapped & Saved: {clean_addr}")
-        except Exception as e:
-            st.warning(f"Map Service Error: {e}")
+with col_right:
+    st.subheader("🏢 Rental Path")
+    rent = cloud_input("Current Monthly Rent ($)", "buy_vs_rent", "rent", step=100)
+    rent_inc = cloud_input("Annual Rent Increase (%)", "buy_vs_rent", "rent_inc", step=0.1)
+    stock_ret = cloud_input("Target Stock Return (%)", "buy_vs_rent", "stock_ret", step=0.1)
+    years = cloud_input("Analysis Horizon (Years)", "buy_vs_rent", "years", step=1, min_value=1)
 
-st.subheader("🏠 Property Underwriting")
+if years < 1: years = 1
+df = run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent_inc, stock_ret, years)
 
-if len(st.session_state.rental_listings) == 0:
-    st.info("No properties in your portfolio yet. Click below to start underwriting.")
+# --- 7. VISUALS ---
+owner_unrec, renter_unrec = df['Owner Unrecoverable'].iloc[-1], df['Renter Unrecoverable'].iloc[-1]
+owner_wealth, renter_wealth = df['Owner Net Wealth'].iloc[-1], df['Renter Wealth'].iloc[-1]
 
-for i, listing in enumerate(st.session_state.rental_listings):
-    with st.expander(f"Listing #{i+1}: {listing['address'][:30]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
-        r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
-        with r1_c1: st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
-        with r1_c2: st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
-        with r1_c3: 
-            if st.button("🗑️ Remove", key=f"del_{i}", use_container_width=True):
-                st.session_state.rental_listings.pop(i)
-                force_cloud_save()
-                st.rerun()
+st.subheader("📊 Performance Comparison")
+v_col1, v_col2 = st.columns(2)
 
-        r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([2.6, 0.6, 0.6, 1, 1])
-        with r2_c1: st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
-        with r2_c2: st.number_input("Beds", value=listing.get('beds', 1), key=f"bd_{i}", on_change=sync_listing, args=(i, 'beds', f"bd_{i}"))
-        with r2_c3: st.number_input("Baths", value=listing.get('baths', 1), key=f"ba_{i}", on_change=sync_listing, args=(i, 'baths', f"ba_{i}"))
-        with r2_c4: st.number_input("Sqft", value=listing.get('sqft', 0), key=f"sq_{i}", on_change=sync_listing, args=(i, 'sqft', f"sq_{i}"))
-        with r2_c5: st.number_input("Year Built", value=listing.get('year', 2000), key=f"yr_{i}", on_change=sync_listing, args=(i, 'year', f"yr_{i}"))
+with v_col1:
+    fig_unrec = go.Figure(data=[
+        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_unrec], marker_color=PRIMARY_GOLD, text=[f"${owner_unrec:,.0f}"], textposition='auto'),
+        go.Bar(name='Renter', x=['Renter'], y=[renter_unrec], marker_color=CHARCOAL, text=[f"${renter_unrec:,.0f}"], textposition='auto')
+    ])
+    fig_unrec.update_layout(
+        title=dict(text="Total Sunk Costs (Lost Money)", x=0.5, y=0.9),
+        margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False
+    )
+    st.plotly_chart(fig_unrec, use_container_width=True)
 
-        r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(4)
-        with r3_c1: st.number_input("Monthly Rent ($)", value=listing['rent'], key=f"rt_{i}", on_change=sync_listing, args=(i, 'rent', f"rt_{i}"))
-        with r3_c2: st.number_input("Property Tax ($)", value=listing['tax'], key=f"tx_{i}", on_change=sync_listing, args=(i, 'tax', f"tx_{i}"))
-        with r3_c3: st.number_input("Strata Fees ($)", value=listing['strata'], key=f"st_{i}", on_change=sync_listing, args=(i, 'strata', f"st_{i}"))
-        with r3_c4: st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
+with v_col2:
+    fig_wealth = go.Figure(data=[
+        go.Bar(name='Homeowner', x=['Homeowner'], y=[owner_wealth], marker_color=PRIMARY_GOLD, text=[f"${owner_wealth:,.0f}"], textposition='auto'),
+        go.Bar(name='Renter', x=['Renter'], y=[renter_wealth], marker_color=CHARCOAL, text=[f"${renter_wealth:,.0f}"], textposition='auto')
+    ])
+    fig_wealth.update_layout(
+        title=dict(text=f"Net Worth after {years} Years", x=0.5, y=0.9),
+        margin=dict(t=40, b=0, l=0, r=0), height=300, showlegend=False
+    )
+    st.plotly_chart(fig_wealth, use_container_width=True)
 
-if len(st.session_state.rental_listings) < 10:
-    if st.button("➕ Add New Listing"):
-        st.session_state.rental_listings.append({
-            "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
-            "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
-        })
-        force_cloud_save()
-        st.rerun()
+# --- 8. WEALTH TRAJECTORY (The Chart I added) ---
+st.subheader("📈 The Break-Even Timeline")
+fig_line = go.Figure()
+fig_line.add_trace(go.Scatter(x=df['Year'], y=df['Owner Net Wealth'], mode='lines', name='Homeowner Wealth', line=dict(color=PRIMARY_GOLD, width=4)))
+fig_line.add_trace(go.Scatter(x=df['Year'], y=df['Renter Wealth'], mode='lines', name='Renter Wealth', line=dict(color=CHARCOAL, width=3, dash='dash')))
 
-# --- 7. CALCULATIONS ENGINE ---
-full_analysis_list = []
-gs = st.session_state.app_db['rental_analyzer']
-calc_dp_mode, calc_dp_val, calc_m_rate, calc_m_amort = gs.get('dp_mode', 'Percentage (%)'), float(gs.get('dp_val', 20)), float(gs.get('m_rate', 5.1)), float(gs.get('m_amort', 25))
-calc_mgmt_fee = float(gs.get('mgmt_fee', 8.0)) if gs.get('use_mgmt', False) else 0.0
+fig_line.update_layout(
+    height=400,
+    margin=dict(l=20, r=20, t=20, b=20),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    hovermode="x unified"
+)
+st.plotly_chart(fig_line, use_container_width=True)
 
-for idx, l in enumerate(st.session_state.rental_listings):
-    if l.get('lat') and l.get('lon'):
-        noi, dp_amt, ann_mtg, net_cf, coc_ret, psf = 0, 0, 0, 0, 0, 0
-        gross_inc = l['rent'] * 12
-        mgmt_cost = (l['rent'] * 12 * (calc_mgmt_fee / 100))
-        reserves = (l['rent'] * 12 * 0.05) 
-        op_ex = l['tax'] + (l['strata'] * 12) + (l.get('ins', 100) * 12) + mgmt_cost + reserves
+# --- 9. STRATEGIC VERDICT (RESTORED) ---
+st.divider()
+st.subheader("🎯 Strategic Verdict")
+ins_col1, ins_col2 = st.columns(2)
+
+with ins_col1:
+    if owner_wealth > renter_wealth:
+        st.success(f"🏆 **Wealth Champion: Homeowner**\n\nOwnership builds **${(owner_wealth - renter_wealth):,.0f} more** in assets over {int(years)} years.")
+    else:
+        st.warning(f"🏆 **Wealth Champion: Renter**\n\nStock returns currently outperform equity. The Renter is **${(renter_wealth - owner_wealth):,.0f} ahead**.")
+
+    sunk_diff = abs(owner_unrec - renter_unrec)
+    if owner_unrec < renter_unrec:
+        st.info(f"✨ **Efficiency Champion: Homeowner**\n\nOwnership wastes **${sunk_diff:,.0f} less** money (Interest/Tax/Maint) than Renting.")
+    else:
+        st.info(f"✨ **Efficiency Champion: Renter**\n\nRenting wastes **${sunk_diff:,.0f} less** money than Buying.")
+
+with ins_col2:
+    # --- THIS LOGIC IS NOW RESTORED FROM YOUR OLD SCRIPT ---
+    if (renter_wealth > owner_wealth) and (owner_unrec < renter_unrec):
+        # The Investor's Paradox Case
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 15px; border-radius: 8px; border: 1px solid #d1d5db;">
+        <b>🔍 The Investor's Paradox:</b><br>
+        Even though Ownership has lower sunk costs, the Renter is wealthier. <br><br>
+        This happens because your <b>{stock_ret}% Stock Return</b> is working harder on your initial capital than your <b>{apprec}% Home Appreciation</b>.
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        # The Break-Even / Growth Outlook Case
+        ahead_mask = df['Owner Net Wealth'] > df['Renter Wealth']
+        be_year = int(df[ahead_mask].iloc[0]['Year']) if ahead_mask.any() else None
         
-        if l['price'] > 0:
-            noi = gross_inc - op_ex
-            dp_amt = (l['price'] * (calc_dp_val / 100)) if "Percent" in calc_dp_mode else calc_dp_val
-            loan = l['price'] - dp_amt
-            r = (calc_m_rate / 100) / 12
-            pmt = loan * (r * (1 + r)**(calc_m_amort*12)) / ((1 + r)**(calc_m_amort*12) - 1) if r > 0 else loan / (calc_m_amort*12)
-            ann_mtg = pmt * 12
-            net_cf = noi - ann_mtg
-            coc_ret = (net_cf / dp_amt) * 100 if dp_amt > 0 else 0
-            psf = l['price'] / l['sqft'] if l.get('sqft', 0) > 0 else 0
-
-        full_analysis_list.append({
-            "Address": l['address'], "Price": l['price'], "Area (sqft)": l.get('sqft', 0),
-            "PSF": psf, "Gross Annual Rent": gross_inc, "Annual OpEx": op_ex,
-            "Annual Mortg": ann_mtg, "Annual Net Cash Flow": net_cf,
-            "Cap Rate %": (noi / l['price']) * 100 if l['price']>0 else 0,
-            "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
-        })
-
-# --- 8. FAST POI FETCHER ---
-@st.cache_data(ttl=86400, show_spinner=False) 
-def pull_osm_data(lat, lon, radius, poi_type):
-    headers = {"User-Agent": "AnalystInAPocket/1.0"}
-    query_map = {"SkyTrain": '"railway"="station"', "Grocery": '"shop"="supermarket"'}
-    
-    if poi_type not in query_map: return pd.DataFrame()
-    tag = query_map[poi_type]
-    
-    query = f'[out:json][timeout:10];node[{tag}](around:{radius},{lat},{lon});out;'
-    try:
-        response = requests.get("https://overpass-api.de/api/interpreter", params={'data': query}, headers=headers, timeout=5)
-        data = response.json()
-        pois = []
-        for el in data.get('elements', []):
-            if 'lat' in el and 'lon' in el:
-                name = el.get('tags', {}).get('name', poi_type)
-                pois.append({'lat': el['lat'], 'lon': el['lon'], 'HoverText': f"{poi_type}: {name}", 'icon': "T" if poi_type == "SkyTrain" else "G"})
-        return pd.DataFrame(pois)
-    except:
-        return pd.DataFrame()
-
-# --- 9. VISUALS & RANKING ---
-if full_analysis_list:
-    df_results = pd.DataFrame(full_analysis_list)
-    df_ranked = df_results[df_results['Price'] > 0].sort_values(by="CoC %", ascending=False).reset_index(drop=True)
-    
-    st.divider()
-    st.subheader("🗺️ Geographic Portfolio Distribution")
-    
-    layer_col1, layer_col2, layer_col3 = st.columns([1.5, 1.5, 3])
-    with layer_col1: show_skytrain = st.checkbox("🚇 SkyTrain Stations")
-    with layer_col2: show_grocery = st.checkbox("🛒 Grocery Stores")
-    with layer_col3:
-        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
-
-    df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else 99)
-    df_results['Rank_str'] = df_results['Rank'].apply(lambda x: str(x) if x != 99 else "-")
-    df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank_str']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
-
-    df_best = df_results[df_results['Rank'] == 1].copy()
-    df_others = df_results[df_results['Rank'] > 1].copy()
-
-    center_lat, center_lon = df_results['lat'].mean(), df_results['lon'].mean()
-    view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=13)
-    
-    map_layers = []
-
-    def add_bulletproof_badge(df, radius, color_rgb):
-        if not df.empty:
-            df['color_col'] = [color_rgb] * len(df)
-            map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
-
-    if show_skytrain:
-        df_train = pull_osm_data(center_lat, center_lon, 3000, "SkyTrain")
-        add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) 
-
-    if show_grocery:
-        df_groc = pull_osm_data(center_lat, center_lon, 2000, "Grocery")
-        add_bulletproof_badge(df_groc, 100, [40, 167, 69, 255]) 
-
-    if not df_best.empty:
-        map_layers.append(pdk.Layer("ScatterplotLayer", df_best, get_position='[lon, lat]', get_fill_color=[206, 179, 111, 255], get_radius=220, pickable=True))
-        map_layers.append(pdk.Layer("TextLayer", df_best, get_position='[lon, lat]', get_text="Rank_str", get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
-
-    if not df_others.empty:
-        map_layers.append(pdk.Layer("ScatterplotLayer", df_others, get_position='[lon, lat]', get_fill_color=[46, 43, 40, 255], get_radius=180, pickable=True))
-        map_layers.append(pdk.Layer("TextLayer", df_others, get_position='[lon, lat]', get_text="Rank_str", get_size=16, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
-
-    st.pydeck_chart(pdk.Deck(
-        map_style=None, initial_view_state=view_state, 
-        layers=map_layers,
-        tooltip={"text": "{HoverText}"} 
-    ))
-
-    # --- 10. RANKING TABLE ---
-    if not df_ranked.empty:
-        st.subheader("📊 Comparative Ranking")
-        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
-        
-        st.dataframe(
-            display_df, use_container_width=True, hide_index=True,
-            column_config={
-                "Price": st.column_config.NumberColumn(format="$%d"),
-                "Area (sqft)": st.column_config.NumberColumn(format="%d"),
-                "PSF": st.column_config.NumberColumn(format="$%d"),
-                "Gross Annual Rent": st.column_config.NumberColumn(format="$%d"),
-                "Annual OpEx": st.column_config.NumberColumn(format="$%d"),
-                "Annual Mortg": st.column_config.NumberColumn(format="$%d"),
-                "Annual Net Cash Flow": st.column_config.NumberColumn(format="$%d"),
-                "Cap Rate %": st.column_config.NumberColumn(format="%.2f%%"),
-                "CoC %": st.column_config.NumberColumn(format="%.2f%%")
-            }
-        )
-
-        st.subheader("💰 Deep Underwriting (Top Selection)")
-        top = df_ranked.iloc[0]
-        st.markdown(f"**Selected Listing:** {top['Address']}")
-
-        def styled_metric(label, value, color, is_outflow=True):
-            prefix = "-" if is_outflow else ""
-            st.markdown(f"""
-            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
-                <p style="margin:0; font-size: 0.85rem; color: #6c757d;">{label}</p>
-                <p style="margin:0; font-size: 1.5rem; font-weight: bold; color: {color};">{prefix}${value:,.0f}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-        m1, m2, m3, m4 = st.columns(4)
-        with m1: styled_metric("Down Payment Req", top['DP_RAW'], DARK_RED)
-        with m2: styled_metric("Gross Annual Income", top['Gross Annual Rent'], SUCCESS_GREEN, is_outflow=False)
-        with m3: styled_metric("Annual Operating Ex", top['Annual OpEx'], DARK_RED)
-        with m4: styled_metric("Annual Mortgage", top['Annual Mortg'], DARK_RED)
+        if be_year:
+            st.write(f"### ⏳ Break-Even: Year {be_year}")
+            st.write(f"This is when equity build-up finally overcomes the high friction costs of interest and taxes.")
+        else:
+            st.write("### 📉 Growth Outlook")
+            st.write("Under current market settings, the home is not projected to catch up in net worth.")
 
 show_disclaimer()
