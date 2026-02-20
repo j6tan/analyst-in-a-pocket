@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pydeck as pdk 
-import requests # Added for OSM Layer Data
+import requests 
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import init_session_state, load_user_data
 
@@ -28,33 +28,33 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS ---
+# --- 3. GLOBAL SETTINGS (FIXED PERSISTENCE) ---
+# Added explicit keys to all global inputs so they never reset on reload
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
     g_col1, g_col2, g_col3, g_col4 = st.columns([1.5, 1.5, 1, 1])
     with g_col1:
-        dp_mode = st.radio("Down Payment Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True)
+        dp_mode = st.radio("Down Payment Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, key="g_dp_mode")
     with g_col2:
         dp_global_val = st.number_input(f"Down Payment ({'%' if 'Percent' in dp_mode else '$'})", 
-                                        value=20.0 if "Percent" in dp_mode else 100000.0)
+                                        value=20.0 if "Percent" in dp_mode else 100000.0, key="g_dp_val")
     with g_col3:
-        m_rate = st.number_input("Mortgage Interest Rate (%)", value=5.1, step=0.1)
+        m_rate = st.number_input("Mortgage Interest Rate (%)", value=5.1, step=0.1, key="g_m_rate")
     with g_col4:
-        m_amort = st.number_input("Amortization (Years)", value=25, step=1)
+        m_amort = st.number_input("Amortization (Years)", value=25, step=1, key="g_m_amort")
     
     g_col5, g_col6 = st.columns([2, 1])
     with g_col5:
-        use_mgmt = st.checkbox("Will you use a Property Manager?")
+        use_mgmt = st.checkbox("Will you use a Property Manager?", key="g_use_mgmt")
     with g_col6:
-        mgmt_fee = st.number_input("Property Management Fee (%)", value=8.0, step=0.5) if use_mgmt else 0.0
+        mgmt_fee = st.number_input("Property Management Fee (%)", value=8.0, step=0.5, key="g_mgmt_fee") if use_mgmt else 0.0
 
-# --- 4. LISTING MANAGEMENT (WITH SYNC FIX) ---
+# --- 4. LISTING MANAGEMENT ---
 if 'rental_listings' not in st.session_state:
     st.session_state.rental_listings = [
         {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
     ]
 
-# The FIX: Callback function to force-save every input
 def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
 
@@ -75,7 +75,6 @@ def geocode_address(index):
 st.subheader("🏠 Property Underwriting")
 for i, listing in enumerate(st.session_state.rental_listings):
     with st.expander(f"Listing #{i+1}: {listing['address'][:30]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
-        # Notice every input now has on_change=sync_listing
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
         with r1_c1: 
             st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
@@ -107,8 +106,12 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with r3_c4: 
             st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
+# FIXED: 'ins', 'beds', 'baths', 'sqft', and 'year' are now injected into the blank template
 if len(st.session_state.rental_listings) < 10:
-    st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({"address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0}))
+    st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({
+        "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
+        "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
+    }))
 
 # --- 5. CALCULATIONS ENGINE ---
 full_analysis_list = []
@@ -118,7 +121,9 @@ for idx, l in enumerate(st.session_state.rental_listings):
         gross_inc = l['rent'] * 12
         mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
-        op_ex = l['tax'] + (l['strata'] * 12) + (l['ins'] * 12) + mgmt_cost + reserves
+        
+        # This is where the KeyError happened! With the 'ins' key added to the blank template above, this is now safe.
+        op_ex = l['tax'] + (l['strata'] * 12) + (l.get('ins', 100) * 12) + mgmt_cost + reserves
         
         if l['price'] > 0:
             noi = gross_inc - op_ex
@@ -139,8 +144,8 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 6. POI MAP LAYER MATIC (OVERPASS API) ---
-@st.cache_data(ttl=86400) # Cache for 24 hours to prevent API spam
+# --- 6. POI MAP LAYER MATIC (WITH REAL ICONS) ---
+@st.cache_data(ttl=86400) 
 def fetch_osm_pois(lat, lon, radius, poi_type):
     overpass_url = "http://overpass-api.de/api/interpreter"
     query_map = {
@@ -149,6 +154,8 @@ def fetch_osm_pois(lat, lon, radius, poi_type):
         "Bus Stops": 'node["highway"="bus_stop"]',
         "Parks": 'nwr["leisure"="park"]'
     }
+    icon_map = {"Schools": "🏫", "Hospitals": "🏥", "Bus Stops": "🚌", "Parks": "🌲"}
+    
     if poi_type not in query_map: return pd.DataFrame()
     
     overpass_query = f"""
@@ -165,7 +172,7 @@ def fetch_osm_pois(lat, lon, radius, poi_type):
             p_lon = element.get('lon', element.get('center', {}).get('lon'))
             p_name = element.get('tags', {}).get('name', poi_type[:-1])
             if p_lat and p_lon:
-                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type[:-1]}: {p_name}"})
+                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type[:-1]}: {p_name}", 'icon': icon_map[poi_type]})
         return pd.DataFrame(pois)
     except:
         return pd.DataFrame()
@@ -190,7 +197,7 @@ if full_analysis_list:
     # Base Property Pins
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
-    df_results['Rank_str'] = df_results['Rank'].astype(str) # Convert to string for Pydeck
+    df_results['Rank_str'] = df_results['Rank'].astype(str) 
     df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
     df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
 
@@ -199,29 +206,29 @@ if full_analysis_list:
     
     map_layers = []
 
-    # 1. Properties: Colored Circles
+    # Properties: Colored Circles
     map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=180, pickable=True))
-    # 2. Properties: Centered White Rank Numbers (No address labels)
+    # Properties: Centered White Rank Numbers
     map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
 
-    # 3. Dynamic POI Layers
+    # Dynamic POI Layers (Now using Emoji TextLayers instead of colored dots!)
     if show_schools:
         df_sch = fetch_osm_pois(center_lat, center_lon, 3000, "Schools")
-        if not df_sch.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_sch, get_position='[lon, lat]', get_color=[0, 102, 204, 180], get_radius=80, pickable=True))
+        if not df_sch.empty: map_layers.append(pdk.Layer("TextLayer", df_sch, get_position='[lon, lat]', get_text='icon', get_size=25, pickable=True))
     if show_hospitals:
         df_hos = fetch_osm_pois(center_lat, center_lon, 5000, "Hospitals")
-        if not df_hos.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_hos, get_position='[lon, lat]', get_color=[204, 0, 0, 180], get_radius=100, pickable=True))
+        if not df_hos.empty: map_layers.append(pdk.Layer("TextLayer", df_hos, get_position='[lon, lat]', get_text='icon', get_size=28, pickable=True))
     if show_transit:
         df_bus = fetch_osm_pois(center_lat, center_lon, 1500, "Bus Stops")
-        if not df_bus.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_bus, get_position='[lon, lat]', get_color=[255, 128, 0, 150], get_radius=50, pickable=True))
+        if not df_bus.empty: map_layers.append(pdk.Layer("TextLayer", df_bus, get_position='[lon, lat]', get_text='icon', get_size=20, pickable=True))
     if show_parks:
         df_prk = fetch_osm_pois(center_lat, center_lon, 2000, "Parks")
-        if not df_prk.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_prk, get_position='[lon, lat]', get_color=[0, 153, 76, 180], get_radius=100, pickable=True))
+        if not df_prk.empty: map_layers.append(pdk.Layer("TextLayer", df_prk, get_position='[lon, lat]', get_text='icon', get_size=25, pickable=True))
 
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
         layers=map_layers,
-        tooltip={"text": "{HoverText}"} # Universal tooltip for all layers
+        tooltip={"text": "{HoverText}"} 
     ))
 
     # --- RANKING TABLE ---
