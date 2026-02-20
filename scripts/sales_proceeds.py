@@ -18,13 +18,13 @@ if 'sales_proceeds' not in st.session_state.app_db:
 
 st.title("💰 Seller's Net Sheet")
 st.markdown("""
-    <div style="background-color: #F8F9FA; padding: 20px; border-radius: 10px; border-left: 5px solid #CEB36F; margin-bottom: 25px;">
-        <h4 style="color: #4A4E5A; margin: 0 0 5px 0;">True Net Estimator</h4>
-        <p style="color: #6C757D; font-size: 1.05em; margin: 0; line-height: 1.5;">
-            The "Sold Price" isn't what lands in your bank account. 
-            This tool strips away commissions, taxes, penalties, and fees to reveal your <b>Real Walk-Away Number</b>.
-        </p>
-    </div>
+<div style="background-color: #F8F9FA; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid #CEB36F; margin-bottom: 25px;">
+    <h3 style="color: #4A4E5A; margin-top: 0; font-size: 1.4em;">💵 Strategic Brief: True Net Estimator</h3>
+    <p style="color: #4A4E5A; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        The "Sold Price" isn't what lands in your bank account. 
+        This tool strips away commissions, taxes, penalties, and fees to reveal your <b>Real Walk-Away Number</b>.
+    </p>
+</div>
 """, unsafe_allow_html=True)
 
 # --- 2. INPUT SECTION ---
