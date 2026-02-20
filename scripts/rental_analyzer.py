@@ -28,26 +28,49 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS (FIXED PERSISTENCE) ---
-# Added explicit keys to all global inputs so they never reset on reload
+# --- 3. GLOBAL SETTINGS (THE BULLETPROOF FIX) ---
+# We initialize a permanent dictionary in the session state for global settings
+if 'global_settings' not in st.session_state:
+    st.session_state.global_settings = {
+        'dp_mode': "Percentage (%)",
+        'dp_val': 20.0,
+        'm_rate': 5.1,
+        'm_amort': 25,
+        'use_mgmt': False,
+        'mgmt_fee': 8.0
+    }
+
+# Callback to force-save global changes instantly
+def sync_global(field, key):
+    st.session_state.global_settings[field] = st.session_state[key]
+
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
     g_col1, g_col2, g_col3, g_col4 = st.columns([1.5, 1.5, 1, 1])
     with g_col1:
-        dp_mode = st.radio("Down Payment Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, key="g_dp_mode")
+        st.radio("Down Payment Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
+                 key="g_dp_mode", 
+                 index=0 if "Percent" in st.session_state.global_settings['dp_mode'] else 1,
+                 on_change=sync_global, args=('dp_mode', 'g_dp_mode'))
     with g_col2:
-        dp_global_val = st.number_input(f"Down Payment ({'%' if 'Percent' in dp_mode else '$'})", 
-                                        value=20.0 if "Percent" in dp_mode else 100000.0, key="g_dp_val")
+        lbl = f"Down Payment ({'%' if 'Percent' in st.session_state.global_settings['dp_mode'] else '$'})"
+        st.number_input(lbl, value=float(st.session_state.global_settings['dp_val']), 
+                        key="g_dp_val", on_change=sync_global, args=('dp_val', 'g_dp_val'))
     with g_col3:
-        m_rate = st.number_input("Mortgage Interest Rate (%)", value=5.1, step=0.1, key="g_m_rate")
+        st.number_input("Mortgage Interest Rate (%)", value=float(st.session_state.global_settings['m_rate']), step=0.1, 
+                        key="g_m_rate", on_change=sync_global, args=('m_rate', 'g_m_rate'))
     with g_col4:
-        m_amort = st.number_input("Amortization (Years)", value=25, step=1, key="g_m_amort")
+        st.number_input("Amortization (Years)", value=int(st.session_state.global_settings['m_amort']), step=1, 
+                        key="g_m_amort", on_change=sync_global, args=('m_amort', 'g_m_amort'))
     
     g_col5, g_col6 = st.columns([2, 1])
     with g_col5:
-        use_mgmt = st.checkbox("Will you use a Property Manager?", key="g_use_mgmt")
+        st.checkbox("Will you use a Property Manager?", value=st.session_state.global_settings['use_mgmt'], 
+                    key="g_use_mgmt", on_change=sync_global, args=('use_mgmt', 'g_use_mgmt'))
     with g_col6:
-        mgmt_fee = st.number_input("Property Management Fee (%)", value=8.0, step=0.5, key="g_mgmt_fee") if use_mgmt else 0.0
+        if st.session_state.global_settings['use_mgmt']:
+            st.number_input("Property Management Fee (%)", value=float(st.session_state.global_settings['mgmt_fee']), step=0.5, 
+                            key="g_mgmt_fee", on_change=sync_global, args=('mgmt_fee', 'g_mgmt_fee'))
 
 # --- 4. LISTING MANAGEMENT ---
 if 'rental_listings' not in st.session_state:
@@ -106,7 +129,6 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with r3_c4: 
             st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
-# FIXED: 'ins', 'beds', 'baths', 'sqft', and 'year' are now injected into the blank template
 if len(st.session_state.rental_listings) < 10:
     st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({
         "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
@@ -115,22 +137,30 @@ if len(st.session_state.rental_listings) < 10:
 
 # --- 5. CALCULATIONS ENGINE ---
 full_analysis_list = []
+
+# Fetch the permanent globals to use in calculations
+gs = st.session_state.global_settings
+calc_dp_mode = gs['dp_mode']
+calc_dp_val = gs['dp_val']
+calc_m_rate = gs['m_rate']
+calc_m_amort = gs['m_amort']
+calc_mgmt_fee = gs['mgmt_fee'] if gs['use_mgmt'] else 0.0
+
 for idx, l in enumerate(st.session_state.rental_listings):
     if l.get('lat') and l.get('lon'):
         noi, dp_amt, ann_mtg, net_cf, coc_ret, psf = 0, 0, 0, 0, 0, 0
         gross_inc = l['rent'] * 12
-        mgmt_cost = (l['rent'] * 12 * (mgmt_fee / 100))
+        mgmt_cost = (l['rent'] * 12 * (calc_mgmt_fee / 100))
         reserves = (l['rent'] * 12 * 0.05) 
         
-        # This is where the KeyError happened! With the 'ins' key added to the blank template above, this is now safe.
         op_ex = l['tax'] + (l['strata'] * 12) + (l.get('ins', 100) * 12) + mgmt_cost + reserves
         
         if l['price'] > 0:
             noi = gross_inc - op_ex
-            dp_amt = (l['price'] * (dp_global_val / 100)) if "Percent" in dp_mode else dp_global_val
+            dp_amt = (l['price'] * (calc_dp_val / 100)) if "Percent" in calc_dp_mode else calc_dp_val
             loan = l['price'] - dp_amt
-            r = (m_rate / 100) / 12
-            pmt = loan * (r * (1 + r)**(m_amort*12)) / ((1 + r)**(m_amort*12) - 1) if r > 0 else loan / (m_amort*12)
+            r = (calc_m_rate / 100) / 12
+            pmt = loan * (r * (1 + r)**(calc_m_amort*12)) / ((1 + r)**(calc_m_amort*12) - 1) if r > 0 else loan / (calc_m_amort*12)
             ann_mtg = pmt * 12
             net_cf = noi - ann_mtg
             coc_ret = (net_cf / dp_amt) * 100 if dp_amt > 0 else 0
@@ -211,7 +241,7 @@ if full_analysis_list:
     # Properties: Centered White Rank Numbers
     map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
 
-    # Dynamic POI Layers (Now using Emoji TextLayers instead of colored dots!)
+    # Dynamic POI Layers
     if show_schools:
         df_sch = fetch_osm_pois(center_lat, center_lon, 3000, "Schools")
         if not df_sch.empty: map_layers.append(pdk.Layer("TextLayer", df_sch, get_position='[lon, lat]', get_text='icon', get_size=25, pickable=True))
