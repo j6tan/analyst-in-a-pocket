@@ -51,10 +51,10 @@ if not pvi_data.get('initialized'):
 # --- 4. HEADER ---
 st.title("Debt vs. Equity: The Wealth Choice")
 st.markdown(f"""
-<div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 12px; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
-    <h4 style="color: #2E2B28; margin: 0;">The Compounding Effect of Debt Paydown</h4>
-    <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.6; margin: 10px 0 0 0;">
-        <b>{p1_name} & {p2_name}</b>, we are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
+<div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">📈 Strategic Brief: The Compounding Effect</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Welcome to the lab, <b>{p1_name} & {p2_name}</b>. We are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
     </p>
 </div>
 """, unsafe_allow_html=True)
