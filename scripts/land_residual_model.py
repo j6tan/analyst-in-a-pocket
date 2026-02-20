@@ -50,7 +50,28 @@ name1 = prof.get('p1_name') or "Primary Client"
 name2 = prof.get('p2_name') or ""
 household = f"{name1} and {name2}" if name2 else name1
 
-# --- 4. STORYTELLING HEADER ---
+# --- 4. MARKET INTEL (Load from JSON) ---
+def load_market_intel():
+    path = os.path.join("data", "market_intel.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f: return json.load(f)
+        except: pass
+    return {}
+
+intel = load_market_intel()
+# Default dictionary in case JSON is missing or misformatted
+default_costs = {
+    "Single Family (Custom)": {"fsr": 0.6, "cost": 400},
+    "Multiplex / Missing Middle": {"fsr": 1.0, "cost": 320},
+    "Townhouse (Woodframe)": {"fsr": 1.2, "cost": 280},
+    "Mid-Rise Condo (Woodframe)": {"fsr": 2.5, "cost": 330},
+    "High-Rise Condo (Concrete)": {"fsr": 5.0, "cost": 420},
+    "Commercial / Retail": {"fsr": 3.0, "cost": 350}
+}
+BUILD_COSTS = intel.get("build_costs", default_costs)
+
+# --- 5. STORYTELLING HEADER ---
 st.title("🏗️ Land Residual Valuation")
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
@@ -62,17 +83,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- MARKET INTEL (Hard Costs Base on Altus Group Guide) ---
-BUILD_COSTS = {
-    "Single Family (Custom)": {"fsr": 0.6, "cost": 400},
-    "Multiplex / Missing Middle": {"fsr": 1.0, "cost": 320},
-    "Townhouse (Woodframe)": {"fsr": 1.2, "cost": 280},
-    "Mid-Rise Condo (Woodframe)": {"fsr": 2.5, "cost": 330},
-    "High-Rise Condo (Concrete)": {"fsr": 5.0, "cost": 420},
-    "Commercial / Retail": {"fsr": 3.0, "cost": 350}
-}
 
-# --- 5. INPUTS ---
+# --- 6. INPUTS ---
 st.subheader("1. Zoning & Highest and Best Use")
 z_col1, z_col2, z_col3 = st.columns(3)
 
@@ -112,7 +124,7 @@ with f_col3:
     project_years = cloud_input("Project Duration (Years)", "land_residual", "project_years", step=0.5)
     st.caption("Time from land purchase to final sale.")
 
-# --- 6. CALCULATIONS ---
+# --- 7. CALCULATIONS ---
 # 1. Gross Realization
 gdv = buildable_sf * sell_psf
 
@@ -134,7 +146,7 @@ residual_land_value = gdv - target_profit - total_construction - finance_cost
 rlv_per_buildable = residual_land_value / buildable_sf if buildable_sf > 0 else 0
 rlv_per_dirt = residual_land_value / lot_size if lot_size > 0 else 0
 
-# --- 7. OUTPUT DASHBOARD ---
+# --- 8. OUTPUT DASHBOARD ---
 st.divider()
 st.subheader("📊 The Verdict: Maximum Land Price")
 
