@@ -60,13 +60,12 @@ def sync_listing(index, field, key):
     st.session_state.rental_listings[index][field] = st.session_state[key]
     force_cloud_save()
 
-# --- 4. PERSONALIZED STORYTELLING (STYLED TO MATCH AFFORDABILITY PAGE) ---
+# --- 4. PERSONALIZED STORYTELLING ---
 prof = st.session_state.app_db.get('profile', {})
 name1 = prof.get('p1_name') or "Primary Client"
 name2 = prof.get('p2_name') or ""
 household = f"{name1} and {name2}" if name2 else name1
 
-# EXACT styling match from your affordability_second.py
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🏗️ Strategic Brief: Building Your Real Estate Empire</h3>
@@ -198,24 +197,39 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 8. FAST POI FETCHER ---
+# --- 8. FAST POI FETCHER (SKYTRAIN FIX) ---
 @st.cache_data(ttl=86400, show_spinner=False) 
 def pull_osm_data(lat, lon, radius, poi_type):
     headers = {"User-Agent": "AnalystInAPocket/1.0"}
-    query_map = {"SkyTrain": '"railway"="station"', "Grocery": '"shop"="supermarket"'}
     
-    if poi_type not in query_map: return pd.DataFrame()
-    tag = query_map[poi_type]
-    
-    query = f'[out:json][timeout:10];node[{tag}](around:{radius},{lat},{lon});out;'
+    # THE FIX: SkyTrains are often relations/ways, Groceries are usually nodes.
+    if poi_type == "SkyTrain":
+        query = f"""
+        [out:json][timeout:15];
+        (
+          nwr["railway"="station"](around:{radius},{lat},{lon});
+          nwr["station"="subway"](around:{radius},{lat},{lon});
+        );
+        out center;
+        """
+    elif poi_type == "Grocery":
+        query = f"""
+        [out:json][timeout:10];
+        nwr["shop"="supermarket"](around:{radius},{lat},{lon});
+        out center;
+        """
+    else: return pd.DataFrame()
+
     try:
-        response = requests.get("https://overpass-api.de/api/interpreter", params={'data': query}, headers=headers, timeout=5)
+        response = requests.get("https://overpass-api.de/api/interpreter", params={'data': query}, headers=headers, timeout=10)
         data = response.json()
         pois = []
         for el in data.get('elements', []):
-            if 'lat' in el and 'lon' in el:
+            p_lat = el.get('lat', el.get('center', {}).get('lat'))
+            p_lon = el.get('lon', el.get('center', {}).get('lon'))
+            if p_lat and p_lon:
                 name = el.get('tags', {}).get('name', poi_type)
-                pois.append({'lat': el['lat'], 'lon': el['lon'], 'HoverText': f"{poi_type}: {name}", 'icon': "T" if poi_type == "SkyTrain" else "G"})
+                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type}: {name}", 'icon': "T" if poi_type == "SkyTrain" else "G"})
         return pd.DataFrame(pois)
     except:
         return pd.DataFrame()
@@ -253,7 +267,7 @@ if full_analysis_list:
             map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
 
     if show_skytrain:
-        df_train = pull_osm_data(center_lat, center_lon, 3000, "SkyTrain")
+        df_train = pull_osm_data(center_lat, center_lon, 5000, "SkyTrain")
         add_bulletproof_badge(df_train, 150, [0, 102, 204, 255]) 
 
     if show_grocery:
