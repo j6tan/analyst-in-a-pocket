@@ -28,7 +28,7 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS (CLEAN LAYOUT) ---
+# --- 3. GLOBAL SETTINGS ---
 if 'global_settings' not in st.session_state:
     st.session_state.global_settings = {
         'dp_mode': "Percentage (%)", 'dp_val': 20.0, 'm_rate': 5.1,
@@ -40,8 +40,6 @@ def sync_global(field, key):
 
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
-    
-    # Row 1: Finance Logic
     g_col1, g_col2, g_col3, g_col4 = st.columns(4)
     with g_col1:
         st.radio("DP Mode", ["Percentage (%)", "Fixed Amount ($)"], horizontal=True, 
@@ -58,9 +56,7 @@ with st.container(border=True):
         st.number_input("Amortization (Yrs)", value=int(st.session_state.global_settings['m_amort']), step=1, 
                         key="g_m_amort", on_change=sync_global, args=('m_amort', 'g_m_amort'))
     
-    st.divider() # Creates a clean break for organization
-    
-    # Row 2: Management Options
+    st.divider() 
     g_col5, g_col6, g_col7 = st.columns([1.5, 1.5, 2])
     with g_col5:
         st.checkbox("Use Property Manager?", value=st.session_state.global_settings['use_mgmt'], 
@@ -84,23 +80,16 @@ def geocode_address(index):
     addr = st.session_state.rental_listings[index]['address']
     if addr:
         try:
-            # addressdetails=True pulls components to help us format cleanly
             location = geolocator.geocode(addr, addressdetails=True)
             if location:
                 st.session_state.rental_listings[index]['lat'] = location.latitude
                 st.session_state.rental_listings[index]['lon'] = location.longitude
-                
-                # Format Address: 1234 Apple Ave, Burnaby
                 raw_addr = location.raw.get('address', {})
                 h_num = raw_addr.get('house_number', '')
                 road = raw_addr.get('road', '')
                 city = raw_addr.get('city', raw_addr.get('town', raw_addr.get('village', raw_addr.get('municipality', ''))))
                 
-                if road and city:
-                    clean_addr = f"{h_num} {road}, {city}".strip()
-                else:
-                    clean_addr = ", ".join(location.address.split(",")[:2]) # Fallback
-                
+                clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
                 st.session_state.rental_listings[index]['address'] = clean_addr
                 st.toast(f"📍 Added: {clean_addr}")
                 st.rerun()
@@ -111,41 +100,27 @@ st.subheader("🏠 Property Underwriting")
 for i, listing in enumerate(st.session_state.rental_listings):
     with st.expander(f"Listing #{i+1}: {listing['address'][:30]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
-        with r1_c1: 
-            st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
-        with r1_c2: 
-            st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
+        with r1_c1: st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
+        with r1_c2: st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
         with r1_c3: 
             if st.button("🗑️ Remove", key=f"del_{i}", use_container_width=True):
                 st.session_state.rental_listings.pop(i); st.rerun()
 
         r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([2.6, 0.6, 0.6, 1, 1])
-        with r2_c1: 
-            st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
-        with r2_c2: 
-            st.number_input("Beds", value=listing.get('beds', 1), key=f"bd_{i}", on_change=sync_listing, args=(i, 'beds', f"bd_{i}"))
-        with r2_c3: 
-            st.number_input("Baths", value=listing.get('baths', 1), key=f"ba_{i}", on_change=sync_listing, args=(i, 'baths', f"ba_{i}"))
-        with r2_c4: 
-            st.number_input("Sqft", value=listing.get('sqft', 0), key=f"sq_{i}", on_change=sync_listing, args=(i, 'sqft', f"sq_{i}"))
-        with r2_c5: 
-            st.number_input("Year Built", value=listing.get('year', 2000), key=f"yr_{i}", on_change=sync_listing, args=(i, 'year', f"yr_{i}"))
+        with r2_c1: st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
+        with r2_c2: st.number_input("Beds", value=listing.get('beds', 1), key=f"bd_{i}", on_change=sync_listing, args=(i, 'beds', f"bd_{i}"))
+        with r2_c3: st.number_input("Baths", value=listing.get('baths', 1), key=f"ba_{i}", on_change=sync_listing, args=(i, 'baths', f"ba_{i}"))
+        with r2_c4: st.number_input("Sqft", value=listing.get('sqft', 0), key=f"sq_{i}", on_change=sync_listing, args=(i, 'sqft', f"sq_{i}"))
+        with r2_c5: st.number_input("Year Built", value=listing.get('year', 2000), key=f"yr_{i}", on_change=sync_listing, args=(i, 'year', f"yr_{i}"))
 
         r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(4)
-        with r3_c1: 
-            st.number_input("Monthly Rent ($)", value=listing['rent'], key=f"rt_{i}", on_change=sync_listing, args=(i, 'rent', f"rt_{i}"))
-        with r3_c2: 
-            st.number_input("Property Tax ($)", value=listing['tax'], key=f"tx_{i}", on_change=sync_listing, args=(i, 'tax', f"tx_{i}"))
-        with r3_c3: 
-            st.number_input("Strata Fees ($)", value=listing['strata'], key=f"st_{i}", on_change=sync_listing, args=(i, 'strata', f"st_{i}"))
-        with r3_c4: 
-            st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
+        with r3_c1: st.number_input("Monthly Rent ($)", value=listing['rent'], key=f"rt_{i}", on_change=sync_listing, args=(i, 'rent', f"rt_{i}"))
+        with r3_c2: st.number_input("Property Tax ($)", value=listing['tax'], key=f"tx_{i}", on_change=sync_listing, args=(i, 'tax', f"tx_{i}"))
+        with r3_c3: st.number_input("Strata Fees ($)", value=listing['strata'], key=f"st_{i}", on_change=sync_listing, args=(i, 'strata', f"st_{i}"))
+        with r3_c4: st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
 if len(st.session_state.rental_listings) < 10:
-    st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({
-        "address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, 
-        "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100
-    }))
+    st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({"address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0, "beds": 1, "baths": 1, "sqft": 0, "year": 2000, "ins": 100}))
 
 # --- 5. CALCULATIONS ENGINE ---
 full_analysis_list = []
@@ -180,19 +155,18 @@ for idx, l in enumerate(st.session_state.rental_listings):
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 6. PROFESSIONAL POI BADGES (OVERPASS API FIX) ---
+# --- 6. TARGETED INVESTOR MAP DATA ---
 @st.cache_data(ttl=86400, show_spinner=False) 
-def fetch_osm_pois(lat, lon, radius, poi_type):
-    # Added proper User-Agent to prevent silent blocking
-    headers = {"User-Agent": "AnalystInAPocket/1.0 (Contact: analyst@example.com)"}
+def fetch_investor_pois(lat, lon, radius, poi_type):
+    headers = {"User-Agent": "AnalystInAPocket/1.0"}
     overpass_url = "http://overpass-api.de/api/interpreter"
     
+    # Skytrain stations and Grocery Stores (Supermarkets)
     query_map = {
-        "Schools": '"amenity"="school"',
-        "Hospitals": '"amenity"="hospital"',
-        "Bus Stops": '"highway"="bus_stop"',
-        "Parks": '"leisure"="park"'
+        "SkyTrain": '"railway"="station"',
+        "Grocery": '"shop"="supermarket"'
     }
+    icon_map = {"SkyTrain": "🚆", "Grocery": "🛒"}
     
     if poi_type not in query_map: return pd.DataFrame()
     tag = query_map[poi_type]
@@ -213,9 +187,9 @@ def fetch_osm_pois(lat, lon, radius, poi_type):
         for element in data['elements']:
             p_lat = element.get('lat', element.get('center', {}).get('lat'))
             p_lon = element.get('lon', element.get('center', {}).get('lon'))
-            p_name = element.get('tags', {}).get('name', poi_type[:-1])
+            p_name = element.get('tags', {}).get('name', poi_type)
             if p_lat and p_lon:
-                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type[:-1]}: {p_name}"})
+                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type}: {p_name}", 'icon': icon_map[poi_type]})
         return pd.DataFrame(pois)
     except:
         return pd.DataFrame()
@@ -228,12 +202,11 @@ if full_analysis_list:
     st.divider()
     st.subheader("🗺️ Geographic Portfolio Distribution")
     
-    layer_col1, layer_col2, layer_col3, layer_col4, layer_col5 = st.columns(5)
-    with layer_col1: show_schools = st.checkbox("🏫 Schools")
-    with layer_col2: show_hospitals = st.checkbox("🏥 Hospitals")
-    with layer_col3: show_transit = st.checkbox("🚌 Bus Stops")
-    with layer_col4: show_parks = st.checkbox("🌲 Parks")
-    with layer_col5:
+    layer_col1, layer_col2, layer_col3, layer_col4 = st.columns([1.5, 1.5, 1.5, 2])
+    with layer_col1: show_skytrain = st.checkbox("🚆 SkyTrain Stations")
+    with layer_col2: show_grocery = st.checkbox("🛒 Grocery Stores")
+    with layer_col3: show_catchments = st.checkbox("🎒 School Catchments")
+    with layer_col4:
         st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
 
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
@@ -247,31 +220,42 @@ if full_analysis_list:
     
     map_layers = []
 
-    # Properties Layers
-    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color', get_radius=180, pickable=True))
-    map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
+    # 1. School Catchment Polygons (GeoJSON)
+    if show_catchments:
+        # Note: To use EXACT Burnaby catchments, you must download the GeoJSON from Burnaby Open Data 
+        # For now, this loads a visual example so the layer doesn't crash.
+        CATCHMENT_GEOJSON = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/vancouver.geojson"
+        
+        map_layers.append(pdk.Layer(
+            "GeoJsonLayer",
+            CATCHMENT_GEOJSON,
+            opacity=0.2,
+            stroked=True,
+            filled=True,
+            extruded=False,
+            get_fill_color="[206, 179, 111, 50]", # Gold Tint
+            get_line_color="[46, 43, 40, 255]", # Charcoal Borders
+            line_width_min_pixels=2,
+            pickable=True
+        ))
 
-    # Dynamic POI Badge Setup (Guaranteed to render natively)
-    def add_poi_badge(df, radius, color, letter):
+    # 2. Add POI Badges
+    def add_poi_badge(df, radius, color):
         if not df.empty:
             df['color_col'] = [color] * len(df)
-            df['letter_col'] = letter
             map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
-            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='letter_col', get_size=14, get_color=[255,255,255,255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
+            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_alignment_baseline="'center'", get_text_anchor="'middle'"))
 
-    # Build Map Badges
-    if show_schools:
-        df_sch = fetch_osm_pois(center_lat, center_lon, 3000, "Schools")
-        add_poi_badge(df_sch, 100, [0, 102, 204, 200], "S") # Blue S
-    if show_hospitals:
-        df_hos = fetch_osm_pois(center_lat, center_lon, 5000, "Hospitals")
-        add_poi_badge(df_hos, 120, [204, 0, 0, 200], "H") # Red H
-    if show_transit:
-        df_bus = fetch_osm_pois(center_lat, center_lon, 1500, "Bus Stops")
-        add_poi_badge(df_bus, 50, [255, 128, 0, 200], "B") # Orange B
-    if show_parks:
-        df_prk = fetch_osm_pois(center_lat, center_lon, 2000, "Parks")
-        add_poi_badge(df_prk, 100, [0, 153, 76, 200], "P") # Green P
+    if show_skytrain:
+        df_train = fetch_investor_pois(center_lat, center_lon, 5000, "SkyTrain")
+        add_poi_badge(df_train, 150, [0, 102, 204, 220]) # Blue
+    if show_grocery:
+        df_groc = fetch_investor_pois(center_lat, center_lon, 3000, "Grocery")
+        add_poi_badge(df_groc, 100, [40, 167, 69, 220]) # Green
+
+    # 3. Properties (Placed last so they render on top of the catchments)
+    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color='color', get_radius=180, pickable=True))
+    map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
 
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
