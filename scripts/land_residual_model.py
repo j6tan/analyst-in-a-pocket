@@ -86,6 +86,8 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+
+
 # --- 5. INPUTS ---
 st.write("")
 st.subheader("1. Site & Product Velocity")
@@ -114,7 +116,7 @@ with f_col1:
     profit_margin = cloud_input("Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
 
 with f_col2:
-    # FIXED Syntax Error here: f"hc_{prod_type}"
+    # Key update forces reset when home type changes
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
     city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
     soft_cost_pct = cloud_input("Soft Costs (%)", "land_residual", "soft_cost_pct", step=1.0)
