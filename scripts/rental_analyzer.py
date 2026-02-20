@@ -28,15 +28,31 @@ SUCCESS_GREEN = "#28a745"
 
 st.title("Pro Rental Portfolio Analyzer")
 
-# --- 3. GLOBAL SETTINGS ---
+# --- 3. GLOBAL SETTINGS & DATABASE PERSISTENCE ---
+# Safety fallback for the app database
+if 'app_db' not in st.session_state:
+    st.session_state.app_db = {}
+
+# Load directly from the core app database so it survives log-outs
 if 'global_settings' not in st.session_state:
-    st.session_state.global_settings = {
+    st.session_state.global_settings = st.session_state.app_db.get('rental_globals', {
         'dp_mode': "Percentage (%)", 'dp_val': 20.0, 'm_rate': 5.1,
         'm_amort': 25, 'use_mgmt': False, 'mgmt_fee': 8.0
-    }
+    })
 
+if 'rental_listings' not in st.session_state:
+    st.session_state.rental_listings = st.session_state.app_db.get('rental_portfolio', [
+        {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
+    ])
+
+# Callback functions now save directly to `app_db`
 def sync_global(field, key):
     st.session_state.global_settings[field] = st.session_state[key]
+    st.session_state.app_db['rental_globals'] = st.session_state.global_settings
+
+def sync_listing(index, field, key):
+    st.session_state.rental_listings[index][field] = st.session_state[key]
+    st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
 
 with st.container(border=True):
     st.subheader("⚙️ Global Settings")
@@ -67,14 +83,6 @@ with st.container(border=True):
                             key="g_mgmt_fee", on_change=sync_global, args=('mgmt_fee', 'g_mgmt_fee'))
 
 # --- 4. LISTING MANAGEMENT ---
-if 'rental_listings' not in st.session_state:
-    st.session_state.rental_listings = [
-        {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
-    ]
-
-def sync_listing(index, field, key):
-    st.session_state.rental_listings[index][field] = st.session_state[key]
-
 def geocode_address(index):
     if not geolocator: return
     addr = st.session_state.rental_listings[index]['address']
@@ -84,19 +92,14 @@ def geocode_address(index):
             if location:
                 st.session_state.rental_listings[index]['lat'] = location.latitude
                 st.session_state.rental_listings[index]['lon'] = location.longitude
-                
-                # FIXED ADDRESS FORMATTING: Extract ONLY street and city.
                 raw_addr = location.raw.get('address', {})
                 h_num = raw_addr.get('house_number', '')
                 road = raw_addr.get('road', '')
                 city = raw_addr.get('city', raw_addr.get('town', raw_addr.get('suburb', raw_addr.get('municipality', ''))))
                 
-                if road and city:
-                    clean_addr = f"{h_num} {road}, {city}".strip()
-                else:
-                    clean_addr = ", ".join(location.address.split(",")[:2]) # Safe fallback
-                
+                clean_addr = f"{h_num} {road}, {city}".strip() if road and city else ", ".join(location.address.split(",")[:2])
                 st.session_state.rental_listings[index]['address'] = clean_addr
+                st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings # Save coordinates to DB
                 st.toast(f"📍 Added: {clean_addr}")
                 st.rerun()
         except Exception as e:
@@ -110,7 +113,9 @@ for i, listing in enumerate(st.session_state.rental_listings):
         with r1_c2: st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
         with r1_c3: 
             if st.button("🗑️ Remove", key=f"del_{i}", use_container_width=True):
-                st.session_state.rental_listings.pop(i); st.rerun()
+                st.session_state.rental_listings.pop(i)
+                st.session_state.app_db['rental_portfolio'] = st.session_state.rental_listings
+                st.rerun()
 
         r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([2.6, 0.6, 0.6, 1, 1])
         with r2_c1: st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
@@ -171,7 +176,6 @@ def fetch_investor_pois(lat, lon, radius, poi_type):
         "SkyTrain": '"railway"="station"',
         "Grocery": '"shop"="supermarket"'
     }
-    # Using Train and Cart shapes instead of circles
     icon_map = {"SkyTrain": "🚆", "Grocery": "🛒"}
     
     if poi_type not in query_map: return pd.DataFrame()
@@ -215,12 +219,12 @@ if full_analysis_list:
     with layer_col4:
         st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="font-size:1.2em">🥇</span> Top Pick <span style="font-size:1.2em">🏠</span> Others</div>', unsafe_allow_html=True)
 
-    # SHAPE LOGIC: Replaced circle colors with House and Trophy Emojis
     best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
     df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
     
     # Generate the custom House Shapes
-    df_results['shape_icon'] = df_results.apply(lambda row: f"🥇 {row['Rank']}" if row['Address'] == best_addr else f"🏠 {row['Rank']}", axis=1)
+    df_results['shape_icon'] = df_results.apply(lambda row: "🥇" if row['Address'] == best_addr else "🏠", axis=1)
+    df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
     df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
 
     center_lat, center_lon = df_results['lat'].mean(), df_results['lon'].mean()
@@ -228,9 +232,8 @@ if full_analysis_list:
     
     map_layers = []
 
-    # 1. School Catchment Polygons (Dynamic Mock Polygon)
+    # 1. School Catchment Polygons (Fix: List parsing and Pickable=False)
     if show_catchments:
-        # A dynamic GeoJSON rectangle that guarantees visibility exactly where your properties are located
         mock_geojson = {
             "type": "FeatureCollection",
             "features": [{
@@ -244,8 +247,7 @@ if full_analysis_list:
                         [center_lon - 0.02, center_lat + 0.02],
                         [center_lon - 0.02, center_lat - 0.02]
                     ]]
-                },
-                "properties": {"name": "Simulated Burnaby Catchment Zone"}
+                }
             }]
         }
         
@@ -255,34 +257,38 @@ if full_analysis_list:
             opacity=0.2,
             stroked=True,
             filled=True,
-            get_fill_color="[206, 179, 111, 80]", # Gold Tint
-            get_line_color="[46, 43, 40, 255]",
+            get_fill_color=[206, 179, 111, 80], # Fixed from string to list!
+            get_line_color=[46, 43, 40, 255],
             line_width_min_pixels=3,
-            pickable=True
+            pickable=False # Fixes the weird hover box issue!
         ))
 
-    # 2. Add POI Shapes (No more colored circles behind them)
+    # 2. Add POI Shapes (Scatterplot handles hover, TextLayer handles the shape)
+    def add_poi_badge(df, radius, color):
+        if not df.empty:
+            df['color_col'] = [color] * len(df)
+            map_layers.append(pdk.Layer("ScatterplotLayer", df, get_position='[lon, lat]', get_fill_color='color_col', get_radius=radius, pickable=True))
+            map_layers.append(pdk.Layer("TextLayer", df, get_position='[lon, lat]', get_text='icon', get_size=20, get_alignment_baseline="'center'", get_text_anchor="'middle'", pickable=False))
+
     if show_skytrain:
         df_train = fetch_investor_pois(center_lat, center_lon, 5000, "SkyTrain")
-        if not df_train.empty:
-            map_layers.append(pdk.Layer("TextLayer", df_train, get_position='[lon, lat]', get_text='icon', get_size=35, pickable=True))
-            
+        add_poi_badge(df_train, 150, [0, 102, 204, 220]) 
     if show_grocery:
         df_groc = fetch_investor_pois(center_lat, center_lon, 3000, "Grocery")
-        if not df_groc.empty:
-            map_layers.append(pdk.Layer("TextLayer", df_groc, get_position='[lon, lat]', get_text='icon', get_size=30, pickable=True))
+        add_poi_badge(df_groc, 100, [40, 167, 69, 220])
 
-    # 3. Property House Shapes (Placed last so they render on top)
+    # 3. Property House Shapes 
+    # The ScatterplotLayer is invisible (opacity 0) but holds the HoverText data securely.
+    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_fill_color=[0,0,0,0], get_radius=200, pickable=True))
     map_layers.append(pdk.Layer(
         "TextLayer", 
         df_results, 
         get_position='[lon, lat]', 
         get_text="shape_icon", 
-        get_size=35, 
-        get_color=[46, 43, 40, 255], 
+        get_size=40, 
         get_alignment_baseline="'center'", 
         get_text_anchor="'middle'",
-        pickable=True
+        pickable=False
     ))
 
     st.pydeck_chart(pdk.Deck(
@@ -294,7 +300,7 @@ if full_analysis_list:
     # --- RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
-        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'shape_icon', 'Rank', 'HoverText'], errors='ignore')
+        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'shape_icon', 'Rank', 'HoverText', 'color'], errors='ignore')
         
         st.dataframe(
             display_df, use_container_width=True, hide_index=True,
