@@ -25,6 +25,7 @@ PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
+BORDER_GREY = "#DEE2E6"
 
 def get_marginal_tax_rate(income):
     if income <= 55867: return 20.06
