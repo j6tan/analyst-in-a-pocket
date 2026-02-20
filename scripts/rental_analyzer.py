@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pydeck as pdk 
+import requests # Added for OSM Layer Data
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import init_session_state, load_user_data
 
@@ -20,8 +21,8 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 2. BRANDING COLORS ---
-PRIMARY_GOLD_RGBA = [206, 179, 111, 255] # #CEB36F
-CHARCOAL_RGBA = [46, 43, 40, 255]       # #2E2B28
+PRIMARY_GOLD_RGBA = [206, 179, 111, 255] 
+CHARCOAL_RGBA = [46, 43, 40, 255]       
 DARK_RED = "#8B0000"
 SUCCESS_GREEN = "#28a745"
 
@@ -47,11 +48,15 @@ with st.container(border=True):
     with g_col6:
         mgmt_fee = st.number_input("Property Management Fee (%)", value=8.0, step=0.5) if use_mgmt else 0.0
 
-# --- 4. LISTING MANAGEMENT ---
+# --- 4. LISTING MANAGEMENT (WITH SYNC FIX) ---
 if 'rental_listings' not in st.session_state:
     st.session_state.rental_listings = [
         {"address": "3399 Noel Drive, Burnaby, BC", "lat": 49.2667, "lon": -122.9000, "price": 800000, "tax": 3000, "strata": 400, "rent": 3500, "beds": 2, "baths": 2, "year": 2010, "ins": 100, "sqft": 850},
     ]
+
+# The FIX: Callback function to force-save every input
+def sync_listing(index, field, key):
+    st.session_state.rental_listings[index][field] = st.session_state[key]
 
 def geocode_address(index):
     if not geolocator: return
@@ -70,25 +75,37 @@ def geocode_address(index):
 st.subheader("🏠 Property Underwriting")
 for i, listing in enumerate(st.session_state.rental_listings):
     with st.expander(f"Listing #{i+1}: {listing['address'][:30]}...", expanded=(i==len(st.session_state.rental_listings)-1)):
+        # Notice every input now has on_change=sync_listing
         r1_c1, r1_c2, r1_c3 = st.columns([1.6, 1, 1])
-        with r1_c1: listing['address'] = st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed")
-        with r1_c2: st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
+        with r1_c1: 
+            st.text_input("Address", value=listing['address'], key=f"addr_{i}", label_visibility="collapsed", on_change=sync_listing, args=(i, 'address', f"addr_{i}"))
+        with r1_c2: 
+            st.button("📍 Add to Map", key=f"geo_{i}", on_click=geocode_address, args=(i,), use_container_width=True)
         with r1_c3: 
             if st.button("🗑️ Remove", key=f"del_{i}", use_container_width=True):
                 st.session_state.rental_listings.pop(i); st.rerun()
 
         r2_c1, r2_c2, r2_c3, r2_c4, r2_c5 = st.columns([2.6, 0.6, 0.6, 1, 1])
-        with r2_c1: listing['price'] = st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}")
-        with r2_c2: listing['beds'] = st.number_input("Beds", value=listing.get('beds', 1), key=f"bd_{i}")
-        with r2_c3: listing['baths'] = st.number_input("Baths", value=listing.get('baths', 1), key=f"ba_{i}")
-        with r2_c4: listing['sqft'] = st.number_input("Sqft", value=listing.get('sqft', 0), key=f"sq_{i}")
-        with r2_c5: listing['year'] = st.number_input("Year Built", value=listing.get('year', 2000), key=f"yr_{i}")
+        with r2_c1: 
+            st.number_input("Listing Price ($)", value=listing['price'], key=f"pr_{i}", on_change=sync_listing, args=(i, 'price', f"pr_{i}"))
+        with r2_c2: 
+            st.number_input("Beds", value=listing.get('beds', 1), key=f"bd_{i}", on_change=sync_listing, args=(i, 'beds', f"bd_{i}"))
+        with r2_c3: 
+            st.number_input("Baths", value=listing.get('baths', 1), key=f"ba_{i}", on_change=sync_listing, args=(i, 'baths', f"ba_{i}"))
+        with r2_c4: 
+            st.number_input("Sqft", value=listing.get('sqft', 0), key=f"sq_{i}", on_change=sync_listing, args=(i, 'sqft', f"sq_{i}"))
+        with r2_c5: 
+            st.number_input("Year Built", value=listing.get('year', 2000), key=f"yr_{i}", on_change=sync_listing, args=(i, 'year', f"yr_{i}"))
 
         r3_c1, r3_c2, r3_c3, r3_c4 = st.columns(4)
-        with r3_c1: listing['rent'] = st.number_input("Monthly Rent ($)", value=listing['rent'], key=f"rt_{i}")
-        with r3_c2: listing['tax'] = st.number_input("Property Tax ($)", value=listing['tax'], key=f"tx_{i}")
-        with r3_c3: listing['strata'] = st.number_input("Strata Fees ($)", value=listing['strata'], key=f"st_{i}")
-        with r3_c4: listing['ins'] = st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}")
+        with r3_c1: 
+            st.number_input("Monthly Rent ($)", value=listing['rent'], key=f"rt_{i}", on_change=sync_listing, args=(i, 'rent', f"rt_{i}"))
+        with r3_c2: 
+            st.number_input("Property Tax ($)", value=listing['tax'], key=f"tx_{i}", on_change=sync_listing, args=(i, 'tax', f"tx_{i}"))
+        with r3_c3: 
+            st.number_input("Strata Fees ($)", value=listing['strata'], key=f"st_{i}", on_change=sync_listing, args=(i, 'strata', f"st_{i}"))
+        with r3_c4: 
+            st.number_input("Monthly Insurance ($)", value=listing.get('ins', 100), key=f"in_{i}", on_change=sync_listing, args=(i, 'ins', f"in_{i}"))
 
 if len(st.session_state.rental_listings) < 10:
     st.button("➕ Add Another Listing", on_click=lambda: st.session_state.rental_listings.append({"address": "", "lat": 0.0, "lon": 0.0, "price": 0, "tax": 0, "strata": 0, "rent": 0}))
@@ -114,44 +131,103 @@ for idx, l in enumerate(st.session_state.rental_listings):
             coc_ret = (net_cf / dp_amt) * 100 if dp_amt > 0 else 0
             psf = l['price'] / l['sqft'] if l.get('sqft', 0) > 0 else 0
 
-        short_addr = l['address'].split(',')[0]
         full_analysis_list.append({
-            "Address": l['address'], "ShortLabel": short_addr, "Price": l['price'], "Area (sqft)": l.get('sqft', 0),
+            "Address": l['address'], "Price": l['price'], "Area (sqft)": l.get('sqft', 0),
             "PSF": psf, "Gross Annual Rent": gross_inc, "Annual OpEx": op_ex,
             "Annual Mortg": ann_mtg, "Annual Net Cash Flow": net_cf,
             "Cap Rate %": (noi / l['price']) * 100 if l['price']>0 else 0,
             "CoC %": coc_ret, "DP_RAW": dp_amt, "lat": l['lat'], "lon": l['lon']
         })
 
-# --- 6. VISUALS & RANKING ---
+# --- 6. POI MAP LAYER MATIC (OVERPASS API) ---
+@st.cache_data(ttl=86400) # Cache for 24 hours to prevent API spam
+def fetch_osm_pois(lat, lon, radius, poi_type):
+    overpass_url = "http://overpass-api.de/api/interpreter"
+    query_map = {
+        "Schools": 'nwr["amenity"="school"]',
+        "Hospitals": 'nwr["amenity"="hospital"]',
+        "Bus Stops": 'node["highway"="bus_stop"]',
+        "Parks": 'nwr["leisure"="park"]'
+    }
+    if poi_type not in query_map: return pd.DataFrame()
+    
+    overpass_query = f"""
+    [out:json];
+    ({query_map[poi_type]}(around:{radius},{lat},{lon}););
+    out center;
+    """
+    try:
+        response = requests.get(overpass_url, params={'data': overpass_query})
+        data = response.json()
+        pois = []
+        for element in data['elements']:
+            p_lat = element.get('lat', element.get('center', {}).get('lat'))
+            p_lon = element.get('lon', element.get('center', {}).get('lon'))
+            p_name = element.get('tags', {}).get('name', poi_type[:-1])
+            if p_lat and p_lon:
+                pois.append({'lat': p_lat, 'lon': p_lon, 'HoverText': f"{poi_type[:-1]}: {p_name}"})
+        return pd.DataFrame(pois)
+    except:
+        return pd.DataFrame()
+
+# --- 7. VISUALS & RANKING ---
 if full_analysis_list:
     df_results = pd.DataFrame(full_analysis_list)
     df_ranked = df_results[df_results['Price'] > 0].sort_values(by="CoC %", ascending=False).reset_index(drop=True)
     
     st.divider()
-    l_col1, l_col2 = st.columns([3, 1])
-    with l_col1: st.subheader("🗺️ Geographic Portfolio Distribution")
-    with l_col2:
-        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 10px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
-
-    # Pydeck with Overlays
-    best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
-    df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
-    view_state = pdk.ViewState(latitude=df_results['lat'].mean(), longitude=df_results['lon'].mean(), zoom=11)
+    st.subheader("🗺️ Geographic Portfolio Distribution")
     
+    # Layer Controls
+    layer_col1, layer_col2, layer_col3, layer_col4, layer_col5 = st.columns(5)
+    with layer_col1: show_schools = st.checkbox("🏫 Schools")
+    with layer_col2: show_hospitals = st.checkbox("🏥 Hospitals")
+    with layer_col3: show_transit = st.checkbox("🚌 Bus Stops")
+    with layer_col4: show_parks = st.checkbox("🌲 Parks")
+    with layer_col5:
+        st.markdown(f'<div style="display: flex; gap: 10px; font-size: 0.8em; justify-content: flex-end; margin-top: 5px;"><span style="color: #CEB36F;">●</span> Top Pick <span style="color: #2E2B28;">●</span> Others</div>', unsafe_allow_html=True)
+
+    # Base Property Pins
+    best_addr = df_ranked.iloc[0]['Address'] if not df_ranked.empty else ""
+    df_results['Rank'] = df_results['Address'].map(lambda x: df_ranked[df_ranked['Address'] == x].index[0] + 1 if x in df_ranked['Address'].values else "-")
+    df_results['Rank_str'] = df_results['Rank'].astype(str) # Convert to string for Pydeck
+    df_results['color'] = df_results['Address'].map(lambda x: PRIMARY_GOLD_RGBA if x == best_addr and x != "" else CHARCOAL_RGBA)
+    df_results['HoverText'] = df_results.apply(lambda row: f"Rank #{row['Rank']}: {row['Address']} (${row['Price']:,.0f})", axis=1)
+
+    center_lat, center_lon = df_results['lat'].mean(), df_results['lon'].mean()
+    view_state = pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=12)
+    
+    map_layers = []
+
+    # 1. Properties: Colored Circles
+    map_layers.append(pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=180, pickable=True))
+    # 2. Properties: Centered White Rank Numbers (No address labels)
+    map_layers.append(pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="Rank_str", get_size=18, get_color=[255, 255, 255, 255], get_alignment_baseline="'center'", get_text_anchor="'middle'"))
+
+    # 3. Dynamic POI Layers
+    if show_schools:
+        df_sch = fetch_osm_pois(center_lat, center_lon, 3000, "Schools")
+        if not df_sch.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_sch, get_position='[lon, lat]', get_color=[0, 102, 204, 180], get_radius=80, pickable=True))
+    if show_hospitals:
+        df_hos = fetch_osm_pois(center_lat, center_lon, 5000, "Hospitals")
+        if not df_hos.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_hos, get_position='[lon, lat]', get_color=[204, 0, 0, 180], get_radius=100, pickable=True))
+    if show_transit:
+        df_bus = fetch_osm_pois(center_lat, center_lon, 1500, "Bus Stops")
+        if not df_bus.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_bus, get_position='[lon, lat]', get_color=[255, 128, 0, 150], get_radius=50, pickable=True))
+    if show_parks:
+        df_prk = fetch_osm_pois(center_lat, center_lon, 2000, "Parks")
+        if not df_prk.empty: map_layers.append(pdk.Layer("ScatterplotLayer", df_prk, get_position='[lon, lat]', get_color=[0, 153, 76, 180], get_radius=100, pickable=True))
+
     st.pydeck_chart(pdk.Deck(
         map_style=None, initial_view_state=view_state, 
-        layers=[
-            pdk.Layer("ScatterplotLayer", df_results, get_position='[lon, lat]', get_color='color', get_radius=150, pickable=True),
-            pdk.Layer("TextLayer", df_results, get_position='[lon, lat]', get_text="ShortLabel", get_size=15, get_color=CHARCOAL_RGBA, get_alignment_baseline="'bottom'", get_pixel_offset=[0, -15])
-        ],
-        tooltip={"text": "{Address}\nPrice: ${Price:,.0f}"}
+        layers=map_layers,
+        tooltip={"text": "{HoverText}"} # Universal tooltip for all layers
     ))
 
-    # --- UPDATED RANKING TABLE (Stable Formatting) ---
+    # --- RANKING TABLE ---
     if not df_ranked.empty:
         st.subheader("📊 Comparative Ranking")
-        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'ShortLabel', 'color'], errors='ignore')
+        display_df = df_ranked.drop(columns=['lat', 'lon', 'DP_RAW', 'color', 'Rank', 'Rank_str', 'HoverText'], errors='ignore')
         
         st.dataframe(
             display_df, use_container_width=True, hide_index=True,
@@ -168,7 +244,6 @@ if full_analysis_list:
             }
         )
 
-        # --- DEEP UNDERWRITING SUMMARY (Top Selection) ---
         st.subheader("💰 Deep Underwriting (Top Selection)")
         top = df_ranked.iloc[0]
         st.markdown(f"**Selected Listing:** {top['Address']}")
