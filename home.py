@@ -23,16 +23,17 @@ def get_inline_logo(img_path, width=80):
 
 logo_html = get_inline_logo("logo.png", width=80)
 
-# Removed center alignment, pulled everything to the left edge
 st.write("")
 st.markdown(f"""
     <div style='display: flex; justify-content: flex-start; align-items: center; margin-bottom: 5px;'>
         {logo_html}
         <h1 style='margin: 0; padding: 0;'>FIRE Investor Dashboard</h1>
     </div>
-    <p style='color: #6c757d; font-size: 1.1em; font-style: italic; margin-top: 5px; margin-bottom: 25px; line-height: 1.4;'>
-        Help Canadian T4 earners save money and reach financial freedom.
-    </p>
+    <div style="padding: 5px 15px 25px 0px;">
+        <p style='text-align: left; color: #6c757d; font-size: 1.1em; font-style: italic; margin-bottom: 0; line-height: 1.4;'>
+            Empowering Canadian T4 earners to optimize their wealth and achieve financial freedom by turning everyday income into a wealth-building machine.
+        </p>
+    </div>
 """, unsafe_allow_html=True)
 
 # --- 3. FINANCIAL PASSPORT (Central Info) ---
