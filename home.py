@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import base64
 from style_utils import inject_global_css
 
 # Ensure style is injected
@@ -11,17 +12,27 @@ if 'app_db' not in st.session_state:
 
 profile = st.session_state.app_db['profile']
 
-# --- LOGO INJECTION ---
-st.write("") 
-if os.path.exists("logo.png"):
-    pad_left, logo_col, pad_right = st.columns([4, 3, 4])
-    with logo_col:
-        st.image("logo.png", use_container_width=True)
-else:
-    st.markdown("<h2 style='text-align: center; color: #CEB36F;'>🔥 FIRE Calculator</h2>", unsafe_allow_html=True)
+# --- 2. INLINE LOGO & TITLE ---
+# Convert image to base64 so it can sit perfectly inside the H1 tag
+def get_inline_logo(img_path, width=60):
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        # Flexbox alignment ensures it doesn't get pushed up or down
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; margin-right: 15px; vertical-align: middle;">'
+    return "🔥" # Fallback if logo.png is missing
 
-# Main Title & Slogan (Fixed Corrupted Emojis)
-st.markdown("<h1 style='text-align: center;'>📊 FIRE Investor Dashboard</h1>", unsafe_allow_html=True)
+logo_html = get_inline_logo("logo.png", width=65)
+
+# The display: flex ensures the logo and text are perfectly centered together
+st.write("")
+st.markdown(f"""
+    <div style='display: flex; justify-content: center; align-items: center; margin-bottom: 5px;'>
+        {logo_html}
+        <h1 style='margin: 0; padding: 0;'>FIRE Investor Dashboard</h1>
+    </div>
+""", unsafe_allow_html=True)
+
 st.markdown("""
     <div style="padding: 0px 15px 20px 15px;">
         <p style='text-align: center; color: #6c757d; font-size: 1.1em; font-style: italic; margin-bottom: 0; line-height: 1.4;'>
@@ -30,7 +41,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# --- 2. FINANCIAL PASSPORT (Central Info) ---
+# --- 3. FINANCIAL PASSPORT (Central Info) ---
 with st.container(border=True):
     col1, col2 = st.columns([3, 1])
     with col1:
@@ -44,7 +55,7 @@ with st.container(border=True):
 
 st.divider()
 
-# --- 3. TOOL GRID LOGIC ---
+# --- 4. TOOL GRID LOGIC ---
 def render_tool_card(title, description, page_path, is_pro=False):
     with st.container(border=True):
         header = f"{title} 💎" if is_pro else title
@@ -55,7 +66,7 @@ def render_tool_card(title, description, page_path, is_pro=False):
         if st.button(button_label, key=page_path, use_container_width=True):
             st.switch_page(page_path)
 
-# --- 4. TIER 1: FOUNDATIONS (FREE) ---
+# --- 5. TIER 1: FOUNDATIONS (FREE) ---
 st.subheader("🧱 Foundations & Budgeting")
 f_c1, f_c2, f_c3 = st.columns(3) 
 
@@ -68,7 +79,7 @@ with f_c3:
 
 st.write("") 
 
-# --- 5. TIER 2: ADVANCED WEALTH STRATEGY (PRO) ---
+# --- 6. TIER 2: ADVANCED WEALTH STRATEGY (PRO) ---
 st.subheader("♟️ Advanced Strategy (Premium)")
 st.info("Unlock these tools to optimize for Financial Independence.")
 
@@ -83,7 +94,7 @@ with p_c3:
 
 st.divider()
 
-# --- 6. INVESTMENT DEEP DIVES ---
+# --- 7. INVESTMENT DEEP DIVES ---
 st.subheader("📈 Investment Analysis")
 i_c1, i_c2 = st.columns(2)
 with i_c1:
