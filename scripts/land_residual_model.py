@@ -59,13 +59,16 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
+# Ensure the new pre_const_months variable exists for returning users
+if 'land_residual' in st.session_state.app_db and 'pre_const_months' not in st.session_state.app_db['land_residual']:
+    st.session_state.app_db['land_residual']['pre_const_months'] = 12.0
+
 # --- 4. THE REFINED STORYTELLING HEADER ---
 st.title("🏗️ Land Residual Model")
 
 prof = st.session_state.app_db.get('profile', {})
 p1_name = prof.get('p1_name', "Dori")
 
-# Tight HTML block to prevent Streamlit rendering bugs
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
     <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.4; margin-bottom: 15px;">
@@ -92,7 +95,7 @@ st.markdown(f"""
 
 # --- 5. INPUTS ---
 st.write("")
-st.subheader("1. Site & Product Velocity")
+st.subheader("1. Site & Highest and Best Use")
 z_col1, z_col2, z_col3 = st.columns(3)
 
 with z_col1:
@@ -119,13 +122,19 @@ with f_col1:
 with f_col2:
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
     city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
-    soft_cost_pct = cloud_input("Soft Costs (%)", "land_residual", "soft_cost_pct", step=1.0)
+    soft_cost_pct = cloud_input("Soft Costs (% of Hard Cost)", "land_residual", "soft_cost_pct", step=1.0)
 
 with f_col3:
     finance_rate = cloud_input("Loan Rate (%)", "land_residual", "finance_rate", step=0.25)
-    st.caption(f"Bank Prime + 2% Rate: {current_prime + 2}%")
+    st.markdown(f"<div style='margin-top:-12px; margin-bottom:12px; font-size:0.8em; color:#6C757D;'>Default: Bank Prime + 2% ({current_prime + 2}%)</div>", unsafe_allow_html=True)
     ltc_pct = cloud_input("Loan-to-Cost %", "land_residual", "ltc_pct", step=5.0)
-    project_months = cloud_input("Build Duration (Months)", "land_residual", "project_months", step=1.0)
+    
+    # Split the timeline into Pre-Build and Build
+    c3_1, c3_2 = st.columns(2)
+    with c3_1:
+        pre_const_months = cloud_input("Pre-Build (Mo)", "land_residual", "pre_const_months", step=1.0)
+    with c3_2:
+        project_months = cloud_input("Build (Mo)", "land_residual", "project_months", step=1.0)
 
 # --- 6. CALCULATIONS ---
 gdv = buildable_sf * sell_psf
@@ -133,10 +142,18 @@ target_profit = gdv * (profit_margin / 100)
 total_hard = buildable_sf * hard_cost_psf
 total_city_fees = buildable_sf * city_fees_psf
 total_soft = (total_hard * (soft_cost_pct / 100)) + total_city_fees
-total_construction = total_hard + total_soft
 
-# Finance costs on average draw
-finance_cost = (total_construction * 0.5) * (finance_rate / 100) * (project_months / 12)
+pre_m = pre_const_months
+build_m = project_months
+
+# ADVANCED FINANCING LOGIC:
+# Soft Costs: Drawn over pre-build (avg 50%), then held fully throughout the entire construction phase.
+soft_interest = total_soft * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
+# Hard Costs: Drawn over construction phase (avg 50%).
+hard_interest = total_hard * (finance_rate / 100) * ((build_m / 12) * 0.5)
+
+finance_cost = soft_interest + hard_interest
+total_construction = total_hard + total_soft
 
 residual_land_value = gdv - target_profit - total_construction - finance_cost
 
@@ -160,20 +177,38 @@ else:
     m4.metric("ROE", f"{roe:.1f}%")
 
     # --- S-CURVE CASH FLOW ---
-    const_months = int(project_months)
-    total_timeline = const_months + sell_months
+    pre_m_int = int(pre_m)
+    const_m_int = int(build_m)
+    total_timeline = pre_m_int + const_m_int + sell_months
+    
+    # Monthly burn rates for charting
+    monthly_soft = total_soft / pre_m_int if pre_m_int > 0 else 0
+    monthly_hard = total_hard / const_m_int if const_m_int > 0 else 0
+    monthly_fin_pre = soft_interest / pre_m_int if pre_m_int > 0 else 0
+    monthly_fin_const = hard_interest / const_m_int if const_m_int > 0 else 0
     monthly_rev = gdv / sell_months if sell_months > 0 else 0
-    monthly_out = (total_construction + finance_cost) / const_months if const_months > 0 else 0
 
     cf_months = [0]
     cumulative_cash = [-residual_land_value]
+    
     for m in range(1, total_timeline + 1):
-        net = -monthly_out if m <= const_months else monthly_rev
+        if m <= pre_m_int:
+            net = -(monthly_soft + monthly_fin_pre) # Burning soft costs & interest
+        elif m <= pre_m_int + const_m_int:
+            net = -(monthly_hard + monthly_fin_const) # Burning hard costs & interest
+        else:
+            net = monthly_rev # Selling units
+            
         cf_months.append(m)
         cumulative_cash.append(cumulative_cash[-1] + net)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=cf_months, y=cumulative_cash, fill='tozeroy', line=dict(color=PRIMARY_GOLD, width=3)))
+    
+    # Add vertical lines to mark phases
+    fig.add_vline(x=pre_m_int, line_dash="dash", line_color="gray", annotation_text="Permits Complete", annotation_position="top right")
+    fig.add_vline(x=pre_m_int + const_m_int, line_dash="dash", line_color="gray", annotation_text="Build Complete", annotation_position="top right")
+    
     fig.update_layout(title=f"Capital Timeline ({total_timeline} Months)", xaxis_title="Timeline (Months)", height=350, plot_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig, use_container_width=True)
 
@@ -186,8 +221,13 @@ else:
     for c in cost_steps:
         row, t_row = [], []
         for s in sale_steps:
-            t_const = (buildable_sf * c) + (buildable_sf * c * (soft_cost_pct/100)) + total_city_fees
-            rlv = (buildable_sf * s) - (buildable_sf * s * (profit_margin/100)) - t_const - (t_const * 0.5 * (finance_rate/100) * (project_months/12))
+            t_hard_sens = buildable_sf * c
+            t_soft_sens = (t_hard_sens * (soft_cost_pct/100)) + total_city_fees
+            
+            s_int = t_soft_sens * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
+            h_int = t_hard_sens * (finance_rate / 100) * ((build_m / 12) * 0.5)
+            
+            rlv = (buildable_sf * s) - (buildable_sf * s * (profit_margin/100)) - t_hard_sens - t_soft_sens - s_int - h_int
             row.append(rlv)
             t_row.append(format_money(rlv))
         z_data.append(row)
@@ -207,7 +247,7 @@ else:
             {"Item": "(-) Target Profit", "Value": format_money(-target_profit)},
             {"Item": "(-) Hard Construction Costs", "Value": format_money(-total_hard)},
             {"Item": "(-) Soft Costs & Fees", "Value": format_money(-total_soft)},
-            {"Item": "(-) Financing Costs", "Value": format_money(-finance_cost)},
+            {"Item": f"(-) Financing Costs ({pre_m_int + const_m_int} Mo)", "Value": format_money(-finance_cost)},
             {"Item": "RESIDUAL LAND VALUE", "Value": format_money(residual_land_value)}
         ])
         st.table(df_pf.set_index("Item"))
