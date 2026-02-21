@@ -59,14 +59,27 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
-if 'land_residual' in st.session_state.app_db and 'pre_const_months' not in st.session_state.app_db['land_residual']:
-    st.session_state.app_db['land_residual']['pre_const_months'] = 12.0
+# Initialize new DB variables
+if 'land_residual' not in st.session_state.app_db:
+    st.session_state.app_db['land_residual'] = {}
+
+defaults = {
+    'pre_const_months': 12.0,
+    'dcc_psf': 20.0,
+    'cac_psf': 15.0,
+    'permit_psf': 5.0,
+    'province': 'BC',
+    'city': 'Vancouver'
+}
+for key, val in defaults.items():
+    if key not in st.session_state.app_db['land_residual']:
+        st.session_state.app_db['land_residual'][key] = val
 
 # --- 4. THE REFINED STORYTELLING HEADER ---
 st.title("🏗️ Land Residual Model")
 
 prof = st.session_state.app_db.get('profile', {})
-p1_name = prof.get('p1_name', "Dori")
+p1_name = prof.get('p1_name', "Investor")
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
@@ -80,7 +93,7 @@ st.markdown(f"""
             <span style="color: #6C757D; font-size: 0.9em;">Value as if you sold the completed project in today’s market</span><br>
             <span style="display: block; margin-top: 8px;"></span>
             <b style="color: {CHARCOAL}; font-size: 1.05em;">Less: Total Development Costs</b><br>
-            <span style="color: #6C757D; font-size: 0.9em;">Including construction hard costs (material, labor, etc), soft costs (municipal and consulting fees), and interest on the loan</span><br>
+            <span style="color: #6C757D; font-size: 0.9em;">Including construction hard costs, soft costs, municipal fees (DCCs/CACs), and loan interest</span><br>
             <span style="display: block; margin-top: 8px;"></span>
             <b style="color: {CHARCOAL}; font-size: 1.05em;">Less: Developer’s Profit</b><br>
             <span style="color: #6C757D; font-size: 0.9em;">Your required margin for taking on the risk (usually 15%-20% of gross revenue)</span><br>
@@ -95,8 +108,18 @@ st.markdown(f"""
 # --- 5. INPUTS ---
 st.write("")
 st.subheader("1. Site & Highest and Best Use")
-z_col1, z_col2, z_col3 = st.columns(3)
 
+loc_c1, loc_c2 = st.columns(2)
+with loc_c1:
+    prov_opts = ["BC", "Ontario", "Alberta", "Manitoba", "Quebec", "Nova Scotia", "New Brunswick", "Saskatchewan"]
+    curr_prov = st.session_state.app_db['land_residual'].get('province', 'BC')
+    idx = prov_opts.index(curr_prov) if curr_prov in prov_opts else 0
+    province = st.selectbox("Province", prov_opts, index=idx)
+    st.session_state.app_db['land_residual']['province'] = province
+with loc_c2:
+    city = cloud_input("Municipality / City", "land_residual", "city")
+
+z_col1, z_col2, z_col3 = st.columns(3)
 with z_col1:
     lot_size = cloud_input("Lot Size (Sq.Ft.)", "land_residual", "lot_size", step=500)
 with z_col2:
@@ -122,13 +145,24 @@ with r_col2:
 # --- COSTS ---
 st.write("")
 st.subheader("3. Development Costs")
-c_col1, c_col2, c_col3 = st.columns(3)
+
+st.markdown("**Construction & Consulting**")
+c_col1, c_col2 = st.columns(2)
 with c_col1:
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
 with c_col2:
     soft_cost_pct = cloud_input("Soft Costs (% of Hard Cost)", "land_residual", "soft_cost_pct", step=1.0)
-with c_col3:
-    city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
+    st.caption("Architecture, Engineering, Marketing, Legal (Excludes City Fees)")
+
+st.markdown("**Municipal Levies & Permits ($/SF)**")
+fee_c1, fee_c2, fee_c3 = st.columns(3)
+with fee_c1:
+    dcc_psf = cloud_input("DCCs ($/SF)", "land_residual", "dcc_psf", step=5.0)
+with fee_c2:
+    cac_psf = cloud_input("ACC / CACs ($/SF)", "land_residual", "cac_psf", step=5.0)
+with fee_c3:
+    permit_psf = cloud_input("DP & BP Fees ($/SF)", "land_residual", "permit_psf", step=1.0)
+
 
 # --- FINANCING ---
 st.write("")
@@ -148,19 +182,27 @@ with f_col4:
 # --- 6. CALCULATIONS ---
 gdv = buildable_sf * sell_psf
 target_profit = gdv * (profit_margin / 100)
+
 total_hard = buildable_sf * hard_cost_psf
-total_city_fees = buildable_sf * city_fees_psf
-total_soft = (total_hard * (soft_cost_pct / 100)) + total_city_fees
+pure_soft_costs = total_hard * (soft_cost_pct / 100)
+
+# Calculate City Fees
+total_dcc = buildable_sf * dcc_psf
+total_cac = buildable_sf * cac_psf
+total_permit = buildable_sf * permit_psf
+total_city_fees = total_dcc + total_cac + total_permit
+
+total_soft_combined = pure_soft_costs + total_city_fees
 
 pre_m = pre_const_months
 build_m = project_months
 
 # ADVANCED FINANCING LOGIC:
-soft_interest = total_soft * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
+soft_interest = total_soft_combined * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
 hard_interest = total_hard * (finance_rate / 100) * ((build_m / 12) * 0.5)
 
 finance_cost = soft_interest + hard_interest
-total_construction = total_hard + total_soft
+total_construction = total_hard + total_soft_combined
 
 residual_land_value = gdv - target_profit - total_construction - finance_cost
 
@@ -179,7 +221,10 @@ df_pf = pd.DataFrame([
     {"Item": "Gross Development Value (GDV)", "Value": format_money(gdv)},
     {"Item": "(-) Target Profit", "Value": format_money(-target_profit)},
     {"Item": "(-) Hard Construction Costs", "Value": format_money(-total_hard)},
-    {"Item": "(-) Soft Costs & Fees", "Value": format_money(-total_soft)},
+    {"Item": "(-) Consulting & Soft Costs", "Value": format_money(-pure_soft_costs)},
+    {"Item": "(-) City Fees: DCCs", "Value": format_money(-total_dcc)},
+    {"Item": "(-) City Fees: ACC/CACs", "Value": format_money(-total_cac)},
+    {"Item": "(-) City Fees: DP & BP Permits", "Value": format_money(-total_permit)},
     {"Item": f"(-) Financing Costs ({int(pre_m) + int(build_m)} Mo)", "Value": format_money(-finance_cost)},
     {"Item": "RESIDUAL LAND VALUE", "Value": format_money(residual_land_value)}
 ])
@@ -204,7 +249,7 @@ else:
     const_m_int = int(build_m)
     total_timeline = pre_m_int + const_m_int + sell_months
     
-    monthly_soft = total_soft / pre_m_int if pre_m_int > 0 else 0
+    monthly_soft = total_soft_combined / pre_m_int if pre_m_int > 0 else 0
     monthly_hard = total_hard / const_m_int if const_m_int > 0 else 0
     monthly_fin_pre = soft_interest / pre_m_int if pre_m_int > 0 else 0
     monthly_fin_const = hard_interest / const_m_int if const_m_int > 0 else 0
