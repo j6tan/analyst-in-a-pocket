@@ -6,10 +6,11 @@ from style_utils import inject_global_css
 from data_handler import init_session_state
 
 # --- 1. GLOBAL CONFIG ---
+# Rebranded Title and Icon
 st.set_page_config(
     layout="wide", 
-    page_title="Analyst in a Pocket", 
-    page_icon="📊",
+    page_title="FIRE Calculator", 
+    page_icon="🔥",
     initial_sidebar_state="expanded"
 )
 inject_global_css()
@@ -25,7 +26,19 @@ VALID_USERS = {
 }
 
 with st.sidebar:
-    st.image("logo.png", width=100) if os.path.exists("logo.png") else None
+    # LOGO & SLOGAN INJECTION
+    if os.path.exists("logo.png"):
+        st.image("logo.png", use_container_width=True)
+    else:
+        st.markdown("<h2 style='text-align: center; color: #CEB36F;'>🔥 FIRE Calculator</h2>", unsafe_allow_html=True)
+    
+    st.markdown("""
+        <p style='text-align: center; color: #6c757d; font-size: 0.95em; font-style: italic; margin-bottom: 20px; line-height: 1.4;'>
+            Help Canadian T4 earners save money and reach financial freedom.
+        </p>
+    """, unsafe_allow_html=True)
+    
+    st.divider()
     
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
@@ -56,7 +69,6 @@ with st.sidebar:
 # --- 4. DYNAMIC NAVIGATION SETUP ---
 is_pro = st.session_state.get("is_pro", False)
 
-# Helper to create Pro labels and icons
 def get_pro_meta(label, icon, is_pro):
     return (label if is_pro else f"{label} 🔒"), (icon if is_pro else "🔒")
 
@@ -67,9 +79,8 @@ second_label, second_icon = get_pro_meta("Secondary Property", "🏢", is_pro)
 renewal_label, renewal_icon = get_pro_meta("Renewal Scenario", "🔄", is_pro)
 duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
 rental_label, rental_icon = get_pro_meta("Rental Multi-Tool", "🏢", is_pro)
-land_label, land_icon = get_pro_meta("Land Residual Model", "🏗️", is_pro) # NEW
+land_label, land_icon = get_pro_meta("Land Residual Model", "🏗️", is_pro) # Kept from previous session
 
-# Define label and icon for the free tool
 pvi_label = "Debt vs. Equity"
 pvi_icon = "📉"
 
@@ -93,7 +104,7 @@ pages = {
         st.Page("scripts/rental_vs_stock.py", title=duel_label, icon=duel_icon),
         st.Page("scripts/smith_maneuver.py", title=smith_label, icon=smith_icon),
         st.Page("scripts/rental_analyzer.py", title=rental_label, icon=rental_icon),
-        st.Page("scripts/land_residual_model.py", title=land_label, icon=land_icon) # NEW
+        st.Page("scripts/land_residual_model.py", title=land_label, icon=land_icon)
     ],
     "Account": [
         st.Page("scripts/membership.py", title="Membership 💎", icon="💎"),
@@ -104,7 +115,6 @@ pages = {
 pg = st.navigation(pages)
 
 # --- 5. THE "SIDEBAR INJECTION" PAYWALL ---
-# ADDED: land_label to pro_titles
 pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label, rental_label, land_label]
 
 if pg.title in pro_titles and not is_pro:
