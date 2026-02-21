@@ -59,6 +59,18 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
+# Dynamic Location Mapping
+CITY_OPTIONS = {
+    "BC": ["Vancouver", "Burnaby", "Surrey", "Richmond", "Coquitlam", "Langley", "New Westminster", "North Vancouver", "Victoria", "Kelowna", "Other"],
+    "Ontario": ["Toronto", "Mississauga", "Brampton", "Ottawa", "Hamilton", "London", "Markham", "Vaughan", "Other"],
+    "Alberta": ["Calgary", "Edmonton", "Red Deer", "Lethbridge", "Other"],
+    "Manitoba": ["Winnipeg", "Brandon", "Other"],
+    "Quebec": ["Montreal", "Quebec City", "Laval", "Gatineau", "Other"],
+    "Nova Scotia": ["Halifax", "Dartmouth", "Other"],
+    "New Brunswick": ["Moncton", "Fredericton", "Saint John", "Other"],
+    "Saskatchewan": ["Saskatoon", "Regina", "Other"]
+}
+
 # Initialize new DB variables
 if 'land_residual' not in st.session_state.app_db:
     st.session_state.app_db['land_residual'] = {}
@@ -109,15 +121,22 @@ st.markdown(f"""
 st.write("")
 st.subheader("1. Site & Highest and Best Use")
 
+# Dynamic Location Dropdowns
 loc_c1, loc_c2 = st.columns(2)
 with loc_c1:
-    prov_opts = ["BC", "Ontario", "Alberta", "Manitoba", "Quebec", "Nova Scotia", "New Brunswick", "Saskatchewan"]
+    prov_opts = list(CITY_OPTIONS.keys())
     curr_prov = st.session_state.app_db['land_residual'].get('province', 'BC')
     idx = prov_opts.index(curr_prov) if curr_prov in prov_opts else 0
     province = st.selectbox("Province", prov_opts, index=idx)
     st.session_state.app_db['land_residual']['province'] = province
+
 with loc_c2:
-    city = cloud_input("Municipality / City", "land_residual", "city")
+    city_opts = CITY_OPTIONS.get(province, ["Other"])
+    curr_city = st.session_state.app_db['land_residual'].get('city', city_opts[0])
+    # Fallback if province changed and previous city isn't in new list
+    city_idx = city_opts.index(curr_city) if curr_city in city_opts else 0
+    city = st.selectbox("Municipality / City", city_opts, index=city_idx)
+    st.session_state.app_db['land_residual']['city'] = city
 
 z_col1, z_col2, z_col3 = st.columns(3)
 with z_col1:
