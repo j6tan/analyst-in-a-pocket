@@ -13,32 +13,26 @@ if 'app_db' not in st.session_state:
 profile = st.session_state.app_db['profile']
 
 # --- 2. INLINE LOGO & TITLE ---
-# Convert image to base64 so it can sit perfectly inside the H1 tag
-def get_inline_logo(img_path, width=60):
+# Convert image to base64 so it can sit perfectly inside the HTML tag
+def get_inline_logo(img_path, width=80):
     if os.path.exists(img_path):
         with open(img_path, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
-        # Flexbox alignment ensures it doesn't get pushed up or down
         return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; margin-right: 15px; vertical-align: middle;">'
-    return "🔥" # Fallback if logo.png is missing
+    return "🔥" 
 
-logo_html = get_inline_logo("logo.png", width=65)
+logo_html = get_inline_logo("logo.png", width=80)
 
-# The display: flex ensures the logo and text are perfectly centered together
+# Removed center alignment, pulled everything to the left edge
 st.write("")
 st.markdown(f"""
-    <div style='display: flex; justify-content: center; align-items: center; margin-bottom: 5px;'>
+    <div style='display: flex; justify-content: flex-start; align-items: center; margin-bottom: 5px;'>
         {logo_html}
         <h1 style='margin: 0; padding: 0;'>FIRE Investor Dashboard</h1>
     </div>
-""", unsafe_allow_html=True)
-
-st.markdown("""
-    <div style="padding: 0px 15px 20px 15px;">
-        <p style='text-align: center; color: #6c757d; font-size: 1.1em; font-style: italic; margin-bottom: 0; line-height: 1.4;'>
-            Help Canadian T4 earners save money and reach financial freedom.
-        </p>
-    </div>
+    <p style='color: #6c757d; font-size: 1.1em; font-style: italic; margin-top: 5px; margin-bottom: 25px; line-height: 1.4;'>
+        Help Canadian T4 earners save money and reach financial freedom.
+    </p>
 """, unsafe_allow_html=True)
 
 # --- 3. FINANCIAL PASSPORT (Central Info) ---
