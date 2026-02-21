@@ -1,5 +1,7 @@
 import streamlit as st
 import time
+import os
+import base64
 from style_utils import inject_global_css
 from data_handler import cloud_input, load_user_data, supabase, sync_widget, init_session_state
 
@@ -19,7 +21,28 @@ if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
 st.divider()
 
-st.title("👤 General Client Information")
+# --- 3. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=80):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; margin-right: 15px; vertical-align: middle;">'
+    return "🔥"
+
+logo_html = get_inline_logo(width=80)
+
+st.write("")
+st.markdown(f"""
+    <div style='display: flex; justify-content: flex-start; align-items: center; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0; padding: 0;'>👤 General Client Information</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- SECTION 1: INCOME ---
 st.subheader("👥 Household Income Details")
