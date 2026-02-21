@@ -59,7 +59,6 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
-# Dynamic Location Mapping
 CITY_OPTIONS = {
     "BC": ["Vancouver", "Burnaby", "Surrey", "Richmond", "Coquitlam", "Langley", "New Westminster", "North Vancouver", "Victoria", "Kelowna", "Other"],
     "Ontario": ["Toronto", "Mississauga", "Brampton", "Ottawa", "Hamilton", "London", "Markham", "Vaughan", "Other"],
@@ -77,9 +76,13 @@ if 'land_residual' not in st.session_state.app_db:
 
 defaults = {
     'pre_const_months': 12.0,
-    'dcc_psf': 20.0,
-    'cac_psf': 15.0,
-    'permit_psf': 5.0,
+    'dcc_per_unit': 25000.0,
+    'cac_per_unit': 15000.0,
+    'regional_dcc_flat': 0.0,
+    'dp_fee_flat': 25000.0,
+    'bp_fee_pct': 1.5,
+    'avg_unit_sf': 850.0,
+    'soft_cost_pct': 10.0,
     'province': 'BC',
     'city': 'Vancouver'
 }
@@ -105,7 +108,7 @@ st.markdown(f"""
             <span style="color: #6C757D; font-size: 0.9em;">Value as if you sold the completed project in today’s market</span><br>
             <span style="display: block; margin-top: 8px;"></span>
             <b style="color: {CHARCOAL}; font-size: 1.05em;">Less: Total Development Costs</b><br>
-            <span style="color: #6C757D; font-size: 0.9em;">Including construction hard costs, soft costs, municipal fees (DCCs/CACs), and loan interest</span><br>
+            <span style="color: #6C757D; font-size: 0.9em;">Including construction hard costs (material, labor, etc), soft costs (municipal and consulting fees), and interest on the loan</span><br>
             <span style="display: block; margin-top: 8px;"></span>
             <b style="color: {CHARCOAL}; font-size: 1.05em;">Less: Developer’s Profit</b><br>
             <span style="color: #6C757D; font-size: 0.9em;">Your required margin for taking on the risk (usually 15%-20% of gross revenue)</span><br>
@@ -117,11 +120,12 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+
+
 # --- 5. INPUTS ---
 st.write("")
 st.subheader("1. Site & Highest and Best Use")
 
-# Dynamic Location Dropdowns
 loc_c1, loc_c2 = st.columns(2)
 with loc_c1:
     prov_opts = list(CITY_OPTIONS.keys())
@@ -133,12 +137,11 @@ with loc_c1:
 with loc_c2:
     city_opts = CITY_OPTIONS.get(province, ["Other"])
     curr_city = st.session_state.app_db['land_residual'].get('city', city_opts[0])
-    # Fallback if province changed and previous city isn't in new list
     city_idx = city_opts.index(curr_city) if curr_city in city_opts else 0
     city = st.selectbox("Municipality / City", city_opts, index=city_idx)
     st.session_state.app_db['land_residual']['city'] = city
 
-z_col1, z_col2, z_col3 = st.columns(3)
+z_col1, z_col2, z_col3, z_col4 = st.columns(4)
 with z_col1:
     lot_size = cloud_input("Lot Size (Sq.Ft.)", "land_residual", "lot_size", step=500)
 with z_col2:
@@ -147,9 +150,12 @@ with z_col2:
     sell_months = active_defaults["sell_months"]
 with z_col3:
     fsr = st.number_input("Floor Space Ratio (FSR)", value=active_defaults["fsr"], step=0.1, key=f"fsr_{prod_type}")
+with z_col4:
+    avg_unit_sf = cloud_input("Avg Unit Size (SF)", "land_residual", "avg_unit_sf", step=50.0)
 
 buildable_sf = lot_size * fsr
-st.info(f"📐 **Buildable:** {buildable_sf:,.0f} SF | ⏳ **Sales Velocity:** {sell_months} Month Sell-Out")
+est_units = buildable_sf / avg_unit_sf if avg_unit_sf > 0 else 0
+st.info(f"📐 **Buildable:** {buildable_sf:,.0f} SF | 🏘️ **Est. Units:** {est_units:,.1f} | ⏳ **Sales Velocity:** {sell_months} Month Sell-Out")
 
 st.divider()
 
@@ -173,15 +179,26 @@ with c_col2:
     soft_cost_pct = cloud_input("Soft Costs (% of Hard Cost)", "land_residual", "soft_cost_pct", step=1.0)
     st.caption("Architecture, Engineering, Marketing, Legal (Excludes City Fees)")
 
-st.markdown("**Municipal Levies & Permits ($/SF)**")
+st.markdown("**Municipal Levies & Permits**")
 fee_c1, fee_c2, fee_c3 = st.columns(3)
 with fee_c1:
-    dcc_psf = cloud_input("DCCs ($/SF)", "land_residual", "dcc_psf", step=5.0)
+    dcc_per_unit = cloud_input("Municipal DCC ($/Unit)", "land_residual", "dcc_per_unit", step=1000.0)
+    regional_dcc_flat = cloud_input("Regional DCC (Total $)", "land_residual", "regional_dcc_flat", step=10000.0)
 with fee_c2:
-    cac_psf = cloud_input("ACC / CACs ($/SF)", "land_residual", "cac_psf", step=5.0)
+    cac_per_unit = cloud_input("ACC / CACs ($/Unit)", "land_residual", "cac_per_unit", step=1000.0)
+    dp_fee_flat = cloud_input("DP Fee (Total $)", "land_residual", "dp_fee_flat", step=1000.0)
 with fee_c3:
-    permit_psf = cloud_input("DP & BP Fees ($/SF)", "land_residual", "permit_psf", step=1.0)
+    bp_fee_pct = cloud_input("BP Fee (% of Hard Cost)", "land_residual", "bp_fee_pct", step=0.1)
 
+st.markdown("""
+<div style="background-color: #F8F9FA; padding: 15px; border-radius: 8px; border-left: 4px solid #4A4E5A; font-size: 0.9em; color: #4A4E5A; margin-top: 10px;">
+    <b>ℹ️ Municipal Fee Guide:</b><br>
+    • <b>DCCs (Development Cost Charges):</b> Fees collected by the municipality to pay for new roads, water, and sewer infrastructure. Look up your city's <i>"DCC Bylaw Schedule"</i>.<br>
+    • <b>Regional DCCs:</b> Additional levies by regional bodies (e.g., Metro Vancouver or TransLink) for regional water/sewer/transit. Found on the regional district's website.<br>
+    • <b>ACC/CACs (Amenity Cost Charges / Contributions):</b> Charges for parks, libraries, and daycares. Often triggered by rezoning. Check the city's <i>"Community Amenity Policy"</i>.<br>
+    • <b>DP (Development Permit) & BP (Building Permit):</b> Application fees. DP is usually a flat base fee plus a minor area charge. BP is typically 1% to 2% of the estimated hard construction cost.
+</div>
+""", unsafe_allow_html=True)
 
 # --- FINANCING ---
 st.write("")
@@ -205,20 +222,23 @@ target_profit = gdv * (profit_margin / 100)
 total_hard = buildable_sf * hard_cost_psf
 pure_soft_costs = total_hard * (soft_cost_pct / 100)
 
-# Calculate City Fees
-total_dcc = buildable_sf * dcc_psf
-total_cac = buildable_sf * cac_psf
-total_permit = buildable_sf * permit_psf
-total_city_fees = total_dcc + total_cac + total_permit
+# Calculate City Fees based on inputs
+total_dcc = est_units * dcc_per_unit
+total_cac = est_units * cac_per_unit
+total_regional_dcc = regional_dcc_flat
+total_dp = dp_fee_flat
+total_bp = total_hard * (bp_fee_pct / 100)
 
+total_city_fees = total_dcc + total_cac + total_regional_dcc + total_dp + total_bp
 total_soft_combined = pure_soft_costs + total_city_fees
 
 pre_m = pre_const_months
 build_m = project_months
 
 # ADVANCED FINANCING LOGIC:
-soft_interest = total_soft_combined * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
-hard_interest = total_hard * (finance_rate / 100) * ((build_m / 12) * 0.5)
+# Interest-only calculation using 60% average utilization during active draw phases
+soft_interest = total_soft_combined * (finance_rate / 100) * ((pre_m / 12) * 0.6 + (build_m / 12))
+hard_interest = total_hard * (finance_rate / 100) * ((build_m / 12) * 0.6)
 
 finance_cost = soft_interest + hard_interest
 total_construction = total_hard + total_soft_combined
@@ -241,9 +261,10 @@ df_pf = pd.DataFrame([
     {"Item": "(-) Target Profit", "Value": format_money(-target_profit)},
     {"Item": "(-) Hard Construction Costs", "Value": format_money(-total_hard)},
     {"Item": "(-) Consulting & Soft Costs", "Value": format_money(-pure_soft_costs)},
-    {"Item": "(-) City Fees: DCCs", "Value": format_money(-total_dcc)},
+    {"Item": "(-) City Fees: Municipal DCCs", "Value": format_money(-total_dcc)},
+    {"Item": "(-) City Fees: Regional DCCs", "Value": format_money(-total_regional_dcc)},
     {"Item": "(-) City Fees: ACC/CACs", "Value": format_money(-total_cac)},
-    {"Item": "(-) City Fees: DP & BP Permits", "Value": format_money(-total_permit)},
+    {"Item": "(-) City Fees: DP & BP Permits", "Value": format_money(-(total_dp + total_bp))},
     {"Item": f"(-) Financing Costs ({int(pre_m) + int(build_m)} Mo)", "Value": format_money(-finance_cost)},
     {"Item": "RESIDUAL LAND VALUE", "Value": format_money(residual_land_value)}
 ])
@@ -307,10 +328,13 @@ else:
         row, t_row = [], []
         for s in sale_steps:
             t_hard_sens = buildable_sf * c
-            t_soft_sens = (t_hard_sens * (soft_cost_pct/100)) + total_city_fees
+            t_bp_sens = t_hard_sens * (bp_fee_pct / 100)
+            t_city_sens = total_dcc + total_cac + total_regional_dcc + total_dp + t_bp_sens
+            t_soft_sens = (t_hard_sens * (soft_cost_pct/100)) + t_city_sens
             
-            s_int = t_soft_sens * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
-            h_int = t_hard_sens * (finance_rate / 100) * ((build_m / 12) * 0.5)
+            # Using 60% utilization for the sensitivity matrix as well
+            s_int = t_soft_sens * (finance_rate / 100) * ((pre_m / 12) * 0.6 + (build_m / 12))
+            h_int = t_hard_sens * (finance_rate / 100) * ((build_m / 12) * 0.6)
             
             rlv = (buildable_sf * s) - (buildable_sf * s * (profit_margin/100)) - t_hard_sens - t_soft_sens - s_int - h_int
             row.append(rlv)
