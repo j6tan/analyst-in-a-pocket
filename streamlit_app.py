@@ -6,7 +6,6 @@ from style_utils import inject_global_css
 from data_handler import init_session_state
 
 # --- 1. GLOBAL CONFIG ---
-# Rebranded Title and Icon
 st.set_page_config(
     layout="wide", 
     page_title="FIRE Calculator", 
@@ -26,20 +25,7 @@ VALID_USERS = {
 }
 
 with st.sidebar:
-    # LOGO & SLOGAN INJECTION
-    if os.path.exists("logo.png"):
-        st.image("logo.png", use_container_width=True)
-    else:
-        st.markdown("<h2 style='text-align: center; color: #CEB36F;'>🔥 FIRE Calculator</h2>", unsafe_allow_html=True)
-    
-    st.markdown("""
-        <p style='text-align: center; color: #6c757d; font-size: 0.95em; font-style: italic; margin-bottom: 20px; line-height: 1.4;'>
-            Help Canadian T4 earners save money and reach financial freedom.
-        </p>
-    """, unsafe_allow_html=True)
-    
-    st.divider()
-    
+    # --- MEMBER LOGIN BELOW ---
     if not st.session_state.get("is_logged_in", False):
         st.header("🔓 Member Login")
         with st.form("login_form"):
@@ -79,7 +65,7 @@ second_label, second_icon = get_pro_meta("Secondary Property", "🏢", is_pro)
 renewal_label, renewal_icon = get_pro_meta("Renewal Scenario", "🔄", is_pro)
 duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
 rental_label, rental_icon = get_pro_meta("Rental Multi-Tool", "🏢", is_pro)
-land_label, land_icon = get_pro_meta("Land Residual Model", "🏗️", is_pro) # Kept from previous session
+land_label, land_icon = get_pro_meta("Land Residual Model", "🏗️", is_pro)
 
 pvi_label = "Debt vs. Equity"
 pvi_icon = "📉"
