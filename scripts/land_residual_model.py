@@ -59,30 +59,31 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
-# --- 4. EXPANDED STORYTELLING HEADER ---
+# --- 4. THE REFINED STORYTELLING HEADER ---
 st.title("🏗️ Land Residual Model")
 
 prof = st.session_state.app_db.get('profile', {})
 p1_name = prof.get('p1_name', "Dori")
 
+# Tight HTML block to prevent Streamlit rendering bugs
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD};">
     <p style="color: {SLATE_ACCENT}; font-size: 1.05em; line-height: 1.4; margin-bottom: 15px;">
-        Welcome, <b>{p1_name}</b>. This tool determines the absolute maximum price you can pay for land while protecting your returns. By working backward from the finished product, it prevents you from overpaying for the dirt.
+        Welcome, <b>{p1_name}</b>. This tool determines the maximum price you can pay for land while protecting your target returns.
     </p>
     <div style="background-color: white; padding: 18px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 5px;">
-        <h4 style="margin-top:0; color: {PRIMARY_GOLD}; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 12px;">The Residual Valuation Method</h4>
+        <h4 style="margin-top:0; color: {PRIMARY_GOLD}; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 12px;">The Residual Logic</h4>
         <p style="color: {SLATE_ACCENT}; font-size: 0.95em; line-height: 1.6; margin-bottom: 0;">
-            <b>1. Gross Development Value (GDV)</b><br>
-            <span style="color: #6C757D; font-size: 0.9em;">We start with the total projected revenue from selling the completed project in today's market.</span><br>
-            <span style="color: #A0A0A0; font-size: 0.85em; display: inline-block; margin: 4px 0;">&mdash; MINUS &mdash;</span><br>
-            <b>2. Target Developer Profit</b><br>
-            <span style="color: #6C757D; font-size: 0.9em;">Your required margin for taking on the risk (typically 15-20% of GDV). This is subtracted immediately—because you don't build for free.</span><br>
-            <span style="color: #A0A0A0; font-size: 0.85em; display: inline-block; margin: 4px 0;">&mdash; MINUS &mdash;</span><br>
-            <b>3. Total Development Costs</b><br>
-            <span style="color: #6C757D; font-size: 0.9em;">Every dollar required to build: hard materials, soft city fees (DCCs/CACs), and interest on the bank loan.</span><br>
+            <b style="color: {CHARCOAL}; font-size: 1.05em;">Projected Gross Revenue</b><br>
+            <span style="color: #6C757D; font-size: 0.9em;">Value as if you sold the completed project in today’s market</span><br>
+            <span style="display: block; margin-top: 8px;"></span>
+            <b style="color: {CHARCOAL}; font-size: 1.05em;">Less: Total Development Costs</b><br>
+            <span style="color: #6C757D; font-size: 0.9em;">Including construction hard costs (material, labor, etc), soft costs (municipal and consulting fees), and interest on the loan</span><br>
+            <span style="display: block; margin-top: 8px;"></span>
+            <b style="color: {CHARCOAL}; font-size: 1.05em;">Less: Developer’s Profit</b><br>
+            <span style="color: #6C757D; font-size: 0.9em;">Your required margin for taking on the risk (usually 15%-20% of gross revenue)</span><br>
             <hr style="margin: 12px 0; border: 0; border-top: 2px solid {PRIMARY_GOLD}; width: 60px;">
-            <b style="color: {CHARCOAL}; font-size: 1.1em;">= MAXIMUM LAND PURCHASE PRICE</b><br>
+            <b style="color: {CHARCOAL}; font-size: 1.1em;">= Residual Land Value</b><br>
             <span style="color: #DC2626; font-size: 0.9em; font-weight: 500;">Whatever capital is left over is the true value of the dirt. Pay a dollar more, and it comes straight out of your profit.</span>
         </p>
     </div>
