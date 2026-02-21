@@ -40,7 +40,7 @@ st.write("")
 st.markdown(f"""
     <div style='display: flex; justify-content: flex-start; align-items: center; margin-bottom: 25px;'>
         {logo_html}
-        <h1 style='margin: 0; padding: 0;'>👤 General Client Information</h1>
+        <h1 style='margin: 0; padding: 0;'> General Client Information</h1>
     </div>
 """, unsafe_allow_html=True)
 
