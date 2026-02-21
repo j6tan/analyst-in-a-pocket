@@ -59,7 +59,6 @@ BUILD_DATA = {
     "Commercial / Mixed-Use": {"fsr": 3.0, "cost": 350, "sell_months": 18}
 }
 
-# Ensure the new pre_const_months variable exists for returning users
 if 'land_residual' in st.session_state.app_db and 'pre_const_months' not in st.session_state.app_db['land_residual']:
     st.session_state.app_db['land_residual']['pre_const_months'] = 12.0
 
@@ -112,29 +111,39 @@ st.info(f"📐 **Buildable:** {buildable_sf:,.0f} SF | ⏳ **Sales Velocity:** {
 
 st.divider()
 
-st.subheader("2. Underwriting & Financing")
-f_col1, f_col2, f_col3 = st.columns(3)
+# --- REVENUE ---
+st.subheader("2. Revenue Projections")
+r_col1, r_col2 = st.columns(2)
+with r_col1:
+    sell_psf = cloud_input("Projected Sale Price ($/SF)", "land_residual", "sell_psf", step=50)
+with r_col2:
+    profit_margin = cloud_input("Target Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
 
-with f_col1:
-    sell_psf = cloud_input("Sale Price ($/SF)", "land_residual", "sell_psf", step=50)
-    profit_margin = cloud_input("Profit Margin (%)", "land_residual", "profit_margin", step=1.0)
-
-with f_col2:
+# --- COSTS ---
+st.write("")
+st.subheader("3. Development Costs")
+c_col1, c_col2, c_col3 = st.columns(3)
+with c_col1:
     hard_cost_psf = st.number_input("Hard Costs ($/SF)", value=active_defaults["cost"], step=10, key=f"hc_{prod_type}")
-    city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
+with c_col2:
     soft_cost_pct = cloud_input("Soft Costs (% of Hard Cost)", "land_residual", "soft_cost_pct", step=1.0)
+with c_col3:
+    city_fees_psf = cloud_input("City Fees ($/SF)", "land_residual", "city_fees_psf", step=5.0)
 
-with f_col3:
+# --- FINANCING ---
+st.write("")
+st.subheader("4. Financing")
+f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+with f_col1:
     finance_rate = cloud_input("Loan Rate (%)", "land_residual", "finance_rate", step=0.25)
-    st.markdown(f"<div style='margin-top:-12px; margin-bottom:12px; font-size:0.8em; color:#6C757D;'>Default: Bank Prime + 2% ({current_prime + 2}%)</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-top:-12px; margin-bottom:12px; font-size:0.8em; color:#6C757D;'>Default: Prime + 2% ({current_prime + 2}%)</div>", unsafe_allow_html=True)
+with f_col2:
     ltc_pct = cloud_input("Loan-to-Cost %", "land_residual", "ltc_pct", step=5.0)
-    
-    # Split the timeline into Pre-Build and Build
-    c3_1, c3_2 = st.columns(2)
-    with c3_1:
-        pre_const_months = cloud_input("Pre-Build (Mo)", "land_residual", "pre_const_months", step=1.0)
-    with c3_2:
-        project_months = cloud_input("Build (Mo)", "land_residual", "project_months", step=1.0)
+with f_col3:
+    pre_const_months = cloud_input("Pre-Build (Mo)", "land_residual", "pre_const_months", step=1.0)
+with f_col4:
+    project_months = cloud_input("Build (Mo)", "land_residual", "project_months", step=1.0)
+
 
 # --- 6. CALCULATIONS ---
 gdv = buildable_sf * sell_psf
@@ -147,9 +156,7 @@ pre_m = pre_const_months
 build_m = project_months
 
 # ADVANCED FINANCING LOGIC:
-# Soft Costs: Drawn over pre-build (avg 50%), then held fully throughout the entire construction phase.
 soft_interest = total_soft * (finance_rate / 100) * ((pre_m / 12) * 0.5 + (build_m / 12))
-# Hard Costs: Drawn over construction phase (avg 50%).
 hard_interest = total_hard * (finance_rate / 100) * ((build_m / 12) * 0.5)
 
 finance_cost = soft_interest + hard_interest
@@ -163,7 +170,23 @@ bank_loan = total_project_cost * (ltc_pct / 100)
 equity_required = total_project_cost - bank_loan
 roe = (target_profit / equity_required) * 100 if equity_required > 0 else 0
 
-# --- 7. RESULTS ---
+
+# --- 7. PRO FORMA (Moved Up) ---
+st.divider()
+st.subheader("📄 Full Pro Forma Breakdown")
+
+df_pf = pd.DataFrame([
+    {"Item": "Gross Development Value (GDV)", "Value": format_money(gdv)},
+    {"Item": "(-) Target Profit", "Value": format_money(-target_profit)},
+    {"Item": "(-) Hard Construction Costs", "Value": format_money(-total_hard)},
+    {"Item": "(-) Soft Costs & Fees", "Value": format_money(-total_soft)},
+    {"Item": f"(-) Financing Costs ({int(pre_m) + int(build_m)} Mo)", "Value": format_money(-finance_cost)},
+    {"Item": "RESIDUAL LAND VALUE", "Value": format_money(residual_land_value)}
+])
+st.table(df_pf.set_index("Item"))
+
+
+# --- 8. RESULTS / ACQUISITION VERDICT ---
 st.divider()
 st.subheader("📊 Acquisition Verdict")
 
@@ -181,7 +204,6 @@ else:
     const_m_int = int(build_m)
     total_timeline = pre_m_int + const_m_int + sell_months
     
-    # Monthly burn rates for charting
     monthly_soft = total_soft / pre_m_int if pre_m_int > 0 else 0
     monthly_hard = total_hard / const_m_int if const_m_int > 0 else 0
     monthly_fin_pre = soft_interest / pre_m_int if pre_m_int > 0 else 0
@@ -193,11 +215,11 @@ else:
     
     for m in range(1, total_timeline + 1):
         if m <= pre_m_int:
-            net = -(monthly_soft + monthly_fin_pre) # Burning soft costs & interest
+            net = -(monthly_soft + monthly_fin_pre) 
         elif m <= pre_m_int + const_m_int:
-            net = -(monthly_hard + monthly_fin_const) # Burning hard costs & interest
+            net = -(monthly_hard + monthly_fin_const) 
         else:
-            net = monthly_rev # Selling units
+            net = monthly_rev 
             
         cf_months.append(m)
         cumulative_cash.append(cumulative_cash[-1] + net)
@@ -205,7 +227,6 @@ else:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=cf_months, y=cumulative_cash, fill='tozeroy', line=dict(color=PRIMARY_GOLD, width=3)))
     
-    # Add vertical lines to mark phases
     fig.add_vline(x=pre_m_int, line_dash="dash", line_color="gray", annotation_text="Permits Complete", annotation_position="top right")
     fig.add_vline(x=pre_m_int + const_m_int, line_dash="dash", line_color="gray", annotation_text="Build Complete", annotation_position="top right")
     
@@ -239,17 +260,5 @@ else:
     ))
     fig2.update_layout(xaxis_title="Final Sale Price ($/SF)", yaxis_title="Hard Costs ($/SF)", height=450)
     st.plotly_chart(fig2, use_container_width=True)
-
-    # --- DETAILED PRO FORMA ---
-    with st.expander("📄 Full Pro Forma Breakdown"):
-        df_pf = pd.DataFrame([
-            {"Item": "Gross Development Value (GDV)", "Value": format_money(gdv)},
-            {"Item": "(-) Target Profit", "Value": format_money(-target_profit)},
-            {"Item": "(-) Hard Construction Costs", "Value": format_money(-total_hard)},
-            {"Item": "(-) Soft Costs & Fees", "Value": format_money(-total_soft)},
-            {"Item": f"(-) Financing Costs ({pre_m_int + const_m_int} Mo)", "Value": format_money(-finance_cost)},
-            {"Item": "RESIDUAL LAND VALUE", "Value": format_money(residual_land_value)}
-        ])
-        st.table(df_pf.set_index("Item"))
 
 show_disclaimer()
