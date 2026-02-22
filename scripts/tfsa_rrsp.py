@@ -105,8 +105,8 @@ with col1:
     curr_rate = get_marginal_tax_rate(current_income)
     base_retire_rate = get_marginal_tax_rate(base_income)
     
-    # The two spaces at the end of each line force a tight line break
-    st.info(f"""**Tax Bracket Analysis:** Marginal Rate (today): **{curr_rate}%** Retirement Tax Rate: **{base_retire_rate}%**""")
+    # Using explicitly written spaces and \n to force the 3 stacked lines
+    st.info(f"**Tax Bracket Analysis:** \nMarginal Rate (today): **{curr_rate}%** \nRetirement Tax Rate: **{base_retire_rate}%**")
 
 with col2:
     st.subheader("📈 The Accumulation")
