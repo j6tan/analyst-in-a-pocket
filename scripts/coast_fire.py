@@ -157,7 +157,7 @@ with col_a:
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>The exact amount you need invested <b>today</b> to never invest again.</i></p>
         <h2 style="color: {CHARCOAL}; margin-top: 15px; margin-bottom: 5px;">${coast_number:,.0f}</h2>
         <div style="color: {'#5cb85c' if has_hit_coast else '#d9534f'}; font-weight: bold; margin-top: 10px;">
-            {'✅ Coast Goal Achieved' if has_hit_coast else f'⚠️ Shortfall: -${(coast_number - current_portfolio):,.0f}'}
+            {'✅ Coast Goal Achieved' if has_hit_coast else f'⚠️ Shortfall: -${coast_shortfall:,.0f}'}
         </div>
     </div>
     """, unsafe_allow_html=True)
