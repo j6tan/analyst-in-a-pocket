@@ -22,25 +22,25 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 3. INLINE LOGO & TITLE ---
-def get_inline_logo(img_name="logo.png", width=80):
-    # Check root directory first, then fallback to looking one folder up
-    img_path = img_name
-    if not os.path.exists(img_path):
-        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
-        
+def get_inline_logo(img_path, width=75):
     if os.path.exists(img_path):
         with open(img_path, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
-        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; margin-right: 15px; vertical-align: middle;">'
-    return "🔥"
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>" 
 
-logo_html = get_inline_logo(width=80)
+logo_html = get_inline_logo("logo.png", width=75)
 
-# Removed st.write("") and added margin-top: -20px to pull it up closer to the divider
+st.write("")
 st.markdown(f"""
-    <div style='display: flex; justify-content: flex-start; align-items: center; margin-top: -20px; margin-bottom: 25px;'>
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-bottom: 5px;'>
         {logo_html}
-        <h1 style='margin: 0; padding: 0;'>👤 General Client Information</h1>
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>FIRE Investor Dashboard</h1>
+    </div>
+    <div style="padding: 8px 15px 25px 0px;">
+        <p style='text-align: left; color: #6c757d; font-size: 1.1em; font-style: italic; margin-bottom: 0; line-height: 1.4;'>
+            Empowering Canadian T4 earners to optimize their wealth and achieve financial freedom by turning everyday income into a wealth-building machine.
+        </p>
     </div>
 """, unsafe_allow_html=True)
 
