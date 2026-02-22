@@ -1,92 +1,139 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
+import time
+import os
+import base64
 from style_utils import inject_global_css, show_disclaimer
-from data_handler import init_session_state
+from data_handler import cloud_input, load_user_data, init_session_state
 
+# --- 1. UNIVERSAL AUTO-LOADER ---
 init_session_state()
+if st.session_state.get('username') and not st.session_state.app_db.get('profile', {}).get('p1_name'):
+    with st.spinner("🔄 restoring your data..."):
+        load_user_data(st.session_state.username)
+        time.sleep(0.1)
+        st.rerun()
+
 inject_global_css()
 
-if st.button("⬅️ Back to Home"):
+if st.button("⬅️ Back to Home Dashboard"):
     st.switch_page("home.py")
+st.divider()
 
-st.title("🏘️ BRRRR Strategy Deal Analyzer")
-st.markdown("""
-Use this model to analyze a "Buy, Rehab, Rent, Refinance, Repeat" deal. 
-The goal is to maximize your **Equity** while minimizing the **Cash** you leave stuck in the property.
-""")
+# --- 2. THEME VARIABLES ---
+PRIMARY_GOLD = "#CEB36F"
+CHARCOAL = "#2E2B28"
+OFF_WHITE = "#F8F9FA"
+SLATE_ACCENT = "#4A4E5A"
 
-# --- 1. INPUTS: THE BUY & REHAB ---
-st.header("1. Acquisition & Renovation")
-col1, col2 = st.columns(2)
+# --- 3. LOGO & STORYTELLING ---
+def get_inline_logo(img_name="logo.png", width=75):
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🏘️</span>"
 
-with col1:
-    buy_price = st.number_input("Purchase Price ($)", value=120000, step=5000)
-    closing_costs_buy = st.number_input("Purchase Closing Costs ($)", value=3000, step=500)
-    rehab_budget = st.number_input("Rehab Budget ($)", value=35000, step=1000)
+logo_html = get_inline_logo(width=75)
 
-with col2:
-    arv = st.number_input("After Repair Value (ARV) ($)", value=210000, step=5000)
-    holding_costs = st.number_input("Holding Costs (Interest/Utilities during rehab) ($)", value=2000, step=500)
+# Personalized Greeting
+prof = st.session_state.app_db.get('profile', {})
+p1_raw = prof.get('p1_name', '').strip() if isinstance(prof.get('p1_name'), str) else ''
+p2_raw = prof.get('p2_name', '').strip() if isinstance(prof.get('p2_name'), str) else ''
+greeting_names = f"{p1_raw} & {p2_raw}" if p1_raw and p2_raw else (p1_raw or "Investor")
 
-total_project_cost = buy_price + closing_costs_buy + rehab_budget + holding_costs
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>The BRRRR Engine</h1>
+    </div>
+""", unsafe_allow_html=True)
 
-# --- 2. INPUTS: THE REFINANCE ---
-st.header("2. The Refinance (The Exit)")
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🔓 Recycled Wealth</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Listen up, <b>{greeting_names}</b>. Real estate is the only asset class that lets you buy your cake, eat it, and then get your money back to buy another. This model analyzes how much of your capital you can "pull back out" of a deal to keep your velocity of money high.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# --- 4. INPUTS: THE DEAL ---
+st.header("🛠️ Phase 1: Buy & Rehab")
 c1, c2 = st.columns(2)
 
 with c1:
-    refi_ltv = st.slider("Refinance Loan-to-Value (LTV) %", 60, 80, 75) / 100
-    refi_rate = st.number_input("New Mortgage Interest Rate (%)", value=6.5, step=0.1)
-
+    buy_price = st.number_input("Purchase Price ($)", value=125000, step=5000)
+    rehab_budget = st.number_input("Rehab Costs ($)", value=40000, step=1000)
+    
 with c2:
-    closing_costs_refi = st.number_input("Refi Closing Costs ($)", value=4000, step=500)
-    monthly_rent = st.number_input("Expected Monthly Rent ($)", value=1800, step=50)
+    arv = st.number_input("After Repair Value (ARV) ($)", value=225000, step=5000)
+    buying_holding = st.number_input("Closing & Holding Costs ($)", value=5000, step=500)
 
-# --- 3. THE MATH ENGINE ---
-new_loan_amount = arv * refi_ltv
-net_refi_proceeds = new_loan_amount - closing_costs_refi
-cash_left_in_deal = total_project_cost - net_refi_proceeds
+total_invested = buy_price + rehab_budget + buying_holding
 
-# Monthly Expenses (Simplified)
+st.header("🏦 Phase 2: Rent & Refi")
+c3, c4 = st.columns(2)
+
+with c3:
+    monthly_rent = st.number_input("Expected Monthly Rent ($)", value=1850, step=50)
+    refi_ltv = st.slider("Refinance LTV (%)", 60, 80, 75) / 100
+
+with c4:
+    refi_rate = st.number_input("New Mortgage Rate (%)", value=6.75, step=0.1)
+    refi_closing = st.number_input("Refi Closing Costs ($)", value=4000, step=500)
+
+# --- 5. MATH ENGINE (ROUNDED TO 1,000) ---
+new_loan_amount = round(arv * refi_ltv, -3)
+net_proceeds = round(new_loan_amount - refi_closing, -3)
+cash_left = round(total_invested - net_proceeds, -3)
+
+# Monthly Cash Flow Math
 monthly_piti = (new_loan_amount * (refi_rate/100/12)) / (1 - (1 + refi_rate/100/12)**-360)
-other_expenses = monthly_rent * 0.25 # 25% for Taxes, Insurance, Maint, CapEx
-monthly_cash_flow = monthly_rent - monthly_piti - other_expenses
+opex_buffer = monthly_rent * 0.25 # 25% for taxes, insurance, repairs
+monthly_net = round(monthly_rent - monthly_piti - opex_buffer, 0)
 
-# --- 4. THE DASHBOARD ---
+# --- 6. THE RESULTS DASHBOARD ---
 st.divider()
 res1, res2, res3 = st.columns(3)
 
-# Metric 1: Cash Position
-if cash_left_in_deal <= 0:
+if cash_left <= 0:
     res1.metric("Cash Left in Deal", "$0", delta="Infinite Return!", delta_color="normal")
+    status_headline = "🔥 THE PERFECT BRRRR"
+    status_color = "#5cb85c"
+    status_text = f"You successfully pulled all your capital out. You now own a property for $0 net investment."
 else:
-    res1.metric("Cash Left in Deal", f"${cash_left_in_deal:,.0f}", delta="Capital Stuck", delta_color="inverse")
+    res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Capital Stuck", delta_color="inverse")
+    status_headline = "🧱 CAPITAL COMMITTED"
+    status_color = "#2B5C8F"
+    status_text = f"You have ${cash_left:,.0f} tied up in this deal. Your money is working, but it isn't fully recycled."
 
-# Metric 2: Equity Created
-equity = arv - new_loan_amount
-res2.metric("Equity Created", f"${equity:,.0f}", f"{((equity/arv)*100):.1f}% Equity")
+res2.metric("Equity Created", f"${round(arv - new_loan_amount, -3):,.0f}")
+res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo")
 
-# Metric 3: Cash Flow
-res3.metric("Est. Monthly Cash Flow", f"${monthly_cash_flow:,.0f}", "After 25% OpEx")
+st.markdown(f"""
+<div style="text-align: center; margin-top: 20px; padding: 20px; border-radius: 10px; border: 2px solid {status_color};">
+    <h2 style="color: {status_color}; margin: 0;">{status_headline}</h2>
+    <p style="color: {SLATE_ACCENT}; margin-top: 10px;">{status_text}</p>
+</div>
+""", unsafe_allow_html=True)
 
-# --- 5. VISUALIZING THE CAPITAL RECYCLING ---
-st.subheader("📊 Capital Breakdown")
+# --- 7. VISUALS ---
+st.write("")
+st.subheader("📊 Capital Stack Comparison")
 
-labels = ['Purchase', 'Rehab/Hold', 'Closing Costs']
-values = [buy_price, rehab_budget + holding_costs, closing_costs_buy + closing_costs_refi]
 
-fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3, marker_colors=['#2E2B28', '#CEB36F', '#4A4E5A'])])
-fig.update_layout(title_text="Where your money goes (Pre-Refi)")
+
+fig = go.Figure(data=[
+    go.Bar(name='Total Invested', x=['Comparison'], y=[total_invested], marker_color=CHARCOAL),
+    go.Bar(name='New Loan Amount', x=['Comparison'], y=[new_loan_amount], marker_color=PRIMARY_GOLD)
+])
+fig.update_layout(barmode='group', height=400, yaxis_title="Dollars ($)")
 st.plotly_chart(fig, use_container_width=True)
-
-# THE REALITY CHECK
-if cash_left_in_deal > (total_project_cost * 0.20):
-    st.warning(f"⚠️ **Warning:** You are leaving **${cash_left_in_deal:,.0f}** in this deal. This is more than a standard 20% down payment. It might be better to just buy a turnkey property unless you expect high appreciation.")
-elif cash_left_in_deal <= 0:
-    st.success(f"🔥 **The Perfect BRRRR:** You effectively own this property for $0 of your own money. You are ready to REPEAT immediately.")
-else:
-    st.info(f"✅ **Good Deal:** You have recycled most of your capital. You only have ${cash_left_in_deal:,.0f} tied up in a ${arv:,.0f} asset.")
 
 show_disclaimer()
 
