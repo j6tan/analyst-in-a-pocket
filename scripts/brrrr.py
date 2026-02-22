@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import base64
-from style_utils import inject_global_css, show_disclaimer
+from style_utils import inject_global_css, show_disclaimer, add_pdf_button
 from data_handler import load_user_data, init_session_state
 
 # --- 1. SESSION INITIALIZATION (BULLETPROOF STATE) ---
