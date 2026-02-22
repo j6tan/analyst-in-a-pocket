@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import time
 import os
 import base64
-from style_utils import inject_global_css
+from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, load_user_data, init_session_state
 
 # --- 1. UNIVERSAL AUTO-LOADER ---
@@ -226,7 +226,12 @@ agg_swr = swr + 0.5
 cons_num, cons_years = calculate_scenario(cons_ret, cons_swr)
 agg_num, agg_years = calculate_scenario(agg_ret, agg_swr)
 
-# Format the output cards
+# Round the FIRE numbers to the nearest thousand
+cons_num_rounded = round(cons_num, -3)
+baseline_num_rounded = round(fire_number, -3)
+agg_num_rounded = round(agg_num, -3)
+
+# Format the output cards (Backslashes removed!)
 s1, s2, s3 = st.columns(3)
 
 with s1:
@@ -234,7 +239,7 @@ with s1:
     <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-top: 5px solid #d9534f;">
         <h4 style="margin-top:0; color: {CHARCOAL};">Conservative</h4>
         <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 10px;">Return: <b>{cons_ret:.1f}%</b> | SWR: <b>{cons_swr:.1f}%</b></div>
-        <h2 style="margin:0; color: {CHARCOAL};">\${cons_num:,.0f}</h2>
+        <h2 style="margin:0; color: {CHARCOAL};">${cons_num_rounded:,.0f}</h2>
         <div style="color: #d9534f; font-weight: bold;">{cons_years:.1f} Years to FIRE</div>
     </div>
     """, unsafe_allow_html=True)
@@ -244,7 +249,7 @@ with s2:
     <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border: 1px solid {PRIMARY_GOLD}; border-top: 5px solid {PRIMARY_GOLD}; transform: scale(1.02); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
         <h4 style="margin-top:0; color: {CHARCOAL};">Baseline (Current)</h4>
         <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 10px;">Return: <b>{annual_return:.1f}%</b> | SWR: <b>{swr:.1f}%</b></div>
-        <h2 style="margin:0; color: {CHARCOAL};">\${fire_number:,.0f}</h2>
+        <h2 style="margin:0; color: {CHARCOAL};">${baseline_num_rounded:,.0f}</h2>
         <div style="color: {PRIMARY_GOLD}; font-weight: bold;">{years_to_fire:.1f} Years to FIRE</div>
     </div>
     """, unsafe_allow_html=True)
@@ -254,10 +259,13 @@ with s3:
     <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-top: 5px solid #5cb85c;">
         <h4 style="margin-top:0; color: {CHARCOAL};">Aggressive</h4>
         <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 10px;">Return: <b>{agg_ret:.1f}%</b> | SWR: <b>{agg_swr:.1f}%</b></div>
-        <h2 style="margin:0; color: {CHARCOAL};">\${agg_num:,.0f}</h2>
+        <h2 style="margin:0; color: {CHARCOAL};">${agg_num_rounded:,.0f}</h2>
         <div style="color: #5cb85c; font-weight: bold;">{agg_years:.1f} Years to FIRE</div>
     </div>
     """, unsafe_allow_html=True)
+
+# --- 10. ERRORS & OMISSIONS DISCLAIMER ---
+show_disclaimer()
 
 # --- FOOTER ---
 st.markdown("""
