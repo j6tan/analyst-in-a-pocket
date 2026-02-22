@@ -188,39 +188,84 @@ with c2:
     st.markdown(f"""
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {CHARCOAL}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {CHARCOAL};">RRSP Strategy</h3>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>*Assumes tax refund is reinvested</i></p>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Initial Deposit (Grossed-Up): <b>${rrsp_deposit:,.0f}</b></p>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Annual Added (Grossed-Up): <b>${rrsp_annual:,.0f} / yr</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>*Assumes tax refunds are reinvested</i></p>
+        
+        <div style="margin: 15px 0; padding: 10px; background-color: white; border-radius: 8px; border: 1px solid {BORDER_GREY}; text-align: left; font-size: 0.9em;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                <span>Pure Investment:</span>
+                <b>${invest_amt:,.0f} + ${annual_invest:,.0f}/yr</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #5cb85c;">
+                <span>Reinvested Refunds:</span>
+                <b>+${(rrsp_deposit - invest_amt):,.0f} + ${(rrsp_annual - annual_invest):,.0f}/yr</b>
+            </div>
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 4px; margin-top: 4px; color: {CHARCOAL}; font-weight: bold;">
+                <span>Gross Portfolio Value:</span>
+                <span>${rrsp_future_value:,.0f}</span>
+            </div>
+        </div>
+
         <p style="color: #d9534f; margin-bottom: 5px;">Taxes Owed at Retirement: <b>-${rrsp_taxes_owed:,.0f}</b></p>
-        <h2 style="color: {CHARCOAL}; margin-top: 15px;">Net: ${rrsp_net:,.0f}</h2>
+        <h2 style="color: {CHARCOAL}; margin-top: 10px;">Net: ${rrsp_net:,.0f}</h2>
     </div>
     """, unsafe_allow_html=True)
 
-# THE CHART
+# --- THE CHART (COMPOUNDING & THE TAX DROP) ---
 st.write("")
-st.subheader("📊 Net Wealth Projection")
-chart_data = pd.DataFrame({
-    "Strategy": ["TFSA (Tax-Free Growth)", "RRSP (Tax-Deferred + Refund)"],
-    "Net After-Tax Wealth": [tfsa_net, rrsp_net]
-})
+st.subheader("📈 Wealth Trajectory & The Retirement Tax Hit")
 
-fig = go.Figure(data=[
-    go.Bar(
-        x=chart_data["Strategy"], 
-        y=chart_data["Net After-Tax Wealth"],
-        marker_color=[PRIMARY_GOLD, CHARCOAL], # Updated to brand palette
-        text=chart_data["Net After-Tax Wealth"].apply(lambda x: f"${x:,.0f}"),
-        textposition='auto',
-        width=0.4
-    )
-])
+# Generate year-by-year data
+years_list = list(range(int(years) + 1))
+tfsa_balances = []
+rrsp_balances = []
+
+r = expected_return / 100
+
+for y in years_list:
+    if r > 0:
+        t_val = (tfsa_deposit * ((1 + r) ** y)) + (tfsa_annual * (((1 + r) ** y - 1) / r))
+        r_val = (rrsp_deposit * ((1 + r) ** y)) + (rrsp_annual * (((1 + r) ** y - 1) / r))
+    else:
+        t_val = tfsa_deposit + (tfsa_annual * y)
+        r_val = rrsp_deposit + (rrsp_annual * y)
+    
+    tfsa_balances.append(t_val)
+    rrsp_balances.append(r_val)
+
+# Add the "Retirement Day" Drop Event
+years_list.append(int(years) + 0.1) # Extends the X-axis just a tiny bit to show the vertical drop
+tfsa_balances.append(tfsa_net)      # TFSA stays exactly the same
+rrsp_balances.append(rrsp_net)      # RRSP drops by the amount of taxes owed
+
+fig = go.Figure()
+
+# TFSA Line
+fig.add_trace(go.Scatter(
+    x=years_list, 
+    y=tfsa_balances, 
+    mode='lines',
+    name='TFSA (Tax-Free Growth)', 
+    line=dict(color=PRIMARY_GOLD, width=4)
+))
+
+# RRSP Line
+fig.add_trace(go.Scatter(
+    x=years_list, 
+    y=rrsp_balances, 
+    mode='lines',
+    name='RRSP (Gross Value → After-Tax Drop)', 
+    line=dict(color=CHARCOAL, width=4)
+))
 
 fig.update_layout(
-    yaxis_title="Net Walk-Away Wealth ($)",
-    height=400,
+    xaxis_title="Years Invested",
+    yaxis_title="Portfolio Value ($)",
+    height=450,
     margin=dict(t=20, b=20, l=0, r=0),
-    plot_bgcolor="white"
+    hovermode="x unified",
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
+
 st.plotly_chart(fig, use_container_width=True)
 
 # THE IRONCLAD RULE EXPLANATION
