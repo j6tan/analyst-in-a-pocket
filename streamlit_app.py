@@ -67,6 +67,12 @@ duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
 rental_label, rental_icon = get_pro_meta("Rental Multi-Tool", "🏢", is_pro)
 land_label, land_icon = get_pro_meta("Land Residual Model", "🏗️", is_pro)
 
+# NEW FIRE TOOLKIT LABELS
+retire_label, retire_icon = get_pro_meta("When Can I Retire?", "🏖️", is_pro)
+tfsa_label, tfsa_icon = get_pro_meta("TFSA vs RRSP", "🍁", is_pro)
+coast_label, coast_icon = get_pro_meta("Coast & Barista FIRE", "☕", is_pro)
+brrrr_label, brrrr_icon = get_pro_meta("BRRRR Strategy", "🔨", is_pro)
+
 pages = {
     "Overview": [
         st.Page("home.py", title="Home Dashboard", icon="🏠", default=True),
@@ -79,6 +85,13 @@ pages = {
         st.Page("scripts/simple_mortgage.py", title="Mortgage Calculator", icon="🏠"),
         st.Page("scripts/sales_proceeds.py", title="Seller Proceeds", icon="💰"),
         st.Page("scripts/pay_vs_invest.py", title="Pay Off or Invest", icon="📉"), 
+    ],
+    "FIRE Toolkit": [
+        st.Page("scripts/net_worth.py", title="Personal Net Worth", icon="📊"), # Free Tool
+        st.Page("scripts/retire_calc.py", title=retire_label, icon=retire_icon),
+        st.Page("scripts/tfsa_rrsp.py", title=tfsa_label, icon=tfsa_icon),
+        st.Page("scripts/coast_fire.py", title=coast_label, icon=coast_icon),
+        st.Page("scripts/brrrr.py", title=brrrr_label, icon=brrrr_icon)
     ],
     "Advanced Wealth Strategy": [
         st.Page("scripts/mortgage_scenario.py", title=mort_label, icon=mort_icon),
@@ -98,7 +111,7 @@ pages = {
 pg = st.navigation(pages)
 
 # --- 5. THE "SIDEBAR INJECTION" PAYWALL ---
-pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label, rental_label, land_label]
+pro_titles = [mort_label, smith_label, second_label, renewal_label, duel_label, rental_label, land_label, retire_label, tfsa_label, coast_label, brrrr_label]
 
 if pg.title in pro_titles and not is_pro:
     st.markdown("""
@@ -139,6 +152,7 @@ if pg.title in pro_titles and not is_pro:
         st.markdown(card_html, unsafe_allow_html=True)
 
 pg.run()
+
 
 
 
