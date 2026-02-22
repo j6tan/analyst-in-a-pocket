@@ -36,7 +36,7 @@ logo_html = get_inline_logo(width=75)
 st.markdown(f"""
     <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
         {logo_html}
-        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>+Seller's Net Sheet</h1>
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Seller's Net Sheet</h1>
     </div>
 """, unsafe_allow_html=True)
 
