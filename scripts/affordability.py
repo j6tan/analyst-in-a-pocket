@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import os
+import base64
 import json
 import math
 from style_utils import inject_global_css, show_disclaimer
@@ -134,12 +135,27 @@ max_pi_pre = min(
 r_mo_pre = (s_rate_pre/100)/12
 qual_loan_pre = custom_round_up(max_pi_pre * (1 - (1+r_mo_pre)**-300) / r_mo_pre) if r_mo_pre > 0 else 0
 
-# --- 9. HEADER & STORYTELLING BOX (RESTORED) ---
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col1:
-    if os.path.exists("logo.png"): st.image("logo.png", width=140)
-with header_col2:
-    st.title("Mortgage Affordability Analysis")
+# --- 9. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>"
+
+logo_html = get_inline_logo(width=75)
+
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Mortgage Affordability Analysis</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 # RESTORED: Dynamic logic based on Renter vs Owner
 if is_renter:
@@ -294,3 +310,4 @@ else:
     st.error("Approval amount is $0.")
 
 show_disclaimer()
+
