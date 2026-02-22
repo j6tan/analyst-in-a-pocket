@@ -5,7 +5,7 @@ import base64
 import json
 import math
 import time
-from style_utils import inject_global_css, show_disclaimer
+from style_utils import inject_global_css, show_disclaimer, add_pdf_button
 from data_handler import cloud_input, sync_widget, load_user_data, init_session_state, supabase
 
 # --- 1. UNIVERSAL AUTO-LOADER (The Fix for Blank Pages) ---
@@ -18,8 +18,13 @@ if st.session_state.get('username') and not st.session_state.app_db.get('profile
 
 inject_global_css()
 
-if st.button("⬅️ Back to Home Dashboard"):
-    st.switch_page("home.py")
+# --- TOP NAVIGATION & PDF ROW ---
+nav_c1, nav_c2, nav_c3 = st.columns([1.5, 2, 1.5]) # Widened the outer columns
+with nav_c1:
+    if st.button("⬅️ Back to Home", use_container_width=True):
+        st.switch_page("home.py")
+with nav_c3:
+    add_pdf_button()
 st.divider()
 
 # --- 1. THEME & STYLING ---
@@ -270,3 +275,4 @@ st.markdown("""
         <span style="font-size: 0.9em; font-style: italic;">Empowering Canadian professionals to build wealth.</span>
     </div>
 """, unsafe_allow_html=True)
+
