@@ -194,7 +194,6 @@ else:
 
     st.info(f"💡 **Insight:** At age {fire_age:.1f}, your portfolio of **\${fire_number:,.0f}** will theoretically generate **\${target_spend:,.0f}** per year indefinitely without drawing down the principal, assuming a {annual_return}% return and {swr}% safe withdrawal rate.")
 
-show_disclaimer()
 # --- FOOTER ---
 st.markdown("""
     <div style="text-align: center; color: #adb5bd; font-size: 0.85em; margin-top: 50px; padding-top: 20px; border-top: 1px solid #dee2e6;">
