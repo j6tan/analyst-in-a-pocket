@@ -79,7 +79,7 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">📊 The Ultimate FIRE Metric</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Your net worth is the absolute scorecard of your financial independence journey. Track your assets, subtract your liabilities, and watch your FIRE number grow over time.
+        Welcome to the dashboard, <b>{greeting_names}</b>. Your net worth is the absolute scorecard of your financial independence journey. Track your assets, subtract your liabilities, and watch your FIRE number grow over time.
     </p>
 </div>
 """, unsafe_allow_html=True)
