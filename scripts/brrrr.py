@@ -99,23 +99,30 @@ monthly_net = round(monthly_rent - monthly_piti - opex_buffer, 0)
 
 # --- 6. THE RESULTS DASHBOARD (BALANCED VERSION) ---
 st.divider()
+
+# First Row: The Big Three
 res1, res2, res3 = st.columns(3)
 
+# Cash Left Calculation
 if cash_left <= 0:
     res1.metric("Cash Left in Deal", "$0", delta="Infinite Return!", delta_color="normal")
     status_headline = "🔥 THE PERFECT BRRRR"
     status_color = "#5cb85c"
     status_text = f"Capital fully recycled. You own this property for <b>$0</b> net investment."
+    coc_display = "∞ (Infinite)"
 else:
     res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Capital Stuck", delta_color="inverse")
     status_headline = "🧱 CAPITAL COMMITTED"
     status_color = "#2B5C8F"
     status_text = f"<b>${cash_left:,.0f}</b> of your capital remains tied up in this asset."
+    # Cash on Cash Return calculation
+    coc_return = (monthly_net * 12) / cash_left * 100
+    coc_display = f"{coc_return:.1f}%"
 
 res2.metric("Equity Created", f"${round(arv - new_loan_amount, -3):,.0f}")
 res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo")
 
-# Re-balanced status box: Bold but sleek
+# The Verdict Box
 st.markdown(f"""
 <div style="text-align: center; margin-top: 20px; padding: 15px 25px; border-radius: 10px; border: 2px solid {status_color}; background-color: {status_color}10;">
     <h3 style="color: {status_color}; margin: 0; font-size: 1.4em; font-weight: 700; letter-spacing: 0.5px;">{status_headline}</h3>
@@ -123,18 +130,21 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 7. VISUALS ---
+# --- 7. SECONDARY PERFORMANCE METRICS (Replacing the Chart) ---
 st.write("")
-st.subheader("📊 Capital Stack Comparison")
+st.subheader("📊 Performance Deep Dive")
+m1, m2, m3 = st.columns(3)
 
+# 1. Cash on Cash Return (Annual Cash Flow / Cash Left)
+m1.metric("Cash on Cash Return", coc_display, help="Annual Cash Flow divided by the cash you have left in the deal.")
 
+# 2. Loan to Value (Actual)
+actual_ltv = (new_loan_amount / arv) * 100
+m2.metric("Post-Refi LTV", f"{actual_ltv:.1f}%", help="Your actual debt-to-value ratio after the bank's appraisal.")
 
-fig = go.Figure(data=[
-    go.Bar(name='Total Invested', x=['Comparison'], y=[total_invested], marker_color=CHARCOAL),
-    go.Bar(name='New Loan Amount', x=['Comparison'], y=[new_loan_amount], marker_color=PRIMARY_GOLD)
-])
-fig.update_layout(barmode='group', height=400, yaxis_title="Dollars ($)")
-st.plotly_chart(fig, use_container_width=True)
+# 3. Forced Appreciation
+forced_app = arv - buy_price - rehab_budget
+m3.metric("Forced Appreciation", f"${round(forced_app, -3):,.0f}", help="The 'sweat equity' value created through your renovation.")
 
 show_disclaimer()
 
