@@ -15,8 +15,14 @@ if st.session_state.get('username') and not st.session_state.get('brrrr_sync_com
 
 inject_global_css()
 
-if st.button("⬅️ Back to Home Dashboard"):
-    st.switch_page("home.py")
+# Top Navigation & Export Row
+nav_col1, nav_col2 = st.columns([3, 1])
+with nav_col1:
+    if st.button("⬅️ Back to Home Dashboard"):
+        st.switch_page("home.py")
+with nav_col2:
+    add_pdf_button()
+
 st.divider()
 
 # --- HELPER: SAFE FLOAT CONVERSION ---
