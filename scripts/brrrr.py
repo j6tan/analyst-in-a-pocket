@@ -97,54 +97,72 @@ monthly_piti = (new_loan_amount * (refi_rate/100/12)) / (1 - (1 + refi_rate/100/
 opex_buffer = monthly_rent * 0.25 # 25% for taxes, insurance, repairs
 monthly_net = round(monthly_rent - monthly_piti - opex_buffer, 0)
 
-# --- 6. THE RESULTS DASHBOARD (BALANCED VERSION) ---
+# --- 6. THE RESULTS DASHBOARD (WITH RISK EVALUATION) ---
 st.divider()
-
-# First Row: The Big Three
 res1, res2, res3 = st.columns(3)
 
-# Cash Left Calculation
-if cash_left <= 0:
-    res1.metric("Cash Left in Deal", "$0", delta="Infinite Return!", delta_color="normal")
-    status_headline = "🔥 THE PERFECT BRRRR"
-    status_color = "#5cb85c"
-    status_text = f"Capital fully recycled. You own this property for <b>$0</b> net investment."
-    coc_display = "∞ (Infinite)"
+# Logic for Deal Grading
+is_positive_cf = monthly_net > 0
+is_infinite = cash_left <= 0
+
+if is_infinite and is_positive_cf:
+    status_headline = "💎 THE HOLY GRAIL"
+    status_color = "#5cb85c" # Green
+    status_text = "Infinite return with positive cash flow. This deal is a massive accelerator for your portfolio."
+elif is_positive_cf:
+    status_headline = "✅ SOLID RENTAL"
+    status_color = "#CEB36F" # Gold
+    status_text = f"You have ${cash_left:,.0f} tied up, but the property pays for itself and more."
+elif monthly_net < 0:
+    status_headline = "🚨 CASH FLOW WARNING"
+    status_color = "#d9534f" # Red
+    status_text = "<b>DANGER:</b> This property is 'underwater' monthly. This will likely hurt your ability to borrow for the next deal."
+
+# Metric Row
+if is_infinite:
+    res1.metric("Cash Left in Deal", "$0", delta="Infinite!", delta_color="normal")
+    coc_display = "∞"
 else:
-    res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Capital Stuck", delta_color="inverse")
-    status_headline = "🧱 CAPITAL COMMITTED"
-    status_color = "#2B5C8F"
-    status_text = f"<b>${cash_left:,.0f}</b> of your capital remains tied up in this asset."
-    # Cash on Cash Return calculation
+    res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Stuck", delta_color="inverse")
     coc_return = (monthly_net * 12) / cash_left * 100
     coc_display = f"{coc_return:.1f}%"
 
 res2.metric("Equity Created", f"${round(arv - new_loan_amount, -3):,.0f}")
-res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo")
+res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo", delta="Negative" if not is_positive_cf else "Positive", delta_color="normal" if is_positive_cf else "inverse")
 
 # The Verdict Box
 st.markdown(f"""
 <div style="text-align: center; margin-top: 20px; padding: 15px 25px; border-radius: 10px; border: 2px solid {status_color}; background-color: {status_color}10;">
-    <h3 style="color: {status_color}; margin: 0; font-size: 1.4em; font-weight: 700; letter-spacing: 0.5px;">{status_headline}</h3>
-    <p style="color: {SLATE_ACCENT}; margin: 8px 0 0 0; font-size: 1.1em; line-height: 1.4;">{status_text}</p>
+    <h3 style="color: {status_color}; margin: 0; font-size: 1.4em; font-weight: 700;">{status_headline}</h3>
+    <p style="color: {SLATE_ACCENT}; margin: 8px 0 0 0; font-size: 1.1em;">{status_text}</p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 7. SECONDARY PERFORMANCE METRICS (Replacing the Chart) ---
+# --- 7. STRATEGIC RECOMMENDATIONS ---
 st.write("")
-st.subheader("📊 Performance Deep Dive")
-m1, m2, m3 = st.columns(3)
+st.subheader("💡 Expert Recommendations")
 
-# 1. Cash on Cash Return (Annual Cash Flow / Cash Left)
-m1.metric("Cash on Cash Return", coc_display, help="Annual Cash Flow divided by the cash you have left in the deal.")
-
-# 2. Loan to Value (Actual)
-actual_ltv = (new_loan_amount / arv) * 100
-m2.metric("Post-Refi LTV", f"{actual_ltv:.1f}%", help="Your actual debt-to-value ratio after the bank's appraisal.")
-
-# 3. Forced Appreciation
-forced_app = arv - buy_price - rehab_budget
-m3.metric("Forced Appreciation", f"${round(forced_app, -3):,.0f}", help="The 'sweat equity' value created through your renovation.")
+if monthly_net < 0:
+    st.error(f"""
+    **Why this is risky:** You are losing **${abs(monthly_net):,.0f}** every month. 
+    1. **Borrowing Power:** Most lenders want a DSCR (Debt Service Coverage Ratio) of at least 1.2. This deal is well below that.
+    2. **The "Repeat" Step:** You'll have to fund this loss out of your paycheck, which reduces your ability to save for the next deal.
+    
+    **How to fix this deal:**
+    * 📉 **Reduce LTV:** Try a {refi_ltv*100 - 5:.0f}% refinance instead of {refi_ltv*100:.0f}%. It leaves more cash in the deal but saves the cash flow.
+    * 🛠️ **Lower Expenses:** Can you manage the property yourself to save on fees?
+    * 💰 **Increase Rent:** Is there a way to add a 'Value-Add' (like a 3rd bedroom) to justify higher rent?
+    """)
+elif is_infinite:
+    st.success("""
+    **Strategy:** You've achieved the perfect BRRRR. Since you have no capital left in this deal, your return is mathematically infinite. 
+    **Next Step:** Take the original capital you just recovered and start looking for Deal #2 immediately.
+    """)
+else:
+    st.info(f"""
+    **Strategy:** This is a 'Workhorse' deal. You have some capital tied up, but it's earning a **{coc_display}** return. 
+    Compare this to your 7% stock market return—this house is likely outperforming your other investments.
+    """)
 
 show_disclaimer()
 
