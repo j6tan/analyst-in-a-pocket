@@ -103,21 +103,23 @@ with c3:
 r = expected_return / 100
 swr_rate = swr / 100
 
-# 1. The Ultimate Target
-fire_number = target_spend / swr_rate
+# 1. The Ultimate Target (Rounded to nearest $1,000)
+fire_number = round(target_spend / swr_rate, -3)
 
-# 2. Coast FIRE Math (What you need today to hit FIRE tomorrow with $0 added)
-coast_number = fire_number / ((1 + r) ** years_to_grow)
+# 2. Coast FIRE Math (Rounded to nearest $1,000)
+coast_number = round(fire_number / ((1 + r) ** years_to_grow), -3)
 
-# 3. Barista FIRE Math (Bridging the gap)
-projected_portfolio = current_portfolio * ((1 + r) ** years_to_grow)
-projected_income = projected_portfolio * swr_rate
-income_shortfall = max(0, target_spend - projected_income)
+# 3. Barista FIRE Math (Rounded to nearest $1,000)
+projected_portfolio = round(current_portfolio * ((1 + r) ** years_to_grow), -3)
+projected_income = round(projected_portfolio * swr_rate, -3)
+income_shortfall = round(max(0, target_spend - projected_income), -3)
+
+# Calculate the gap needed today to hit coast
+coast_shortfall = round(max(0, coast_number - current_portfolio), -3)
 
 has_hit_coast = current_portfolio >= coast_number
 
 # 4. The Reality Check Threshold
-# If the shortfall is more than $40k, it's not a part-time job anymore.
 barista_threshold = 40000.0 
 is_barista = not has_hit_coast and income_shortfall <= barista_threshold
 is_accumulation = not has_hit_coast and income_shortfall > barista_threshold
