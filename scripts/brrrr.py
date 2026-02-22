@@ -4,7 +4,7 @@ import base64
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import load_user_data, init_session_state
 
-# --- 1. SESSION INITIALIZATION ---
+# --- 1. SESSION INITIALIZATION (BULLETPROOF STATE) ---
 init_session_state()
 
 # Load from the cloud exactly ONCE to prevent screen-wiping
@@ -20,7 +20,6 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- HELPER: SAFE FLOAT CONVERSION ---
-# This completely prevents the TypeError by catching None or empty strings
 def safe_float(val, default=0.0):
     try:
         if val is None or str(val).strip() == "":
@@ -43,8 +42,7 @@ input_defaults = {
     "brrrr_ltv_widget": ("brrrr_ltv", 75)
 }
 
-# Pre-fill Streamlit's session state only if it's completely empty.
-# This makes your typing "sticky" and immune to database lag.
+# Pre-fill Streamlit's session state to make typing sticky
 for widget_key, (db_key, default_val) in input_defaults.items():
     if widget_key not in st.session_state:
         db_val = db.get(db_key, default_val)
@@ -57,7 +55,6 @@ for widget_key, (db_key, default_val) in input_defaults.items():
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 SLATE_ACCENT = "#4A4E5A"
-WARNING_AMBER = "#D97706"
 
 def get_logo():
     img_path = "logo.png"
@@ -67,7 +64,13 @@ def get_logo():
         return f'<img src="data:image/png;base64,{encoded}" style="width: 75px;">'
     return "🏘️"
 
-st.markdown(f"<div style='display: flex; align-items: center; gap: 15px;'>{get_logo()} <h1 style='margin:0;'>FIRE Calculator: BRRRR Engine</h1></div>", unsafe_allow_html=True)
+st.markdown(f"<div style='display: flex; align-items: center; gap: 15px;'>{get_logo()} <h1 style='margin:0;'>FIRE Calculator: The BRRRR Engine</h1></div>", unsafe_allow_html=True)
+
+st.markdown("""
+<div style="margin-bottom: 20px; color: #4A4E5A; font-size: 1.1em;">
+    Enter your deal numbers below. The engine will instantly grade the deal and tell you if it's safe to execute or if it's a trap.
+</div>
+""", unsafe_allow_html=True)
 
 # --- 3. THE INPUTS ---
 st.header("🛠️ Phase 1: Buy & Rehab")
@@ -99,7 +102,6 @@ for widget_key, (db_key, _) in input_defaults.items():
 
 # --- 4. MATH ENGINE ---
 total_invested = buy_price + rehab_budget + holding
-
 new_loan = 0.0
 net_proceeds = 0.0
 cash_left = total_invested
@@ -107,11 +109,13 @@ monthly_piti = 0.0
 opex = monthly_rent * 0.25 
 monthly_net = monthly_rent - opex
 dscr = 0.0
+equity = 0.0
 
 if arv > 0:
     new_loan = round(arv * refi_ltv, -3)
     net_proceeds = round(new_loan - refi_costs, -3)
     cash_left = round(total_invested - net_proceeds, -3)
+    equity = round(arv - new_loan, -3)
 
     if refi_rate > 0:
         r_monthly = (refi_rate / 100.0) / 12.0
@@ -122,35 +126,74 @@ if arv > 0:
     monthly_net = round(monthly_rent - monthly_piti - opex, 0)
     dscr = ((monthly_rent - opex) * 12) / (monthly_piti * 12) if monthly_piti > 0 else 99.0
 
-# --- 5. RESULTS ---
-st.divider()
-r1, r2, r3 = st.columns(3)
-r1.metric("Cash Left", f"${max(0, cash_left):,.0f}")
-r2.metric("Equity Created", f"${round(arv - new_loan, -3):,.0f}")
-r3.metric("Monthly Net", f"${monthly_net:,.0f}")
-
-
-
+# --- 5. THE SMART VERDICT ENGINE ---
 if arv > 0:
-    if monthly_net < 0:
+    st.divider()
+    st.header("⚖️ The Verdict")
+
+    # Grading Logic
+    if cash_left <= 0 and monthly_net > 0:
+        grade_title = "GRADE A: The Holy Grail 🏆"
+        grade_color = "#2e7d32" # Dark Green
+        grade_desc = "You recovered 100% of your capital, created equity, AND the property pays you every month. Execute this deal and immediately repeat."
+    elif cash_left > 0 and monthly_net > 0 and dscr >= 1.2:
+        grade_title = "GRADE B: The Wealth Builder 📈"
+        grade_color = "#2B5C8F" # Blue
+        grade_desc = "You left some cash in the deal, but it generates positive cash flow and easily passes the bank's stress test (DSCR). A solid, safe rental."
+    elif equity > 0 and (monthly_net < 0 or dscr < 1.2):
+        grade_title = "GRADE C: The Equity Trap ⚠️"
+        grade_color = "#D97706" # Amber
+        grade_desc = "You created great net worth, but the property loses money monthly or fails the bank's DSCR test. This will drain your personal income and block your next loan."
+    else:
+        grade_title = "GRADE F: The Money Pit 🚨"
+        grade_color = "#d9534f" # Red
+        grade_desc = "You are leaving cash in the deal, you lack equity, and it loses money every month. Walk away or drastically renegotiate."
+
+    # Display Verdict Box
+    st.markdown(f"""
+    <div style="background-color: {grade_color}10; padding: 25px; border-radius: 12px; border: 2px solid {grade_color}; margin-bottom: 25px;">
+        <h2 style="color: {grade_color}; margin-top: 0; font-weight: 800;">{grade_title}</h2>
+        <p style="color: {SLATE_ACCENT}; font-size: 1.2em; line-height: 1.5; margin-bottom: 0;">{grade_desc}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- 6. METRICS & TRANSLATIONS ---
+    st.subheader("📊 The Core Metrics")
+    m1, m2, m3, m4 = st.columns(4)
+    
+    m1.metric("Cash Left in Deal", f"${max(0, cash_left):,.0f}")
+    m2.metric("Equity Created", f"${equity:,.0f}")
+    m3.metric("Monthly Net", f"${monthly_net:,.0f}")
+    m4.metric("DSCR (Bank Ratio)", f"{dscr:.2f}")
+
+    # Plain English Explanations
+    st.markdown(f"""
+    <div style="background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #dee2e6; margin-top: 15px;">
+        <h4 style="color: {CHARCOAL}; margin-top: 0;">📖 How to read your results:</h4>
+        <ul style="color: {SLATE_ACCENT}; line-height: 1.7; margin-bottom: 0;">
+            <li><b>Cash Left (The Velocity Metric):</b> If this is $0, you can recycle your money infinitely. If it's high, your money is stuck.</li>
+            <li><b>Equity (The Wealth Metric):</b> The 'sweat equity' you built. Great for your net worth, but it doesn't pay the bills.</li>
+            <li><b>Monthly Net (The Survival Metric):</b> The actual cash in your pocket after mortgage, taxes, insurance, and repairs. Must be positive to be safe.</li>
+            <li><b>DSCR (The Bank's Metric):</b> Commercial lenders demand a <b>1.20</b> or higher. If you drop below this, banks will refuse to fund your next deal.</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- 7. ACTIONABLE LEVERS ---
+    if "GRADE C" in grade_title or "GRADE F" in grade_title:
+        st.write("")
+        st.subheader("🛠️ How to fix this deal:")
         st.markdown(f"""
-        <div style="background-color: {WARNING_AMBER}15; padding: 20px; border-radius: 10px; border: 1px solid {WARNING_AMBER}; margin-top: 20px;">
-            <h4 style="color: {WARNING_AMBER}; margin-top: 0;">📋 Deal Analysis</h4>
-            <p style="color: {SLATE_ACCENT};"><b>DSCR: {dscr:.2f}</b>. Lenders usually want 1.20+. This negative cash flow can slow your portfolio velocity.</p>
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 15px;">
-                <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                    <span style="font-size: 1.2em;">📉</span><br><b style="color: {CHARCOAL};">Lower LTV</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Try {max(50, refi_ltv_pct - 10)}%</span>
-                </div>
-                <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                    <span style="font-size: 1.2em;">🛠️</span><br><b style="color: {CHARCOAL};">Cut OpEx</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Self-manage</span>
-                </div>
-                <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                    <span style="font-size: 1.2em;">💰</span><br><b style="color: {CHARCOAL};">Value Add</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Increase Rent</span>
-                </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div style="background: {OFF_WHITE}; padding: 15px; border-radius: 8px; border-left: 5px solid {PRIMARY_GOLD};">
+                <b>1. Lower the LTV (Currently {refi_ltv_pct}%)</b><br>
+                <span style="font-size: 0.9em; color: {SLATE_ACCENT};">Drag the LTV slider down. You will leave more cash in the deal, but your Monthly Net and DSCR will turn positive.</span>
+            </div>
+            <div style="background: {OFF_WHITE}; padding: 15px; border-radius: 8px; border-left: 5px solid {PRIMARY_GOLD};">
+                <b>2. Increase the Rent</b><br>
+                <span style="font-size: 0.9em; color: {SLATE_ACCENT};">Can you add a bedroom or upgrade finishes to command $200 more per month?</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
-    elif cash_left <= 0:
-        st.success("✨ **The Perfect BRRRR:** You've recovered your initial capital with positive cash flow.")
 
 show_disclaimer()
