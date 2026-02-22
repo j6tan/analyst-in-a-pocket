@@ -98,4 +98,3 @@ def show_disclaimer():
         </p>
     </div>
     """, unsafe_allow_html=True)
-    st.caption("Analyst in a Pocket | Strategic Equity Strategy")
