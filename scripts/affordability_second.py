@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import base64
 import json
 import math
 import time
@@ -57,10 +58,27 @@ aff_sec = st.session_state.app_db['affordability_second']
 if aff_sec.get('target_price', 0) == 0:
     aff_sec.update({"down_payment": 200000, "target_price": 600000, "contract_rate": 4.26, "manual_rent": 2500, "vacancy_months": 1.0, "annual_prop_tax": 3000, "strata_mo": 400, "insurance_mo": 100, "rm_mo": 150, "asset_province": current_res_prov, "use_case": "Rental Property", "mgmt_pct": 5.0, "is_vanc": False})
 
-# --- 4. TITLE & STORYBOX ---
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col2:
-    st.title("The Portfolio Expansion Map")
+# --- 4. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>"
+
+logo_html = get_inline_logo(width=75)
+
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>The Portfolio Expansion Map</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
@@ -244,3 +262,4 @@ with col_s2:
     st.caption("⚠️ *Note: All surpluses are pre-lifestyle. Accuracy depends on your 'Monthly Budget' inputs.*")
 
 show_disclaimer()
+
