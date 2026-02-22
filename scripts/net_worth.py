@@ -34,6 +34,20 @@ if 'net_worth' not in st.session_state.app_db:
 nw_data = st.session_state.app_db['net_worth']
 prof = st.session_state.app_db.get('profile', {})
 
+# Smart Name Formatting
+p1_raw = prof.get('p1_name', '')
+p1_raw = p1_raw.strip() if isinstance(p1_raw, str) else ''
+
+p2_raw = prof.get('p2_name', '')
+p2_raw = p2_raw.strip() if isinstance(p2_raw, str) else ''
+
+if p1_raw and p2_raw:
+    greeting_names = f"{p1_raw} & {p2_raw}"
+elif p1_raw:
+    greeting_names = p1_raw
+else:
+    greeting_names = "Primary Client"
+
 # Pre-fill liabilities from the profile page if they exist
 if not nw_data.get('initialized'):
     nw_data['mortgage_debt'] = prof.get('m_bal', 0.0)
