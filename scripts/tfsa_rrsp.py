@@ -149,14 +149,18 @@ diff = abs(rrsp_net - tfsa_net)
 tfsa_glow = "none"
 rrsp_glow = "none"
 
+RRSP_COLOR = "#2B5C8F"  # Deep professional blue for RRSP
+WINNER_GLOW = "#FF9800" # Bright orange for the glowing outline
+
 if rrsp_net > tfsa_net:
     winner = "RRSP"
-    winner_color = CHARCOAL 
-    rrsp_glow = f"0 0 0 5px {PRIMARY_GOLD}" # The Golden Outline!
+    winner_color = RRSP_COLOR 
+    # Made the shadow wider and brighter!
+    rrsp_glow = f"0 0 15px 3px {WINNER_GLOW}" 
 elif tfsa_net > rrsp_net:
     winner = "TFSA"
     winner_color = PRIMARY_GOLD
-    tfsa_glow = f"0 0 0 5px {PRIMARY_GOLD}" # The Golden Outline!
+    tfsa_glow = f"0 0 15px 3px {WINNER_GLOW}" 
 else:
     winner = "TIE (Mathematically Identical)"
     winner_color = SLATE_ACCENT
@@ -186,8 +190,8 @@ with c1:
 
 with c2:
     st.markdown(f"""
-    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {CHARCOAL}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
-        <h3 style="margin-top:0; color: {CHARCOAL};">RRSP Strategy</h3>
+    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {RRSP_COLOR}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
+        <h3 style="margin-top:0; color: {RRSP_COLOR};">RRSP Strategy</h3>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>*Assumes tax refunds are reinvested</i></p>
         <div style="margin: 15px 0; padding: 10px; background-color: white; border-radius: 8px; border: 1px solid {BORDER_GREY}; text-align: left; font-size: 0.9em;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
@@ -204,7 +208,7 @@ with c2:
             </div>
         </div>
         <p style="color: #d9534f; margin-bottom: 5px;">Taxes Owed at Retirement: <b>-${rrsp_taxes_owed:,.0f}</b></p>
-        <h2 style="color: {CHARCOAL}; margin-top: 10px;">Net: ${rrsp_net:,.0f}</h2>
+        <h2 style="color: {RRSP_COLOR}; margin-top: 10px;">Net: ${rrsp_net:,.0f}</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -231,9 +235,10 @@ for y in years_list:
     rrsp_balances.append(r_val)
 
 # Add the "Retirement Day" Drop Event
-years_list.append(int(years) + 0.1) # Extends the X-axis just a tiny bit to show the vertical drop
-tfsa_balances.append(tfsa_net)      # TFSA stays exactly the same
-rrsp_balances.append(rrsp_net)      # RRSP drops by the amount of taxes owed
+drop_year = int(years) + 0.1
+years_list.append(drop_year) 
+tfsa_balances.append(tfsa_net)      
+rrsp_balances.append(rrsp_net)      
 
 fig = go.Figure()
 
@@ -252,11 +257,14 @@ fig.add_trace(go.Scatter(
     y=rrsp_balances, 
     mode='lines',
     name='RRSP (Gross Value → After-Tax Drop)', 
-    line=dict(color=CHARCOAL, width=4)
+    line=dict(color=RRSP_COLOR, width=4) # Updated to the new Blue!
 ))
 
 fig.update_layout(
-    xaxis_title="Years Invested",
+    xaxis=dict(
+        title="Years Invested",
+        range=[0, drop_year + 0.5] # This forces the chart to not cut off the edge!
+    ),
     yaxis_title="Portfolio Value ($)",
     height=450,
     margin=dict(t=20, b=20, l=0, r=0),
