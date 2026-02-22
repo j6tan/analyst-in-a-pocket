@@ -138,6 +138,11 @@ def add_pdf_button():
                 font-weight: 600;
                 width: 100%;
                 font-family: 'Inter', sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+                
+                /* THE FIX: Forces crisp font rendering inside the iframe */
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+                
                 white-space: nowrap;
                 transition: background-color 0.2s ease-in-out;
                 display: flex;
