@@ -152,14 +152,14 @@ def add_pdf_button():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
             
-            /* Kills invisible iframe margins for perfect alignment */
-            body { margin: 0; padding: 0; }
+            body { margin: 0; padding: 0; background: transparent; }
             
             .pdf-btn {
+                box-sizing: border-box; /* Stops invisible padding */
                 background-color: #EDEDED;
                 color: #444444;
                 border: none;
-                height: 42px; /* Matches Streamlit exactly */
+                height: 42px; /* Locked to 42px */
                 border-radius: 50px;
                 cursor: pointer;
                 font-size: 14px;
@@ -172,6 +172,7 @@ def add_pdf_button():
                 align-items: center;
                 justify-content: center;
                 gap: 8px;
+                margin: 0;
             }
             .pdf-btn:hover {
                 background-color: #D6D6D6;
