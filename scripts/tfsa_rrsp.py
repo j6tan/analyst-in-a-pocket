@@ -100,8 +100,12 @@ with col1:
     st.subheader("💼 The Tax Variables")
     current_income = cloud_input("Current Annual Income ($)", "tfsa_rrsp", "current_income", step=5000, help="Determines the Marginal tax refund you get today.")
     base_income = cloud_input("Base Retirement Income ($)", "tfsa_rrsp", "base_income", step=2000, help="Your estimated CPP, OAS, Pensions, or part-time work.")
+    
+    # Calculate both marginal rates
     curr_rate = get_marginal_tax_rate(current_income)
-    st.info(f"Today's Marginal Refund Rate: **{curr_rate}%**")
+    base_retire_rate = get_marginal_tax_rate(base_income)
+    
+    st.info(f"**Tax Bracket Analysis:**\n* Today's Marginal Refund Rate: **{curr_rate}%**\n* Base Retirement Tax Rate (Before Withdrawals): **{base_retire_rate}%**")
 
 with col2:
     st.subheader("📈 The Accumulation")
