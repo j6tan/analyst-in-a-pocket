@@ -30,6 +30,8 @@ def inject_global_css():
             border-radius: 50px !important;
             padding: 0.6rem 2rem !important;
             border: none !important;
+            font-size: 14px !important; /* Force match */
+            font-weight: 600 !important; /* Force Bold */
         }
         div.stButton > button:hover { background-color: #333 !important; }
         div.stButton > button[kind="secondary"] {
@@ -144,7 +146,8 @@ def add_pdf_button():
                 padding: 0.6rem 2rem;
                 border-radius: 50px;
                 cursor: pointer;
-                font-size: 16px;
+                font-size: 14px; /* Dropped to match Streamlit default */
+                font-weight: 600; /* Added Bold */
                 width: 100%;
                 font-family: 'Inter', sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
                 transition: background-color 0.2s ease-in-out;
