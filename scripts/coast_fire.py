@@ -75,7 +75,7 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">☕ Downshifting the Rat Race</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Welcome back, <b>{greeting_names}</b>. You don't always need millions in the bank to quit your stressful job. If you have enough invested today, you can stop saving forever and let compounding do the heavy lifting while you work a lower-stress job you actually enjoy.
+        Welcome back, <b>{greeting_names}</b>. You don't always need millions in the bank to quit your stressful job. If you have enough invested today, you can stop saving forever and let compounding do the heavy lifting while you transition to a lower-stress lifestyle.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -116,17 +116,27 @@ income_shortfall = max(0, target_spend - projected_income)
 
 has_hit_coast = current_portfolio >= coast_number
 
+# 4. The Reality Check Threshold
+# If the shortfall is more than $40k, it's not a part-time job anymore.
+barista_threshold = 40000.0 
+is_barista = not has_hit_coast and income_shortfall <= barista_threshold
+is_accumulation = not has_hit_coast and income_shortfall > barista_threshold
+
 # --- 7. VISUALS & DASHBOARD ---
 st.divider()
 
 if has_hit_coast:
     status_headline = "🎉 YOU HAVE REACHED COAST FIRE!"
     status_color = "#5cb85c"
-    status_text = f"Congratulations! You can stop investing today. Without adding a single penny, your current portfolio of <b>${current_portfolio:,.0f}</b> will naturally compound to exceed your <b>${fire_number:,.0f}</b> goal by age {target_age}. You only need to earn enough to cover your daily living expenses!"
-else:
+    status_text = f"Congratulations! You can stop investing today. Without adding a single penny, your current portfolio of <b>${current_portfolio:,.0f}</b> will naturally compound to exceed your <b>${fire_number:,.0f}</b> goal by age {target_age}."
+elif is_barista:
     status_headline = "☕ YOU ARE IN BARISTA FIRE TERRITORY"
     status_color = BARISTA_BROWN
-    status_text = f"If you stopped investing today, your portfolio would grow to <b>${projected_portfolio:,.0f}</b> by age {target_age}. It will generate <b>${projected_income:,.0f}/yr</b>, leaving a small shortfall. You just need a fun, part-time job to cover the gap!"
+    status_text = f"If you stopped investing today, your portfolio would grow to <b>${projected_portfolio:,.0f}</b> by age {target_age}. It will generate <b>${projected_income:,.0f}/yr</b>. You just need a fun, part-time job to cover the <b>${income_shortfall:,.0f}</b> gap!"
+else:
+    status_headline = "🧱 THE ACCUMULATION PHASE"
+    status_color = "#2B5C8F" # A deep, "work mode" blue
+    status_text = f"If you stopped investing today, your portfolio would only generate <b>${projected_income:,.0f}/yr</b> by age {target_age}, leaving a massive <b>${income_shortfall:,.0f}/yr</b> shortfall. This isn't a part-time job gap—you are still heavily in the accumulation phase. Keep grinding and adding to that portfolio!"
 
 st.markdown(f"""
 <div style="text-align: center; margin-bottom: 30px;">
@@ -151,14 +161,14 @@ with col_a:
     """, unsafe_allow_html=True)
 
 with col_b:
-    barista_glow = f"0 0 15px 4px {BARISTA_BROWN}" if not has_hit_coast else "none"
+    barista_glow = f"0 0 15px 4px {status_color}" if not has_hit_coast else "none"
     st.markdown(f"""
-    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {BARISTA_BROWN}; box-shadow: {barista_glow}; text-align: center; height: 100%;">
-        <h3 style="margin-top:0; color: {BARISTA_BROWN};">Barista FIRE Gap</h3>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>The part-time income required at age {target_age} if you stop saving now.</i></p>
+    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {status_color}; box-shadow: {barista_glow}; text-align: center; height: 100%;">
+        <h3 style="margin-top:0; color: {status_color};">The Income Gap</h3>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>The income required at age {target_age} if you stop saving now.</i></p>
         <h2 style="color: {CHARCOAL}; margin-top: 15px; margin-bottom: 5px;">${income_shortfall:,.0f} / yr</h2>
-        <div style="color: {'#5cb85c' if has_hit_coast else BARISTA_BROWN}; font-weight: bold; margin-top: 10px;">
-            {'✅ No part-time work needed!' if has_hit_coast else '☕ Perfect for a low-stress job'}
+        <div style="color: {'#5cb85c' if has_hit_coast else status_color}; font-weight: bold; margin-top: 10px;">
+            {'✅ No part-time work needed!' if has_hit_coast else ('☕ Perfect for Barista FIRE' if is_barista else '🧱 Full-time career still required')}
         </div>
     </div>
     """, unsafe_allow_html=True)
