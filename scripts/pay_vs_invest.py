@@ -42,6 +42,7 @@ p1_name = prof.get('p1_name', 'Primary Client')
 p2_name = prof.get('p2_name', '')
 p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
+household = f"{p1_name} and {p2_name}" if p2_name else p1_name
 
 if 'pay_vs_invest' not in st.session_state.app_db:
     st.session_state.app_db['pay_vs_invest'] = {}
@@ -77,7 +78,7 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">📈 Strategic Brief: The Compounding Effect</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Welcome to the lab, <b>{p1_name} </b>. We are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
+        Welcome to the lab, <b>{household} </b>. We are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
     </p>
 </div>
 """, unsafe_allow_html=True)
