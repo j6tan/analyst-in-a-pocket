@@ -146,12 +146,17 @@ rrsp_net = rrsp_future_value - rrsp_taxes_owed
 
 # The Verdict
 diff = abs(rrsp_net - tfsa_net)
+tfsa_glow = "none"
+rrsp_glow = "none"
+
 if rrsp_net > tfsa_net:
     winner = "RRSP"
-    winner_color = CHARCOAL # Updated to brand palette
+    winner_color = CHARCOAL 
+    rrsp_glow = f"0 0 0 5px {PRIMARY_GOLD}" # The Golden Outline!
 elif tfsa_net > rrsp_net:
     winner = "TFSA"
     winner_color = PRIMARY_GOLD
+    tfsa_glow = f"0 0 0 5px {PRIMARY_GOLD}" # The Golden Outline!
 else:
     winner = "TIE (Mathematically Identical)"
     winner_color = SLATE_ACCENT
@@ -170,7 +175,7 @@ c1, c2 = st.columns(2)
 
 with c1:
     st.markdown(f"""
-    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {PRIMARY_GOLD}; text-align: center; height: 100%;">
+    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {PRIMARY_GOLD}; box-shadow: {tfsa_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {CHARCOAL};">TFSA Strategy</h3>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Initial Deposit: <b>${tfsa_deposit:,.0f}</b></p>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Annual Added: <b>${tfsa_annual:,.0f} / yr</b></p>
@@ -181,7 +186,7 @@ with c1:
 
 with c2:
     st.markdown(f"""
-    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {CHARCOAL}; text-align: center; height: 100%;">
+    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {CHARCOAL}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {CHARCOAL};">RRSP Strategy</h3>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>*Assumes tax refund is reinvested</i></p>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Initial Deposit (Grossed-Up): <b>${rrsp_deposit:,.0f}</b></p>
