@@ -23,35 +23,33 @@ def inject_global_css():
         h1 { font-weight: 800 !important; letter-spacing: -0.04em !important; font-size: 3rem !important; }
         h2, h3 { font-weight: 700 !important; }
 
-        /* 4. BUTTONS */
-        div.stButton > button {
+        /* 4. BUTTONS - AGGRESSIVE TARGETING */
+        
+        /* The Native Streamlit Button Box */
+        button[data-testid="baseButton-secondary"] {
+            background-color: #EDEDED !important;
+            border: 0px solid transparent !important; /* Force kill the faint border */
             border-radius: 50px !important;
-            white-space: nowrap !important;
-            border: none !important; /* Kills the faint Streamlit border */
             box-shadow: none !important;
-            min-height: 42px !important; /* Forces equal height */
-        }
-        div.stButton > button p {
-            font-weight: 600 !important;
-            font-size: 14px !important;
-            white-space: nowrap !important;
-            margin: 0 !important;
+            min-height: 42px !important;
+            height: 42px !important; /* Lock the height */
+            padding: 0 2rem !important;
         }
         
-        /* Primary Buttons */
-        div.stButton > button[kind="primary"] {
-            background-color: #4D4D4D !important;
-        }
-        div.stButton > button[kind="primary"] p {
-            color: white !important;
+        /* The Text Inside the Native Button */
+        button[data-testid="baseButton-secondary"] p {
+            color: #444444 !important;
+            font-weight: 600 !important;
+            font-size: 14px !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
 
-        /* Secondary Buttons (Back to Home) */
-        div.stButton > button[kind="secondary"] {
-            background-color: #EDEDED !important;
-        }
-        div.stButton > button[kind="secondary"] p {
-            color: #444444 !important; /* Matches PDF text exactly */
+        /* Hover Effect */
+        button[data-testid="baseButton-secondary"]:hover {
+            background-color: #D6D6D6 !important;
+            color: #444444 !important;
+            border: 0px solid transparent !important;
         }
 
         /* 5. SIDEBAR FIXES */
