@@ -5,6 +5,8 @@ import math
 import time
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, load_user_data, init_session_state, supabase
+import os
+import base64
 
 # --- 1. UNIVERSAL AUTO-LOADER ---
 init_session_state()
@@ -49,8 +51,28 @@ pvi_data = st.session_state.app_db['pay_vs_invest']
 if not pvi_data.get('initialized'):
     pvi_data.update({"amort": 5, "initialized": True})
 
-# --- 4. HEADER ---
-st.title("Debt vs. Equity: The Wealth Choice")
+# --- 4. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>"
+
+logo_html = get_inline_logo(width=75)
+
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Pay Off Mortgage or Invest?</h1>
+    </div>
+""", unsafe_allow_html=True)
+
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">📈 Strategic Brief: The Compounding Effect</h3>
