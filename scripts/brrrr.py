@@ -16,9 +16,9 @@ if st.session_state.get('username') and not st.session_state.app_db.get('profile
 inject_global_css()
 
 # --- TOP NAVIGATION & PDF ROW ---
-nav_c1, nav_c2, nav_c3 = st.columns([1, 2, 1])
+nav_c1, nav_c2, nav_c3 = st.columns([1.5, 2, 1.5]) # Widened the outer columns
 with nav_c1:
-    if st.button("⬅️ Back to Dashboard", use_container_width=True):
+    if st.button("⬅️ Back to Home", use_container_width=True):
         st.switch_page("home.py")
 with nav_c3:
     add_pdf_button()
