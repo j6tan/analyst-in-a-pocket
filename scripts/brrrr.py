@@ -138,46 +138,43 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 7. STRATEGIC INSIGHTS (REFINED UI) ---
+# --- 7. STRATEGIC INSIGHTS (SANITIZED UI) ---
 st.write("")
 st.subheader("📋 Deal Analysis & Recommendations")
 
-# Define a softer "Warning" color (a sophisticated Amber/Orange)
 WARNING_AMBER = "#D97706" 
 
-# Calculate DSCR for the recommendation text
-# DSCR = Net Operating Income / Debt Service
+# Recalculate DSCR for the text
 noi_annual = (monthly_rent - opex_buffer) * 12
 debt_service_annual = monthly_piti * 12
 dscr = noi_annual / debt_service_annual if debt_service_annual > 0 else 0
 
 if monthly_net < 0:
-    st.markdown(f"""
-    <div style="background-color: {WARNING_AMBER}15; padding: 20px; border-radius: 10px; border: 1px solid {WARNING_AMBER};">
-        <h4 style="color: {WARNING_AMBER}; margin-top: 0;">⚠️ Cash Flow Sensitivity</h4>
-        <p style="color: {SLATE_ACCENT};">This deal is currently showing a monthly deficit of <b>${abs(monthly_net):,.0f}</b>. Here is why this matters for your portfolio growth:</p>
-        
-        <ul style="color: {SLATE_ACCENT}; line-height: 1.6;">
-            <li><b>Borrowing Power:</b> Your current <b>DSCR is {dscr:.2f}</b>. Lenders typically want to see 1.20 or higher. This negative cash flow can "handcuff" your ability to get your next loan.</li>
-            <li><b>The "Repeat" Step:</b> Funding this loss from your personal income slows down your capital accumulation for Deal #2.</li>
-        </ul>
-        
-        <hr style="border: 0; border-top: 1px solid {WARNING_AMBER}50; margin: 15px 0;">
-        
-        <h4 style="color: {WARNING_AMBER};">Ways to Optimize this Deal:</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
-            <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                <span style="font-size: 1.2em;">📉</span><br><b style="color: {CHARCOAL};">Adjust LTV</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Try a {refi_ltv*100 - 5:.0f}% Refi to lower the payment.</span>
-            </div>
-            <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                <span style="font-size: 1.2em;">🛠️</span><br><b style="color: {CHARCOAL};">Lower OpEx</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Self-manage or shop insurance for better rates.</span>
-            </div>
-            <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                <span style="font-size: 1.2em;">💰</span><br><b style="color: {CHARCOAL};">Value-Add</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Improve the unit to command a higher market rent.</span>
-            </div>
+    # Ensure this entire block is one single f-string with NO leading spaces inside the triple quotes
+    html_recommendation = f"""
+<div style="background-color: {WARNING_AMBER}15; padding: 20px; border-radius: 10px; border: 1px solid {WARNING_AMBER};">
+    <h4 style="color: {WARNING_AMBER}; margin-top: 0;">⚠️ Cash Flow Sensitivity</h4>
+    <p style="color: {SLATE_ACCENT};">This deal is currently showing a monthly deficit of <b>${abs(monthly_net):,.0f}</b>. Here is why this matters for your portfolio growth:</p>
+    <ul style="color: {SLATE_ACCENT}; line-height: 1.6;">
+        <li><b>Borrowing Power:</b> Your current <b>DSCR is {dscr:.2f}</b>. Lenders typically want 1.20+. Negative cash flow can "handcuff" your ability to get your next loan.</li>
+        <li><b>The "Repeat" Step:</b> Funding this loss from personal income slows down capital accumulation for Deal #2.</li>
+    </ul>
+    <hr style="border: 0; border-top: 1px solid {WARNING_AMBER}50; margin: 15px 0;">
+    <h4 style="color: {WARNING_AMBER};">Ways to Optimize this Deal:</h4>
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
+        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
+            <span style="font-size: 1.2em;">📉</span><br><b style="color: {CHARCOAL};">Adjust LTV</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Try a {refi_ltv*100 - 5:.0f}% Refi to lower the payment.</span>
+        </div>
+        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
+            <span style="font-size: 1.2em;">🛠️</span><br><b style="color: {CHARCOAL};">Lower OpEx</b><br><span style="font-size: 0.85em; color: #4A4E5A;">Self-manage or shop insurance for better rates.</span>
+        </div>
+        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
+            <span style="font-size: 1.2em;">💰</span><br><b style="color: {CHARCOAL};">Value-Add</b><br><span style="font-size: 0.85em; color: #4A4E5A;">Improve the unit to command a higher market rent.</span>
         </div>
     </div>
-    """, unsafe_allow_html=True) # <--- THIS IS THE MAGIC KEY
+</div>
+"""
+    st.markdown(html_recommendation, unsafe_allow_html=True)
 
 elif is_infinite:
     st.success("✨ **The Perfect BRRRR:** You've recovered your initial capital. Focus on maintaining high occupancy while looking for your next property.")
