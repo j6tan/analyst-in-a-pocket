@@ -189,7 +189,6 @@ with c2:
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {CHARCOAL}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {CHARCOAL};">RRSP Strategy</h3>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>*Assumes tax refunds are reinvested</i></p>
-        
         <div style="margin: 15px 0; padding: 10px; background-color: white; border-radius: 8px; border: 1px solid {BORDER_GREY}; text-align: left; font-size: 0.9em;">
             <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                 <span>Pure Investment:</span>
@@ -204,7 +203,6 @@ with c2:
                 <span>${rrsp_future_value:,.0f}</span>
             </div>
         </div>
-
         <p style="color: #d9534f; margin-bottom: 5px;">Taxes Owed at Retirement: <b>-${rrsp_taxes_owed:,.0f}</b></p>
         <h2 style="color: {CHARCOAL}; margin-top: 10px;">Net: ${rrsp_net:,.0f}</h2>
     </div>
