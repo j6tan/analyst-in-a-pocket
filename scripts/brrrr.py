@@ -97,7 +97,7 @@ monthly_piti = (new_loan_amount * (refi_rate/100/12)) / (1 - (1 + refi_rate/100/
 opex_buffer = monthly_rent * 0.25 # 25% for taxes, insurance, repairs
 monthly_net = round(monthly_rent - monthly_piti - opex_buffer, 0)
 
-# --- 6. THE RESULTS DASHBOARD ---
+# --- 6. THE RESULTS DASHBOARD (COMPACT VERSION) ---
 st.divider()
 res1, res2, res3 = st.columns(3)
 
@@ -105,20 +105,21 @@ if cash_left <= 0:
     res1.metric("Cash Left in Deal", "$0", delta="Infinite Return!", delta_color="normal")
     status_headline = "🔥 THE PERFECT BRRRR"
     status_color = "#5cb85c"
-    status_text = f"You successfully pulled all your capital out. You now own a property for $0 net investment."
+    status_text = f"Capital fully recycled. You own this for $0 net investment."
 else:
     res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Capital Stuck", delta_color="inverse")
     status_headline = "🧱 CAPITAL COMMITTED"
     status_color = "#2B5C8F"
-    status_text = f"You have ${cash_left:,.0f} tied up in this deal. Your money is working, but it isn't fully recycled."
+    status_text = f"${cash_left:,.0f} remains tied up in this asset."
 
 res2.metric("Equity Created", f"${round(arv - new_loan_amount, -3):,.0f}")
 res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo")
 
+# Sleeker, more compact status box
 st.markdown(f"""
-<div style="text-align: center; margin-top: 20px; padding: 20px; border-radius: 10px; border: 2px solid {status_color};">
-    <h2 style="color: {status_color}; margin: 0;">{status_headline}</h2>
-    <p style="color: {SLATE_ACCENT}; margin-top: 10px;">{status_text}</p>
+<div style="text-align: center; margin-top: 15px; padding: 10px 20px; border-radius: 8px; border: 1px solid {status_color}; background-color: {status_color}10;">
+    <h4 style="color: {status_color}; margin: 0; font-size: 1.1em; letter-spacing: 1px;">{status_headline}</h4>
+    <p style="color: {SLATE_ACCENT}; margin: 5px 0 0 0; font-size: 0.95em;">{status_text}</p>
 </div>
 """, unsafe_allow_html=True)
 
