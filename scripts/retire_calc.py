@@ -53,7 +53,7 @@ current_invested = (
 if not rc_data.get('initialized'):
     rc_data['starting_assets'] = current_invested
     rc_data['current_age'] = 35.0
-    rc_data['target_spend'] = 80000.0
+    rc_data['monthly_income'] = 6000.0 # Changed to a monthly goal
     rc_data['annual_return'] = 7.0
     rc_data['swr'] = 4.0
     rc_data['initialized'] = True
@@ -87,22 +87,34 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 5. INPUT VARIABLES ---
+# --- 5. INPUT VARIABLES (PLAIN ENGLISH) ---
+st.subheader("📍 1. Your Starting Point")
 c1, c2 = st.columns(2)
-
 with c1:
-    st.subheader("👤 The Baseline")
     current_age = cloud_input("Current Age", "retire_calc", "current_age", step=1)
-    starting_assets = cloud_input("Current Invested Assets ($)", "retire_calc", "starting_assets", step=5000)
-    monthly_contribution = cloud_input("Monthly Contribution ($)", "retire_calc", "monthly_contribution", step=500, help="How much are you adding to your investments every month?")
-
 with c2:
-    st.subheader("🎯 The Target")
-    target_spend = cloud_input("Desired Annual Retirement Spend ($)", "retire_calc", "target_spend", step=5000, help="Your expected yearly expenses in retirement.")
-    annual_return = cloud_input("Expected Market Return (%)", "retire_calc", "annual_return", step=0.1)
-    swr = cloud_input("Safe Withdrawal Rate (%)", "retire_calc", "swr", step=0.1, help="The 4% rule is the gold standard for a 30+ year retirement.")
+    starting_assets = cloud_input("Total Invested Wealth ($)", "retire_calc", "starting_assets", step=5000, help="This automatically pulled your stock and crypto totals from the Net Worth page, but you can override it here.")
+
+st.subheader("💰 2. Your Savings & Goals")
+c3, c4 = st.columns(2)
+with c3:
+    monthly_contribution = cloud_input("Monthly Investments ($)", "retire_calc", "monthly_contribution", step=500, help="How much new money do you put into your investments every single month?")
+with c4:
+    monthly_income = cloud_input("Desired Monthly Retirement Income ($)", "retire_calc", "monthly_income", step=500, help="When you finally quit your job, how much money do you need every month to cover your bills, travel, and lifestyle?")
+
+# Hide the nerdy math from the main view to reduce friction
+with st.expander("⚙️ Advanced Math Assumptions (Optional)"):
+    st.write("We pre-filled these with standard financial planning rules, but you can tweak them.")
+    a1, a2 = st.columns(2)
+    with a1:
+        annual_return = cloud_input("Expected Annual Market Return (%)", "retire_calc", "annual_return", step=0.1, help="Historically, the S&P 500 returns about 7-10% per year after inflation.")
+    with a2:
+        swr = cloud_input("Safe Withdrawal Rate (%)", "retire_calc", "swr", step=0.1, help="The 4% rule assumes you can safely withdraw 4% of your portfolio every year forever without running out of money.")
 
 # --- 6. CORE MATH ENGINE ---
+# Convert their monthly goal to an annual number for the math
+target_spend = monthly_income * 12
+
 # Calculate the FIRE Number
 fire_number = target_spend / (swr / 100) if swr > 0 else 0
 
