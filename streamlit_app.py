@@ -90,8 +90,7 @@ pages = {
         st.Page("scripts/net_worth.py", title="Personal Net Worth", icon="📊"), # Free Tool
         st.Page("scripts/retire_calc.py", title=retire_label, icon=retire_icon),
         st.Page("scripts/tfsa_rrsp.py", title=tfsa_label, icon=tfsa_icon),
-        st.Page("scripts/coast_fire.py", title=coast_label, icon=coast_icon),
-        st.Page("scripts/brrrr.py", title=brrrr_label, icon=brrrr_icon)
+        st.Page("scripts/coast_fire.py", title=coast_label, icon=coast_icon)
     ],
     "Advanced Wealth Strategy": [
         st.Page("scripts/mortgage_scenario.py", title=mort_label, icon=mort_icon),
@@ -100,7 +99,8 @@ pages = {
         st.Page("scripts/rental_vs_stock.py", title=duel_label, icon=duel_icon),
         st.Page("scripts/smith_maneuver.py", title=smith_label, icon=smith_icon),
         st.Page("scripts/rental_analyzer.py", title=rental_label, icon=rental_icon),
-        st.Page("scripts/land_residual_model.py", title=land_label, icon=land_icon)
+        st.Page("scripts/land_residual_model.py", title=land_label, icon=land_icon),
+        st.Page("scripts/brrrr.py", title=brrrr_label, icon=brrrr_icon)
     ],
     "Account": [
         st.Page("scripts/membership.py", title="Membership 💎", icon="💎"),
@@ -152,6 +152,7 @@ if pg.title in pro_titles and not is_pro:
         st.markdown(card_html, unsafe_allow_html=True)
 
 pg.run()
+
 
 
 
