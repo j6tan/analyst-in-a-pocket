@@ -59,7 +59,7 @@ def get_pro_meta(label, icon, is_pro):
     return (label if is_pro else f"{label} 🔒"), (icon if is_pro else "🔒")
 
 # DEFINE ALL LABELS
-mort_label, mort_icon = get_pro_meta("Mortgage Scenarios", "📈", is_pro)
+mort_label, mort_icon = get_pro_meta("Advanced Mortgage Analysis", "📈", is_pro)
 smith_label, smith_icon = get_pro_meta("Smith Maneuver", "💰", is_pro)
 second_label, second_icon = get_pro_meta("Secondary Property", "🏢", is_pro)
 renewal_label, renewal_icon = get_pro_meta("Renewal Scenario", "🔄", is_pro)
@@ -139,6 +139,7 @@ if pg.title in pro_titles and not is_pro:
         st.markdown(card_html, unsafe_allow_html=True)
 
 pg.run()
+
 
 
 
