@@ -55,7 +55,7 @@ for widget_key, (db_key, default_val) in input_defaults.items():
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 SLATE_ACCENT = "#4A4E5A"
-OFF_WHITE = "#F8F9FA"  # <--- FIXED: Added this back!
+OFF_WHITE = "#F8F9FA"
 
 def get_logo():
     img_path = "logo.png"
@@ -65,11 +65,21 @@ def get_logo():
         return f'<img src="data:image/png;base64,{encoded}" style="width: 75px;">'
     return "🏘️"
 
-st.markdown(f"<div style='display: flex; align-items: center; gap: 15px;'>{get_logo()} <h1 style='margin:0;'>FIRE Calculator: The BRRRR Engine</h1></div>", unsafe_allow_html=True)
+# Dynamic Greeting for the Storybox
+prof = st.session_state.app_db.get('profile', {})
+p1_name = prof.get('p1_name', 'Investor')
+p2_name = prof.get('p2_name', '')
+greeting = f"{p1_name} & {p2_name}" if p2_name else p1_name
 
-st.markdown("""
-<div style="margin-bottom: 20px; color: #4A4E5A; font-size: 1.1em;">
-    Enter your deal numbers below. The engine will instantly grade the deal and tell you if it's safe to execute or if it's a trap.
+st.markdown(f"<div style='display: flex; align-items: center; gap: 15px;'>{get_logo()} <h1 style='margin:0;'>The BRRRR Engine</h1></div>", unsafe_allow_html=True)
+
+# --- THE STORYBOX ---
+st.markdown(f"""
+<div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-top: 20px; margin-bottom: 25px;">
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🔓 Recycled Wealth</h3>
+    <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
+        Listen up, <b>{greeting}</b>. The goal of this engine is to find the exact tipping point where you leave the absolute minimum amount of cash in the deal while ensuring the property still pays for itself. Enter your numbers below, and the engine will instantly grade your deal.
+    </p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -134,31 +144,64 @@ if arv > 0:
 
     # Grading Logic
     if cash_left <= 0 and monthly_net > 0:
+        grade_letter = "A"
         grade_title = "GRADE A: The Holy Grail 🏆"
         grade_color = "#2e7d32" # Dark Green
         grade_desc = "You recovered 100% of your capital, created equity, AND the property pays you every month. Execute this deal and immediately repeat."
     elif cash_left > 0 and monthly_net > 0 and dscr >= 1.2:
+        grade_letter = "B"
         grade_title = "GRADE B: The Wealth Builder 📈"
         grade_color = "#2B5C8F" # Blue
         grade_desc = "You left some cash in the deal, but it generates positive cash flow and easily passes the bank's stress test (DSCR). A solid, safe rental."
     elif equity > 0 and (monthly_net < 0 or dscr < 1.2):
+        grade_letter = "C"
         grade_title = "GRADE C: The Equity Trap ⚠️"
         grade_color = "#D97706" # Amber
         grade_desc = "You created great net worth, but the property loses money monthly or fails the bank's DSCR test. This will drain your personal income and block your next loan."
     else:
+        grade_letter = "F"
         grade_title = "GRADE F: The Money Pit 🚨"
         grade_color = "#d9534f" # Red
         grade_desc = "You are leaving cash in the deal, you lack equity, and it loses money every month. Walk away or drastically renegotiate."
 
     # Display Verdict Box
     st.markdown(f"""
-    <div style="background-color: {grade_color}10; padding: 25px; border-radius: 12px; border: 2px solid {grade_color}; margin-bottom: 25px;">
-        <h2 style="color: {grade_color}; margin-top: 0; font-weight: 800;">{grade_title}</h2>
-        <p style="color: {SLATE_ACCENT}; font-size: 1.2em; line-height: 1.5; margin-bottom: 0;">{grade_desc}</p>
+    <div style="background-color: {grade_color}10; padding: 25px; border-radius: 12px; border: 2px solid {grade_color}; margin-bottom: 10px;">
+        <h2 style="color: {grade_color}; margin-top: 0; font-weight: 800; font-size: 1.5em;">{grade_title}</h2>
+        <p style="color: {SLATE_ACCENT}; font-size: 1.15em; line-height: 1.5; margin-bottom: 0;">{grade_desc}</p>
     </div>
     """, unsafe_allow_html=True)
 
+    # --- THE REPORT CARD SCALE (Expandable) ---
+    with st.expander("📊 How is this deal graded? (View Full Scale)"):
+        def get_op(target): return "1.0" if grade_letter == target else "0.3"
+        def get_bd(target, color): return f"3px solid {color}" if grade_letter == target else f"1px solid {color}50"
+
+        st.markdown(f"""
+        <div style="display: flex; justify-content: space-between; gap: 10px; text-align: center; margin-top: 10px; margin-bottom: 20px;">
+            <div style="flex: 1; padding: 10px; background-color: #2e7d3215; border: {get_bd('A', '#2e7d32')}; opacity: {get_op('A')}; border-radius: 8px;">
+                <b style="color: #2e7d32; font-size: 1.1em;">A: Holy Grail</b>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #2B5C8F15; border: {get_bd('B', '#2B5C8F')}; opacity: {get_op('B')}; border-radius: 8px;">
+                <b style="color: #2B5C8F; font-size: 1.1em;">B: Wealth Builder</b>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #D9770615; border: {get_bd('C', '#D97706')}; opacity: {get_op('C')}; border-radius: 8px;">
+                <b style="color: #D97706; font-size: 1.1em;">C: Equity Trap</b>
+            </div>
+            <div style="flex: 1; padding: 10px; background-color: #d9534f15; border: {get_bd('F', '#d9534f')}; opacity: {get_op('F')}; border-radius: 8px;">
+                <b style="color: #d9534f; font-size: 1.1em;">F: Money Pit</b>
+            </div>
+        </div>
+        <div style="color: {SLATE_ACCENT}; font-size: 0.95em; line-height: 1.6; background: {OFF_WHITE}; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
+            <b>Grade A:</b> $0 cash left in the deal AND positive monthly cash flow.<br>
+            <b>Grade B:</b> You leave some cash in the deal, but cash flow is positive and DSCR is over 1.20.<br>
+            <b>Grade C:</b> You created positive equity, but the property has negative cash flow or a low DSCR.<br>
+            <b>Grade F:</b> You have cash trapped, no equity, and negative cash flow.
+        </div>
+        """, unsafe_allow_html=True)
+
     # --- 6. METRICS & TRANSLATIONS ---
+    st.write("")
     st.subheader("📊 The Core Metrics")
     m1, m2, m3, m4 = st.columns(4)
     
@@ -172,16 +215,16 @@ if arv > 0:
     <div style="background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #dee2e6; margin-top: 15px;">
         <h4 style="color: {CHARCOAL}; margin-top: 0;">📖 How to read your results:</h4>
         <ul style="color: {SLATE_ACCENT}; line-height: 1.7; margin-bottom: 0;">
-            <li><b>Cash Left (The Velocity Metric):</b> If this is $0, you can recycle your money infinitely. If it's high, your money is stuck.</li>
-            <li><b>Equity (The Wealth Metric):</b> The 'sweat equity' you built. Great for your net worth, but it doesn't pay the bills.</li>
-            <li><b>Monthly Net (The Survival Metric):</b> The actual cash in your pocket after mortgage, taxes, insurance, and repairs. Must be positive to be safe.</li>
-            <li><b>DSCR (The Bank's Metric):</b> Commercial lenders demand a <b>1.20</b> or higher. If you drop below this, banks will refuse to fund your next deal.</li>
+            <li><b>Cash Left (Velocity):</b> If this is $0, you can recycle your money infinitely. If it's high, your money is stuck.</li>
+            <li><b>Equity (Wealth):</b> The 'sweat equity' you built. Great for your net worth, but it doesn't pay the bills.</li>
+            <li><b>Monthly Net (Survival):</b> Cash in your pocket after mortgage, taxes, insurance, and repairs. Must be positive to be safe.</li>
+            <li><b>DSCR (The Bank's Metric):</b> Lenders demand a <b>1.20</b> or higher. If you drop below this, banks may refuse your next loan.</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
 
     # --- 7. ACTIONABLE LEVERS ---
-    if "GRADE C" in grade_title or "GRADE F" in grade_title:
+    if grade_letter in ["C", "F"]:
         st.write("")
         st.subheader("🛠️ How to fix this deal:")
         st.markdown(f"""
