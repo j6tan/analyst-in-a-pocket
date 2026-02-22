@@ -105,7 +105,7 @@ with col1:
     curr_rate = get_marginal_tax_rate(current_income)
     base_retire_rate = get_marginal_tax_rate(base_income)
     
-    st.info(f"**Tax Bracket Analysis:**\n* Today's Marginal Refund Rate: **{curr_rate}%**\n* Base Retirement Tax Rate (Before Withdrawals): **{base_retire_rate}%**")
+    st.info(f"**Tax Bracket Analysis:**\n* Marginal Rate (today): **{curr_rate}%**\n* Retirement Tax Rate: **{base_retire_rate}%**")
 
 with col2:
     st.subheader("📈 The Accumulation")
