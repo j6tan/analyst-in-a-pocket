@@ -38,8 +38,8 @@ def get_marginal_tax_rate(income):
 
 # --- 3. DATA RETRIEVAL ---
 prof = st.session_state.app_db.get('profile', {})
-p1_name = prof.get('p1_name', 'Client 1')
-p2_name = prof.get('p2_name', 'Client 2')
+p1_name = prof.get('p1_name', 'Primary Client')
+p2_name = prof.get('p2_name', '')
 p1_inc = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 p2_inc = float(prof.get('p2_t4', 0)) + float(prof.get('p2_bonus', 0)) + float(prof.get('p2_commission', 0))
 
