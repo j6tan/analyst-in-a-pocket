@@ -2,17 +2,28 @@ import streamlit as st
 import datetime
 from data_handler import supabase # Assuming your Supabase client is here
 
+# ==========================================
+# 📂 THE MASTER PAGE ORGANIZER
+# ==========================================
+# Define which pages are 'public' and which require 'pro'
+PAGE_ACCESS_CONFIG = {
+    "home": "public",
+    "affordability": "public",
+    "flip_analyzer": "public", # Example
+    "brrrr": "pro",
+    "smith_manoeuvre": "pro",
+    "proforma_builder": "pro" # Example
+}
+
+# ==========================================
+# 🧠 MEMBERSHIP LOGIC
+# ==========================================
 def get_membership_status():
-    """
-    Returns a dict with 'is_pro' (bool) and 'tier' (str).
-    Checks expiry dates for 48h and Monthly members.
-    """
-    # 1. Check if user is even logged in
+    """Returns a dict checking if the user has an active Pro membership."""
     username = st.session_state.get("username")
     if not username:
         return {"is_pro": False, "tier": "Public"}
 
-    # 2. Fetch the user's record from Supabase
     try:
         response = supabase.table("profiles").select("membership_tier, pro_until").eq("username", username).execute()
         if not response.data:
@@ -22,18 +33,14 @@ def get_membership_status():
         tier = user_record.get("membership_tier", "Public")
         pro_until_str = user_record.get("pro_until")
 
-        # 3. Handle Life Membership
         if tier == "Life":
             return {"is_pro": True, "tier": "Life"}
 
-        # 4. Handle Time-Limited Memberships (48h and Monthly)
         if pro_until_str:
             pro_until = datetime.datetime.fromisoformat(pro_until_str)
             if datetime.datetime.now() < pro_until:
                 return {"is_pro": True, "tier": tier}
             else:
-                # OPTIONAL: Automatically demote them in DB if expired
-                # supabase.table("profiles").update({"membership_tier": "Public"}).eq("username", username).execute()
                 return {"is_pro": False, "tier": "Expired"}
 
     except Exception as e:
@@ -42,33 +49,44 @@ def get_membership_status():
 
     return {"is_pro": False, "tier": "Public"}
 
-def require_pro(feature_name="this tool"):
+# ==========================================
+# 🛑 THE GATEKEEPER
+# ==========================================
+def enforce_page_access(page_id, pretty_name="This tool"):
     """
-    Call this at the top of Pro pages. 
-    If not Pro, it shows the paywall and STOPS the script.
+    Checks the Master Organizer. If the page is 'pro', verifies membership.
+    If the user is not a member, drops the paywall and stops the app.
     """
+    access_level = PAGE_ACCESS_CONFIG.get(page_id, "public")
+    
+    if access_level == "public":
+        return # Let them pass immediately
+
+    # If it's a Pro page, check their status
     status = get_membership_status()
     if not status["is_pro"]:
         st.markdown(f"""
-            <div style="background-color: #F8F9FA; padding: 40px; border-radius: 15px; text-align: center; border: 1px solid #ddd;">
-                <h2 style="color: #333;">🔒 {feature_name}</h2>
-                <p style="color: #666;">This is a Premium feature available to our 48-hour, Monthly, and Life members.</p>
+            <div style="background-color: #F8F9FA; padding: 40px; border-radius: 15px; text-align: center; border: 1px solid #ddd; margin-top: 20px;">
+                <div style="font-size: 50px; margin-bottom: 10px;">🔒</div>
+                <h2 style="color: #333; margin-top: 0;">{pretty_name} is a Pro Feature</h2>
+                <p style="color: #666; font-size: 1.1em;">Upgrade to a 48-Hour, Monthly, or Life membership to unlock this strategy and save your scenarios.</p>
             </div>
         """, unsafe_allow_html=True)
         
-        if st.button("🚀 Upgrade My Account", use_container_width=True):
-            st.switch_page("pages/membership.py") # Create this page for Stripe
-        st.stop()
+        st.write("")
+        c1, c2, c3 = st.columns([1, 2, 1])
+        with c2:
+            if st.button("🚀 View Upgrade Options", type="primary", use_container_width=True):
+                st.switch_page("pages/membership.py") # Directs to your pricing page
+        
+        st.stop() # CRITICAL: This hides the rest of the calculator from free users
 
+# ==========================================
+# 💾 SMART SYNC
+# ==========================================
 def smart_save(data_dict):
-    """
-    Only saves to Supabase if the user is a Pro member.
-    """
+    """Only saves to Supabase if the user is a Pro member."""
     status = get_membership_status()
     if status["is_pro"] and st.session_state.get("username"):
-        # Import your save function here to avoid circular imports
         from data_handler import save_user_data
         save_user_data(st.session_state.username, data_dict)
-    else:
-        # Public users: Data stays in st.session_state only
-        pass
