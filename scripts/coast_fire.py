@@ -80,6 +80,20 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# --- THE FIRE DICTIONARY EXPANDER ---
+with st.expander("📚 What are the different types of FIRE?"):
+    st.markdown(f"""
+    **🔥 Traditional FIRE:** You have saved 25x your annual expenses. You can safely withdraw 4% a year and never have to work again.
+    
+    **⚖️ Lean FIRE:** Traditional FIRE, but for minimalists. You live on a very strict, low-cost budget (usually under $40,000/yr), meaning you can retire much sooner with a smaller portfolio.
+    
+    **🍾 Fat FIRE:** The luxury route. You want a high-spending lifestyle in retirement (often $100,000+ a year). It takes longer to achieve because you need a massive portfolio ($2.5M+).
+    
+    **⛵ Coast FIRE:** You have invested enough *today* that it will naturally compound into your Traditional FIRE number by age 65. You can stop saving completely and just work enough to cover your current daily bills.
+    
+    **☕ Barista FIRE:** You quit the rat race *before* reaching your full FIRE number. You take a fun, low-stress, part-time job to cover your living expenses (and maybe get benefits) while your investments grow in the background.
+    """)
+
 # --- 5. INPUT VARIABLES ---
 c1, c2, c3 = st.columns(3)
 
