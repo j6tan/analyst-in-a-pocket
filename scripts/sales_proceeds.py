@@ -219,7 +219,7 @@ if target_price > 0:
     st.subheader("📊 Scenario Spectrum")
     
     scenarios = [
-        {"label": "Price Adjusted -10%", "price": target_price * 0.90, "bg": "#FEF2F2", "text": "#7F1D1D"},
+        {"label": "Price Adjusted -10%", "price": target_price * 0.90, "bg": "#FEE2E2", "text": "#7F1D1D"}, # Darkened this background!
         {"label": "Price Adjusted -5%", "price": target_price * 0.95, "bg": "#FFF1F2", "text": "#991B1B"},
         {"label": "Target Price", "price": target_price, "bg": "#FFFBEB", "text": "#92400E"},
         {"label": "Price Adjusted +5%", "price": target_price * 1.05, "bg": "#F0FDF4", "text": "#166534"},
