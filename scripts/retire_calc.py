@@ -194,6 +194,71 @@ else:
 
     st.info(f"💡 **Insight:** At age {fire_age:.1f}, your portfolio of **\${fire_number:,.0f}** will theoretically generate **\${target_spend:,.0f}** per year indefinitely without drawing down the principal, assuming a {annual_return}% return and {swr}% safe withdrawal rate.")
 
+# --- 9. SENSITIVITY ANALYSIS (STRESS TEST) ---
+st.divider()
+st.subheader("🌪️ FIRE Stress Test (Sensitivity Analysis)")
+st.markdown("<p style='color: #4A4E5A; margin-bottom: 20px;'>How do shifts in market performance and withdrawal strategies impact your timeline?</p>", unsafe_allow_html=True)
+
+def calculate_scenario(ret_rate, withdrawal_rate):
+    if withdrawal_rate <= 0: return float('inf'), float('inf')
+    scenario_fire_num = target_spend / (withdrawal_rate / 100)
+    
+    if ret_rate <= 0:
+        if monthly_contribution <= 0: return scenario_fire_num, float('inf')
+        m = (scenario_fire_num - starting_assets) / monthly_contribution
+        return scenario_fire_num, max(0, m/12)
+        
+    mo_ret = (ret_rate / 100) / 12
+    bal = starting_assets
+    m = 0
+    while bal < scenario_fire_num and m < 1200:
+        m += 1
+        bal = bal * (1 + mo_ret) + monthly_contribution
+    return scenario_fire_num, (m / 12)
+
+# Define Scenarios (-2% Return & -0.5% SWR for Conservative, etc.)
+cons_ret = max(0, annual_return - 2.0)
+cons_swr = max(1.0, swr - 0.5)
+
+agg_ret = annual_return + 2.0
+agg_swr = swr + 0.5
+
+cons_num, cons_years = calculate_scenario(cons_ret, cons_swr)
+agg_num, agg_years = calculate_scenario(agg_ret, agg_swr)
+
+# Format the output cards
+s1, s2, s3 = st.columns(3)
+
+with s1:
+    st.markdown(f"""
+    <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-top: 5px solid #d9534f;">
+        <h4 style="margin-top:0; color: {CHARCOAL};">Conservative</h4>
+        <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 10px;">Return: <b>{cons_ret:.1f}%</b> | SWR: <b>{cons_swr:.1f}%</b></div>
+        <h2 style="margin:0; color: {CHARCOAL};">\${cons_num:,.0f}</h2>
+        <div style="color: #d9534f; font-weight: bold;">{cons_years:.1f} Years to FIRE</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+with s2:
+    st.markdown(f"""
+    <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border: 1px solid {PRIMARY_GOLD}; border-top: 5px solid {PRIMARY_GOLD}; transform: scale(1.02); box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+        <h4 style="margin-top:0; color: {CHARCOAL};">Baseline (Current)</h4>
+        <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 10px;">Return: <b>{annual_return:.1f}%</b> | SWR: <b>{swr:.1f}%</b></div>
+        <h2 style="margin:0; color: {CHARCOAL};">\${fire_number:,.0f}</h2>
+        <div style="color: {PRIMARY_GOLD}; font-weight: bold;">{years_to_fire:.1f} Years to FIRE</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with s3:
+    st.markdown(f"""
+    <div style="background-color: {OFF_WHITE}; padding: 15px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-top: 5px solid #5cb85c;">
+        <h4 style="margin-top:0; color: {CHARCOAL};">Aggressive</h4>
+        <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 10px;">Return: <b>{agg_ret:.1f}%</b> | SWR: <b>{agg_swr:.1f}%</b></div>
+        <h2 style="margin:0; color: {CHARCOAL};">\${agg_num:,.0f}</h2>
+        <div style="color: #5cb85c; font-weight: bold;">{agg_years:.1f} Years to FIRE</div>
+    </div>
+    """, unsafe_allow_html=True)
+
 # --- FOOTER ---
 st.markdown("""
     <div style="text-align: center; color: #adb5bd; font-size: 0.85em; margin-top: 50px; padding-top: 20px; border-top: 1px solid #dee2e6;">
