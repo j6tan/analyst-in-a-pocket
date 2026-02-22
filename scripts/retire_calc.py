@@ -49,8 +49,13 @@ current_invested = (
     float(nw_data.get('crypto_value', 0))
 )
 
+# Inject the safe defaults directly into the database
 if not rc_data.get('initialized'):
     rc_data['starting_assets'] = current_invested
+    rc_data['current_age'] = 35.0
+    rc_data['target_spend'] = 80000.0
+    rc_data['annual_return'] = 7.0
+    rc_data['swr'] = 4.0
     rc_data['initialized'] = True
 
 # --- 4. INLINE LOGO & TITLE ---
@@ -87,15 +92,15 @@ c1, c2 = st.columns(2)
 
 with c1:
     st.subheader("👤 The Baseline")
-    current_age = cloud_input("Current Age", "retire_calc", "current_age", step=1, default_val=35)
+    current_age = cloud_input("Current Age", "retire_calc", "current_age", step=1)
     starting_assets = cloud_input("Current Invested Assets ($)", "retire_calc", "starting_assets", step=5000)
     monthly_contribution = cloud_input("Monthly Contribution ($)", "retire_calc", "monthly_contribution", step=500, help="How much are you adding to your investments every month?")
 
 with c2:
     st.subheader("🎯 The Target")
-    target_spend = cloud_input("Desired Annual Retirement Spend ($)", "retire_calc", "target_spend", step=5000, default_val=80000, help="Your expected yearly expenses in retirement.")
-    annual_return = cloud_input("Expected Market Return (%)", "retire_calc", "annual_return", step=0.1, default_val=7.0)
-    swr = cloud_input("Safe Withdrawal Rate (%)", "retire_calc", "swr", step=0.1, default_val=4.0, help="The 4% rule is the gold standard for a 30+ year retirement.")
+    target_spend = cloud_input("Desired Annual Retirement Spend ($)", "retire_calc", "target_spend", step=5000, help="Your expected yearly expenses in retirement.")
+    annual_return = cloud_input("Expected Market Return (%)", "retire_calc", "annual_return", step=0.1)
+    swr = cloud_input("Safe Withdrawal Rate (%)", "retire_calc", "swr", step=0.1, help="The 4% rule is the gold standard for a 30+ year retirement.")
 
 # --- 6. CORE MATH ENGINE ---
 # Calculate the FIRE Number
