@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import os
+import base64
 from style_utils import inject_global_css, show_disclaimer
 from data_handler import cloud_input, sync_widget, supabase, load_user_data, init_session_state
 import time
@@ -116,11 +117,27 @@ def run_wealth_comparison(price, dp, rate, apprec, ann_tax, mo_maint, rent, rent
     
     return pd.DataFrame(data)
 
-# --- 5. STORYBOX ---
-st.markdown("<style>div.block-container {padding-top: 1rem;}</style>", unsafe_allow_html=True)
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col2:
-    st.title("Rent vs. Own Analysis")
+# --- 5. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>"
+
+logo_html = get_inline_logo(width=75)
+
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Rent vs. Own Analysis</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 20px;">
@@ -237,3 +254,4 @@ with ins_col2:
             st.write("Under current market settings, the home is not projected to catch up in net worth.")
 
 show_disclaimer()
+
