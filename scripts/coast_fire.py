@@ -184,18 +184,33 @@ with col_b:
     </div>
     """, unsafe_allow_html=True)
 
-# --- 8. THE FIRE LADDER ---
+# --- 8. THE FIRE LADDER (COAST PROGRESS) ---
 st.write("")
-st.subheader("🪜 Your FIRE Ladder (Current Progress)")
+st.subheader("🪜 Your Coasting Milestones")
+st.caption("Are you done saving? This shows how much of your 'Save-No-More' number you have reached today.")
 l1, l2, l3 = st.columns(3)
 
-def fire_metric(col, label, target, current):
-    progress = min(100, int((current/target)*100))
-    col.metric(label, f"${target:,.0f}", f"{progress}% of target", delta_color="normal")
+# Calculate the COAST version of each milestone
+coast_lean = round(lean_fire_num / ((1 + r) ** years_to_grow), -3)
+coast_trad = coast_number # We already have this (Traditional)
+coast_fat = round(fat_fire_num / ((1 + r) ** years_to_grow), -3)
 
-fire_metric(l1, "Lean FIRE", lean_fire_num, current_portfolio)
-fire_metric(l2, "Traditional FIRE", traditional_fire_num, current_portfolio)
-fire_metric(l3, "Fat FIRE", fat_fire_num, current_portfolio)
+def coast_metric(col, label, coast_target, current):
+    # Calculate progress toward the amount needed TODAY
+    progress = int((current / coast_target) * 100)
+    
+    if progress >= 100:
+        status_msg = "✅ COAST SECURED"
+        d_color = "normal" 
+    else:
+        status_msg = f"{progress}% of Coast Goal"
+        d_color = "inverse" # Shows red/warning if under 100%
+
+    col.metric(label, f"${coast_target:,.0f}", status_msg, delta_color=d_color)
+
+coast_metric(l1, "Lean Coast", coast_lean, current_portfolio)
+coast_metric(l2, "Traditional Coast", coast_trad, current_portfolio)
+coast_metric(l3, "Fat Coast", coast_fat, current_portfolio)
 
 # --- 9. THE CHART ---
 st.write("")
