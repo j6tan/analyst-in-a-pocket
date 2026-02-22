@@ -40,7 +40,7 @@ def get_inline_logo(img_name="logo.png", width=75):
 
 logo_html = get_inline_logo(width=75)
 
-# Personalized Greeting
+# Personalized Greeting based on profile data
 prof = st.session_state.app_db.get('profile', {})
 p1_raw = prof.get('p1_name', '').strip() if isinstance(prof.get('p1_name'), str) else ''
 p2_raw = prof.get('p2_name', '').strip() if isinstance(prof.get('p2_name'), str) else ''
@@ -57,22 +57,22 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🔓 Recycled Wealth</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Listen up, <b>{greeting_names}</b>. Real estate is the only asset class that lets you buy your cake, eat it, and then get your money back to buy another. This model analyzes how much of your capital you can "pull back out" of a deal to keep your velocity of money high.
+        Listen up, <b>{greeting_names}</b>. Real estate lets you buy your cake, eat it, and then get your money back to buy another. This model analyzes your capital recycling velocity.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# --- 4. INPUTS: THE DEAL ---
+# --- 4. INPUTS: THE DEAL (Synced to Cloud) ---
 st.header("🛠️ Phase 1: Buy & Rehab")
 c1, c2 = st.columns(2)
 
 with c1:
-    buy_price = st.number_input("Purchase Price ($)", value=125000, step=5000)
-    rehab_budget = st.number_input("Rehab Costs ($)", value=40000, step=1000)
+    buy_price = cloud_input("Purchase Price ($)", "brrrr_buy_price", 125000)
+    rehab_budget = cloud_input("Rehab Costs ($)", "brrrr_rehab_budget", 40000)
     
 with c2:
-    arv = st.number_input("After Repair Value (ARV) ($)", value=225000, step=5000)
-    buying_holding = st.number_input("Closing & Holding Costs ($)", value=5000, step=500)
+    arv = cloud_input("After Repair Value (ARV) ($)", "brrrr_arv", 225000)
+    buying_holding = cloud_input("Closing & Holding Costs ($)", "brrrr_holding", 5000)
 
 total_invested = buy_price + rehab_budget + buying_holding
 
@@ -80,55 +80,58 @@ st.header("🏦 Phase 2: Rent & Refi")
 c3, c4 = st.columns(2)
 
 with c3:
-    monthly_rent = st.number_input("Expected Monthly Rent ($)", value=1850, step=50)
-    refi_ltv = st.slider("Refinance LTV (%)", 60, 80, 75) / 100
+    monthly_rent = cloud_input("Expected Monthly Rent ($)", "brrrr_rent", 1850)
+    refi_ltv_val = st.slider("Refinance LTV (%)", 60, 80, 75)
+    refi_ltv = refi_ltv_val / 100
 
 with c4:
-    refi_rate = st.number_input("New Mortgage Rate (%)", value=6.75, step=0.1)
-    refi_closing = st.number_input("Refi Closing Costs ($)", value=4000, step=500)
+    refi_rate = cloud_input("New Mortgage Rate (%)", "brrrr_refi_rate", 4.0)
+    refi_closing = cloud_input("Refi Closing Costs ($)", "brrrr_refi_costs", 4000)
 
-# --- 5. MATH ENGINE (ROUNDED TO 1,000) ---
+# --- 5. MATH ENGINE ---
 new_loan_amount = round(arv * refi_ltv, -3)
 net_proceeds = round(new_loan_amount - refi_closing, -3)
 cash_left = round(total_invested - net_proceeds, -3)
 
 # Monthly Cash Flow Math
-monthly_piti = (new_loan_amount * (refi_rate/100/12)) / (1 - (1 + refi_rate/100/12)**-360)
+r_monthly = (refi_rate / 100) / 12
+n_months = 360
+monthly_piti = (new_loan_amount * r_monthly) / (1 - (1 + r_monthly)**-n_months)
 opex_buffer = monthly_rent * 0.25 # 25% for taxes, insurance, repairs
 monthly_net = round(monthly_rent - monthly_piti - opex_buffer, 0)
 
-# --- 6. THE RESULTS DASHBOARD (WITH RISK EVALUATION) ---
+# DSCR Calculation
+noi_annual = (monthly_rent - opex_buffer) * 12
+debt_annual = monthly_piti * 12
+dscr = noi_annual / debt_annual if debt_annual > 0 else 0
+
+# --- 6. THE RESULTS DASHBOARD ---
 st.divider()
 res1, res2, res3 = st.columns(3)
 
-# Logic for Deal Grading
 is_positive_cf = monthly_net > 0
 is_infinite = cash_left <= 0
 
 if is_infinite and is_positive_cf:
-    status_headline = "💎 THE HOLY GRAIL"
-    status_color = "#5cb85c" # Green
-    status_text = "Infinite return with positive cash flow. This deal is a massive accelerator for your portfolio."
+    status_headline, status_color = "💎 THE HOLY GRAIL", "#5cb85c"
+    status_text = "Infinite return with positive cash flow. Portfolio accelerator."
 elif is_positive_cf:
-    status_headline = "✅ SOLID RENTAL"
-    status_color = "#CEB36F" # Gold
-    status_text = f"You have ${cash_left:,.0f} tied up, but the property pays for itself and more."
-elif monthly_net < 0:
-    status_headline = "🚨 CASH FLOW WARNING"
-    status_color = "#d9534f" # Red
-    status_text = "<b>DANGER:</b> This property is 'underwater' monthly. This will likely hurt your ability to borrow for the next deal."
+    status_headline, status_color = "✅ SOLID RENTAL", "#CEB36F"
+    status_text = f"You have ${cash_left:,.0f} tied up, but the property pays for itself."
+else:
+    status_headline, status_color = "⚠️ CASH FLOW WARNING", "#D97706"
+    status_text = f"This property is showing a monthly deficit of <b>${abs(monthly_net):,.0f}</b>."
 
-# Metric Row
+# Metrics Row
 if is_infinite:
-    res1.metric("Cash Left in Deal", "$0", delta="Infinite!", delta_color="normal")
+    res1.metric("Cash Left in Deal", "$0", delta="Infinite Return!", delta_color="normal")
     coc_display = "∞"
 else:
-    res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Stuck", delta_color="inverse")
-    coc_return = (monthly_net * 12) / cash_left * 100
-    coc_display = f"{coc_return:.1f}%"
+    res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Capital Stuck", delta_color="inverse")
+    coc_display = f"{((monthly_net * 12) / cash_left * 100):.1f}%"
 
 res2.metric("Equity Created", f"${round(arv - new_loan_amount, -3):,.0f}")
-res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo", delta="Negative" if not is_positive_cf else "Positive", delta_color="normal" if is_positive_cf else "inverse")
+res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo")
 
 # The Verdict Box
 st.markdown(f"""
@@ -138,48 +141,39 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 7. STRATEGIC INSIGHTS (SANITIZED UI) ---
+# --- 7. STRATEGIC INSIGHTS ---
 st.write("")
 st.subheader("📋 Deal Analysis & Recommendations")
 
-WARNING_AMBER = "#D97706" 
-
-# Recalculate DSCR for the text
-noi_annual = (monthly_rent - opex_buffer) * 12
-debt_service_annual = monthly_piti * 12
-dscr = noi_annual / debt_service_annual if debt_service_annual > 0 else 0
-
 if monthly_net < 0:
-    # Ensure this entire block is one single f-string with NO leading spaces inside the triple quotes
-    html_recommendation = f"""
-<div style="background-color: {WARNING_AMBER}15; padding: 20px; border-radius: 10px; border: 1px solid {WARNING_AMBER};">
-    <h4 style="color: {WARNING_AMBER}; margin-top: 0;">⚠️ Cash Flow Sensitivity</h4>
-    <p style="color: {SLATE_ACCENT};">This deal is currently showing a monthly deficit of <b>${abs(monthly_net):,.0f}</b>. Here is why this matters for your portfolio growth:</p>
+    html_rec = f"""
+<div style="background-color: #D9770615; padding: 20px; border-radius: 10px; border: 1px solid #D97706;">
+    <h4 style="color: #D97706; margin-top: 0;">⚠️ Cash Flow Sensitivity</h4>
+    <p style="color: {SLATE_ACCENT};">Why this matters for your portfolio growth:</p>
     <ul style="color: {SLATE_ACCENT}; line-height: 1.6;">
-        <li><b>Borrowing Power:</b> Your current <b>DSCR is {dscr:.2f}</b>. Lenders typically want 1.20+. Negative cash flow can "handcuff" your ability to get your next loan.</li>
-        <li><b>The "Repeat" Step:</b> Funding this loss from personal income slows down capital accumulation for Deal #2.</li>
+        <li><b>Borrowing Power:</b> Your <b>DSCR is {dscr:.2f}</b>. Lenders typically want 1.20+. This could stop your next loan.</li>
+        <li><b>Velocity:</b> Personal income used to fund losses cannot be used for the next down payment.</li>
     </ul>
-    <hr style="border: 0; border-top: 1px solid {WARNING_AMBER}50; margin: 15px 0;">
-    <h4 style="color: {WARNING_AMBER};">Ways to Optimize this Deal:</h4>
+    <hr style="border: 0; border-top: 1px solid #D9770650; margin: 15px 0;">
+    <h4 style="color: #D97706;">Optimization Toolkit:</h4>
     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
-        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-            <span style="font-size: 1.2em;">📉</span><br><b style="color: {CHARCOAL};">Adjust LTV</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Try a {refi_ltv*100 - 5:.0f}% Refi to lower the payment.</span>
+        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid #D9770630; text-align: center;">
+            <span style="font-size: 1.2em;">📉</span><br><b style="color: {CHARCOAL};">Adjust LTV</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Try {refi_ltv_val - 5}% LTV.</span>
         </div>
-        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-            <span style="font-size: 1.2em;">🛠️</span><br><b style="color: {CHARCOAL};">Lower OpEx</b><br><span style="font-size: 0.85em; color: #4A4E5A;">Self-manage or shop insurance for better rates.</span>
+        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid #D9770630; text-align: center;">
+            <span style="font-size: 1.2em;">🛠️</span><br><b style="color: {CHARCOAL};">Lower OpEx</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Self-manage or shop insurance.</span>
         </div>
-        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-            <span style="font-size: 1.2em;">💰</span><br><b style="color: {CHARCOAL};">Value-Add</b><br><span style="font-size: 0.85em; color: #4A4E5A;">Improve the unit to command a higher market rent.</span>
+        <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid #D9770630; text-align: center;">
+            <span style="font-size: 1.2em;">💰</span><br><b style="color: {CHARCOAL};">Value-Add</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Increase the market rent.</span>
         </div>
     </div>
 </div>
 """
-    st.markdown(html_recommendation, unsafe_allow_html=True)
-
+    st.markdown(html_rec, unsafe_allow_html=True)
 elif is_infinite:
-    st.success("✨ **The Perfect BRRRR:** You've recovered your initial capital. Focus on maintaining high occupancy while looking for your next property.")
+    st.success("✨ **The Perfect BRRRR:** You've recovered your capital. Focus on high occupancy and Deal #2.")
 else:
-    st.info(f"📈 **Wealth Builder:** This property is self-sustaining and earning a **{coc_display}** Cash-on-Cash return.")
+    st.info(f"📈 **Wealth Builder:** Property is earning a **{coc_display}** Cash-on-Cash return.")
 
 show_disclaimer()
 
