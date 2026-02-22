@@ -77,7 +77,7 @@ st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
     <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">📈 Strategic Brief: The Compounding Effect</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Welcome to the lab, <b>{p1_name} & {p2_name}</b>. We are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
+        Welcome to the lab, <b>{p1_name} </b>. We are isolating the impact of your extra monthly savings to see if your dollars work harder killing debt or growing in the market.
     </p>
 </div>
 """, unsafe_allow_html=True)
