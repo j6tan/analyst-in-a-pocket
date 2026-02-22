@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 def inject_global_css():
     st.markdown("""
@@ -98,3 +99,65 @@ def show_disclaimer():
         </p>
     </div>
     """, unsafe_allow_html=True)
+
+def add_pdf_button():
+    """Injects a button that triggers the browser's native Print/Save as PDF dialog."""
+    components.html(
+        """
+        <script>
+        function triggerPrint() {
+            window.parent.print();
+        }
+        </script>
+        <style>
+            .pdf-btn {
+                background-color: #2E2B28;
+                color: #CEB36F;
+                border: 1px solid #CEB36F;
+                padding: 10px 20px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 14px;
+                font-weight: bold;
+                width: 100%;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                transition: all 0.2s ease-in-out;
+            }
+            .pdf-btn:hover {
+                background-color: #CEB36F;
+                color: #2E2B28;
+            }
+        </style>
+        <button class="pdf-btn" onclick="triggerPrint()">📄 Save Report as PDF</button>
+        """,
+        height=50
+    )
+Step 2: Clean up the PDF format (Also in style_utils.py)
+When the user prints the page, we don't want the Streamlit sidebar, the top header bar, or the "Back to Home" button showing up on the final document.
+
+Inside your existing inject_global_css() function in style_utils.py, add this @media print block to the inside of your <style> tags:
+
+CSS
+/* --- PRINT STYLES FOR PDF EXPORT --- */
+@media print {
+    /* Hide the Streamlit Header and Sidebar */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    /* Force background to white for clean printing */
+    .stApp {
+        background-color: white !important;
+    }
+    /* Hide specific UI elements you don't want in the report */
+    .stButton > button {
+        display: none !important;
+    }
+    /* Expand the main container to use the full page width */
+    .main .block-container {
+        max-width: 100% !important;
+        padding-top: 0 !important;
+    }
+}
