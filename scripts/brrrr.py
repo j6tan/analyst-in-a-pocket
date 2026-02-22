@@ -55,6 +55,7 @@ for widget_key, (db_key, default_val) in input_defaults.items():
 PRIMARY_GOLD = "#CEB36F"
 CHARCOAL = "#2E2B28"
 SLATE_ACCENT = "#4A4E5A"
+OFF_WHITE = "#F8F9FA"  # <--- FIXED: Added this back!
 
 def get_logo():
     img_path = "logo.png"
@@ -186,11 +187,11 @@ if arv > 0:
         st.markdown(f"""
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
             <div style="background: {OFF_WHITE}; padding: 15px; border-radius: 8px; border-left: 5px solid {PRIMARY_GOLD};">
-                <b>1. Lower the LTV (Currently {refi_ltv_pct}%)</b><br>
+                <b style="color: {CHARCOAL};">1. Lower the LTV (Currently {refi_ltv_pct}%)</b><br>
                 <span style="font-size: 0.9em; color: {SLATE_ACCENT};">Drag the LTV slider down. You will leave more cash in the deal, but your Monthly Net and DSCR will turn positive.</span>
             </div>
             <div style="background: {OFF_WHITE}; padding: 15px; border-radius: 8px; border-left: 5px solid {PRIMARY_GOLD};">
-                <b>2. Increase the Rent</b><br>
+                <b style="color: {CHARCOAL};">2. Increase the Rent</b><br>
                 <span style="font-size: 0.9em; color: {SLATE_ACCENT};">Can you add a bedroom or upgrade finishes to command $200 more per month?</span>
             </div>
         </div>
