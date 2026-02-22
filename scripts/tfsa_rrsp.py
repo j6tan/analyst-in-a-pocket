@@ -199,7 +199,7 @@ with c1:
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {PRIMARY_GOLD}; box-shadow: {tfsa_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {PRIMARY_GOLD};">TFSA Drawdown</h3>
         <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 15px; border-bottom: 1px solid {BORDER_GREY}; padding-bottom: 10px;">
-            Gross Portfolio Built: <b>${tfsa_gross:,.0f}</b>
+            Total Portfolio (100% Tax-Free): <b>${tfsa_gross:,.0f}</b>
         </div>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Gross Withdrawal ({swr:.1f}%): <b>${tfsa_withdraw:,.0f}</b></p>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Income Tax Hit (0.0%): <b>$0</b></p>
@@ -213,7 +213,7 @@ with c2:
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {RRSP_COLOR}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {RRSP_COLOR};">RRSP Drawdown</h3>
         <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 15px; border-bottom: 1px solid {BORDER_GREY}; padding-bottom: 10px;">
-            Gross Portfolio Built: <b>${rrsp_gross:,.0f}</b>
+            Total Portfolio (Pre-Tax Gross): <b>${rrsp_gross:,.0f}</b>
         </div>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Gross Withdrawal ({swr:.1f}%): <b>${rrsp_withdraw:,.0f}</b></p>
         <p style="color: #d9534f; margin-bottom: 5px;">Income Tax Hit ({effective_tax_rate:.1f}%): <b>-${rrsp_income_tax:,.0f}</b></p>
