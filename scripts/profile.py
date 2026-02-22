@@ -22,27 +22,27 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 3. INLINE LOGO & TITLE ---
-def get_inline_logo(img_path, width=75):
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
     if os.path.exists(img_path):
         with open(img_path, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
         return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
-    return "<span style='font-size: 50px;'>🔥</span>" 
+    return "<span style='font-size: 50px;'>🔥</span>"
 
-logo_html = get_inline_logo("logo.png", width=75)
+logo_html = get_inline_logo(width=75)
 
-st.write("")
 st.markdown(f"""
-    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-bottom: 5px;'>
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
         {logo_html}
-        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>FIRE Investor Dashboard</h1>
-    </div>
-    <div style="padding: 8px 15px 25px 0px;">
-        <p style='text-align: left; color: #6c757d; font-size: 1.1em; font-style: italic; margin-bottom: 0; line-height: 1.4;'>
-            Empowering Canadian T4 earners to optimize their wealth and achieve financial freedom by turning everyday income into a wealth-building machine.
-        </p>
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>General Client Information</h1>
     </div>
 """, unsafe_allow_html=True)
+
 
 # --- SECTION 1: INCOME ---
 st.subheader("👥 Household Income Details")
