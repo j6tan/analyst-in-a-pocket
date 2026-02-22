@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import os
+import base64
 import json
 from style_utils import inject_global_css, show_disclaimer 
 
@@ -25,8 +26,8 @@ if 'app_db' not in st.session_state:
     st.session_state.app_db = {}
 
 prof = st.session_state.app_db.get('profile', {})
-client_name1 = prof.get('p1_name', 'Dori') 
-client_name2 = prof.get('p2_name', 'Kevin') 
+client_name1 = prof.get('p1_name', 'Primary Client') 
+client_name2 = prof.get('p2_name', '') 
 household_names = f"{client_name1} & {client_name2}" if client_name2 else client_name1
 
 # --- 2. PERSISTENCE & INITIALIZATION ---
@@ -232,12 +233,27 @@ def simulate_mortgage(principal, annual_rate, amort_years, freq_label, extra_per
         "Name": "" 
     }
 
-# --- 7. INTERFACE ---
-header_col1, header_col2 = st.columns([1, 5], vertical_alignment="center")
-with header_col1:
-    if os.path.exists("logo.png"): st.image("logo.png", width=140)
-with header_col2:
-    st.title("Mortgage Scenario Analysis") 
+# --- 7. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>"
+
+logo_html = get_inline_logo(width=75)
+
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Mortgage Scenario Analysis</h1>
+    </div>
+""", unsafe_allow_html=True)
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 15px 25px; border-radius: 10px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 15px;">
@@ -426,4 +442,5 @@ with tabs[3]:
 
 # --- 12. LEGAL DISCLAIMER ---
 show_disclaimer()
+
 
