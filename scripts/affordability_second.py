@@ -76,7 +76,7 @@ logo_html = get_inline_logo(width=75)
 st.markdown(f"""
     <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
         {logo_html}
-        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Should we buy the second home?</h1>
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Can we afford a second home?</h1>
     </div>
 """, unsafe_allow_html=True)
 
@@ -262,5 +262,6 @@ with col_s2:
     st.caption("⚠️ *Note: All surpluses are pre-lifestyle. Accuracy depends on your 'Monthly Budget' inputs.*")
 
 show_disclaimer()
+
 
 
