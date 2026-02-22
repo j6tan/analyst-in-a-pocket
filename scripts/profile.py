@@ -36,11 +36,11 @@ def get_inline_logo(img_name="logo.png", width=80):
 
 logo_html = get_inline_logo(width=80)
 
-st.write("")
+# Removed st.write("") and added margin-top: -20px to pull it up closer to the divider
 st.markdown(f"""
-    <div style='display: flex; justify-content: flex-start; align-items: center; margin-bottom: 25px;'>
+    <div style='display: flex; justify-content: flex-start; align-items: center; margin-top: -20px; margin-bottom: 25px;'>
         {logo_html}
-        <h1 style='margin: 0; padding: 0;'> General Client Information</h1>
+        <h1 style='margin: 0; padding: 0;'>👤 General Client Information</h1>
     </div>
 """, unsafe_allow_html=True)
 
