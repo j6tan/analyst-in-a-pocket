@@ -138,31 +138,46 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- 7. STRATEGIC RECOMMENDATIONS ---
+# --- 7. STRATEGIC INSIGHTS (REFINED UI) ---
 st.write("")
-st.subheader("💡 Expert Recommendations")
+st.subheader("📋 Deal Analysis & Recommendations")
+
+# Define a softer "Warning" color (a sophisticated Amber/Orange)
+WARNING_AMBER = "#D97706" 
 
 if monthly_net < 0:
-    st.error(f"""
-    **Why this is risky:** You are losing **${abs(monthly_net):,.0f}** every month. 
-    1. **Borrowing Power:** Most lenders want a DSCR (Debt Service Coverage Ratio) of at least 1.2. This deal is well below that.
-    2. **The "Repeat" Step:** You'll have to fund this loss out of your paycheck, which reduces your ability to save for the next deal.
-    
-    **How to fix this deal:**
-    * 📉 **Reduce LTV:** Try a {refi_ltv*100 - 5:.0f}% refinance instead of {refi_ltv*100:.0f}%. It leaves more cash in the deal but saves the cash flow.
-    * 🛠️ **Lower Expenses:** Can you manage the property yourself to save on fees?
-    * 💰 **Increase Rent:** Is there a way to add a 'Value-Add' (like a 3rd bedroom) to justify higher rent?
-    """)
+    # We use a standard container or a custom div instead of st.error
+    st.markdown(f"""
+    <div style="background-color: {WARNING_AMBER}15; padding: 20px; border-radius: 10px; border: 1px solid {WARNING_AMBER};">
+        <h4 style="color: {WARNING_AMBER}; margin-top: 0;">⚠️ Cash Flow Sensitivity</h4>
+        <p style="color: {SLATE_ACCENT};">This deal is currently showing a monthly deficit of <b>${abs(monthly_net):,.0f}</b>. Here is why this matters for your portfolio growth:</p>
+        
+        <ul style="color: {SLATE_ACCENT}; line-height: 1.6;">
+            <li><b>Borrowing Power:</b> Lenders look for a <b>DSCR (Debt Service Coverage Ratio)</b> of ~1.2x. A negative cash flow reduces your "Global Cash Flow" and can stop you from getting your next loan.</li>
+            <li><b>The "Repeat" Step:</b> Funding this loss from your personal income slows down your ability to save for the next acquisition.</li>
+        </ul>
+        
+        <hr style="border: 0; border-top: 1px solid {WARNING_AMBER}50; margin: 15px 0;">
+        
+        <h4 style="color: {WARNING_AMBER};">Ways to Optimize this Deal:</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
+            <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
+                <span style="font-size: 1.2em;">📉</span><br><b>Adjust LTV</b><br><span style="font-size: 0.85em;">Try a {refi_ltv*100 - 5:.0f}% Refi to lower the payment.</span>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
+                <span style="font-size: 1.2em;">🛠️</span><br><b>Lower OpEx</b><br><span style="font-size: 0.85em;">Self-manage or shop insurance for better rates.</span>
+            </div>
+            <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
+                <span style="font-size: 1.2em;">💰</span><br><b>Value-Add</b><br><span style="font-size: 0.85em;">Improve the unit to command a higher market rent.</span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 elif is_infinite:
-    st.success("""
-    **Strategy:** You've achieved the perfect BRRRR. Since you have no capital left in this deal, your return is mathematically infinite. 
-    **Next Step:** Take the original capital you just recovered and start looking for Deal #2 immediately.
-    """)
+    st.success("✨ **The Perfect BRRRR:** You've recovered your initial capital. Focus on maintaining high occupancy while looking for your next property.")
 else:
-    st.info(f"""
-    **Strategy:** This is a 'Workhorse' deal. You have some capital tied up, but it's earning a **{coc_display}** return. 
-    Compare this to your 7% stock market return—this house is likely outperforming your other investments.
-    """)
+    st.info(f"📈 **Wealth Builder:** This property is self-sustaining and earning a **{coc_display}** Cash-on-Cash return.")
 
 show_disclaimer()
 
