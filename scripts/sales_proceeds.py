@@ -289,7 +289,11 @@ if target_price > 0:
     </div>
     """, unsafe_allow_html=True)
     
-    st.caption("Note: This is an estimate. Penalties and taxes vary based on exact lender terms and CRA assessments.")
+    st.markdown("""
+    <div style="max-width: 800px; margin: 10px auto 0 auto; color: #6c757d; font-size: 0.85em;">
+        Note: This is an estimate. Penalties and taxes vary based on exact lender terms and CRA assessments.
+    </div>
+    """, unsafe_allow_html=True)
 
 else:
     st.info("👈 Enter a target price to generate the analysis.")
