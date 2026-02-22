@@ -61,6 +61,7 @@ if not tr_data.get('initialized'):
     tr_data['current_income'] = current_t4
     tr_data['retire_income'] = retire_inc
     tr_data['invest_amt'] = 10000.0
+    tr_data['annual_invest'] = 5000.0 # NEW: Annual contribution
     tr_data['years'] = 20.0
     tr_data['expected_return'] = 7.0
     tr_data['initialized'] = True
@@ -110,21 +111,36 @@ with col1:
 
 with col2:
     st.subheader("📈 The Investment Variables")
-    invest_amt = cloud_input("After-Tax Cash to Invest ($)", "tfsa_rrsp", "invest_amt", step=1000, help="How much cash is sitting in your bank account right now ready to deploy?")
+    invest_amt = cloud_input("Initial Lump Sum Deposit ($)", "tfsa_rrsp", "invest_amt", step=1000, help="The after-tax cash sitting in your bank right now.")
+    annual_invest = cloud_input("Annual Contribution ($)", "tfsa_rrsp", "annual_invest", step=1000, help="New after-tax money you will add every year (like a yearly bonus).")
     years = cloud_input("Years to Grow", "tfsa_rrsp", "years", step=1)
     expected_return = cloud_input("Expected Annual Return (%)", "tfsa_rrsp", "expected_return", step=0.1)
 
 # --- 6. CORE MATH ENGINE ---
+r = expected_return / 100
+t = years
+
 # 1. TFSA Math (Simple)
 tfsa_deposit = invest_amt
-tfsa_future_value = tfsa_deposit * ((1 + (expected_return / 100)) ** years)
+tfsa_annual = annual_invest
+
+if r > 0:
+    tfsa_future_value = (tfsa_deposit * ((1 + r) ** t)) + (tfsa_annual * (((1 + r) ** t - 1) / r))
+else:
+    tfsa_future_value = tfsa_deposit + (tfsa_annual * t)
+
 tfsa_net = tfsa_future_value # Tax-free withdrawal
 
 # 2. RRSP Math (The Gross-Up)
-# If you have $10,000 after-tax, its pre-tax equivalent is: $10,000 / (1 - marginal_tax_rate)
-# This perfectly mimics depositing $10k, getting a refund, reinvesting it, getting a refund on the refund, etc.
-rrsp_deposit = invest_amt / (1 - (curr_rate / 100)) if curr_rate < 100 else invest_amt
-rrsp_future_value = rrsp_deposit * ((1 + (expected_return / 100)) ** years)
+tax_factor = (1 - (curr_rate / 100)) if curr_rate < 100 else 1
+rrsp_deposit = invest_amt / tax_factor
+rrsp_annual = annual_invest / tax_factor
+
+if r > 0:
+    rrsp_future_value = (rrsp_deposit * ((1 + r) ** t)) + (rrsp_annual * (((1 + r) ** t - 1) / r))
+else:
+    rrsp_future_value = rrsp_deposit + (rrsp_annual * t)
+
 rrsp_taxes_owed = rrsp_future_value * (ret_rate / 100)
 rrsp_net = rrsp_future_value - rrsp_taxes_owed
 
@@ -132,13 +148,13 @@ rrsp_net = rrsp_future_value - rrsp_taxes_owed
 diff = abs(rrsp_net - tfsa_net)
 if rrsp_net > tfsa_net:
     winner = "RRSP"
-    winner_color = "#5cb85c" # Green
+    winner_color = CHARCOAL # Updated to brand palette
 elif tfsa_net > rrsp_net:
     winner = "TFSA"
     winner_color = PRIMARY_GOLD
 else:
     winner = "TIE (Mathematically Identical)"
-    winner_color = CHARCOAL
+    winner_color = SLATE_ACCENT
 
 # --- 7. VISUALS & DASHBOARD ---
 st.divider()
@@ -156,7 +172,8 @@ with c1:
     st.markdown(f"""
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {PRIMARY_GOLD}; text-align: center; height: 100%;">
         <h3 style="margin-top:0; color: {CHARCOAL};">TFSA Strategy</h3>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Starting Deposit (After-Tax): <b>${tfsa_deposit:,.0f}</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Initial Deposit: <b>${tfsa_deposit:,.0f}</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Annual Added: <b>${tfsa_annual:,.0f} / yr</b></p>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Taxes Owed at Retirement: <b>$0</b></p>
         <h2 style="color: {PRIMARY_GOLD}; margin-top: 15px;">Net: ${tfsa_net:,.0f}</h2>
     </div>
@@ -164,12 +181,13 @@ with c1:
 
 with c2:
     st.markdown(f"""
-    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid #5cb85c; text-align: center; height: 100%;">
+    <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {CHARCOAL}; text-align: center; height: 100%;">
         <h3 style="margin-top:0; color: {CHARCOAL};">RRSP Strategy</h3>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px; font-size: 0.9em;"><i>*Assumes tax refund is reinvested</i></p>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Starting Deposit (Grossed-Up): <b>${rrsp_deposit:,.0f}</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Initial Deposit (Grossed-Up): <b>${rrsp_deposit:,.0f}</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Annual Added (Grossed-Up): <b>${rrsp_annual:,.0f} / yr</b></p>
         <p style="color: #d9534f; margin-bottom: 5px;">Taxes Owed at Retirement: <b>-${rrsp_taxes_owed:,.0f}</b></p>
-        <h2 style="color: #5cb85c; margin-top: 15px;">Net: ${rrsp_net:,.0f}</h2>
+        <h2 style="color: {CHARCOAL}; margin-top: 15px;">Net: ${rrsp_net:,.0f}</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -185,7 +203,7 @@ fig = go.Figure(data=[
     go.Bar(
         x=chart_data["Strategy"], 
         y=chart_data["Net After-Tax Wealth"],
-        marker_color=[PRIMARY_GOLD, '#5cb85c'],
+        marker_color=[PRIMARY_GOLD, CHARCOAL], # Updated to brand palette
         text=chart_data["Net After-Tax Wealth"].apply(lambda x: f"${x:,.0f}"),
         textposition='auto',
         width=0.4
