@@ -97,7 +97,7 @@ monthly_piti = (new_loan_amount * (refi_rate/100/12)) / (1 - (1 + refi_rate/100/
 opex_buffer = monthly_rent * 0.25 # 25% for taxes, insurance, repairs
 monthly_net = round(monthly_rent - monthly_piti - opex_buffer, 0)
 
-# --- 6. THE RESULTS DASHBOARD (COMPACT VERSION) ---
+# --- 6. THE RESULTS DASHBOARD (BALANCED VERSION) ---
 st.divider()
 res1, res2, res3 = st.columns(3)
 
@@ -105,21 +105,21 @@ if cash_left <= 0:
     res1.metric("Cash Left in Deal", "$0", delta="Infinite Return!", delta_color="normal")
     status_headline = "🔥 THE PERFECT BRRRR"
     status_color = "#5cb85c"
-    status_text = f"Capital fully recycled. You own this for $0 net investment."
+    status_text = f"Capital fully recycled. You own this property for <b>$0</b> net investment."
 else:
     res1.metric("Cash Left in Deal", f"${cash_left:,.0f}", delta="Capital Stuck", delta_color="inverse")
     status_headline = "🧱 CAPITAL COMMITTED"
     status_color = "#2B5C8F"
-    status_text = f"${cash_left:,.0f} remains tied up in this asset."
+    status_text = f"<b>${cash_left:,.0f}</b> of your capital remains tied up in this asset."
 
 res2.metric("Equity Created", f"${round(arv - new_loan_amount, -3):,.0f}")
 res3.metric("Est. Net Cash Flow", f"${monthly_net:,.0f}/mo")
 
-# Sleeker, more compact status box
+# Re-balanced status box: Bold but sleek
 st.markdown(f"""
-<div style="text-align: center; margin-top: 15px; padding: 10px 20px; border-radius: 8px; border: 1px solid {status_color}; background-color: {status_color}10;">
-    <h4 style="color: {status_color}; margin: 0; font-size: 1.1em; letter-spacing: 1px;">{status_headline}</h4>
-    <p style="color: {SLATE_ACCENT}; margin: 5px 0 0 0; font-size: 0.95em;">{status_text}</p>
+<div style="text-align: center; margin-top: 20px; padding: 15px 25px; border-radius: 10px; border: 2px solid {status_color}; background-color: {status_color}10;">
+    <h3 style="color: {status_color}; margin: 0; font-size: 1.4em; font-weight: 700; letter-spacing: 0.5px;">{status_headline}</h3>
+    <p style="color: {SLATE_ACCENT}; margin: 8px 0 0 0; font-size: 1.1em; line-height: 1.4;">{status_text}</p>
 </div>
 """, unsafe_allow_html=True)
 
