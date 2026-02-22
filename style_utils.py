@@ -135,22 +135,23 @@ def add_pdf_button():
         }
         </script>
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+            
             .pdf-btn {
-                background-color: #2E2B28;
-                color: #CEB36F;
-                border: 1px solid #CEB36F;
-                padding: 10px 20px;
-                border-radius: 8px;
+                background-color: #EDEDED;
+                color: #444444;
+                border: none;
+                padding: 0.6rem 2rem;
+                border-radius: 50px;
                 cursor: pointer;
-                font-size: 14px;
-                font-weight: bold;
+                font-size: 16px;
                 width: 100%;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-                transition: all 0.2s ease-in-out;
+                font-family: 'Inter', sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+                transition: background-color 0.2s ease-in-out;
             }
             .pdf-btn:hover {
-                background-color: #CEB36F;
-                color: #2E2B28;
+                background-color: #D6D6D6;
+                color: #444444;
             }
         </style>
         <button class="pdf-btn" onclick="triggerPrint()">📄 Save Report as PDF</button>
