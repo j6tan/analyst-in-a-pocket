@@ -46,7 +46,8 @@ current_invested = (
     float(nw_data.get('tfsa_value', 0)) + 
     float(nw_data.get('rrsp_value', 0)) + 
     float(nw_data.get('non_reg_value', 0)) +
-    float(nw_data.get('crypto_value', 0))
+    float(nw_data.get('crypto_value', 0)) +
+    float(nw_data.get('cash_value', 0)) # Now adding your Cash & Checking!
 )
 
 # Inject the safe defaults directly into the database
@@ -100,7 +101,7 @@ c3, c4 = st.columns(2)
 with c3:
     monthly_contribution = cloud_input("Monthly Investments ($)", "retire_calc", "monthly_contribution", step=500, help="How much new money do you put into your investments every single month?")
 with c4:
-    monthly_income = cloud_input("Desired Monthly Retirement Income ($)", "retire_calc", "monthly_income", step=500, help="When you finally quit your job, how much money do you need every month to cover your bills, travel, and lifestyle?")
+    monthly_income = cloud_input("Desired Monthly Retirement Income ($)", "retire_calc", "monthly_income", step=500, help="Include your expected mortgage payment here IF your house will not be completely paid off by the time you retire!")
 
 # Hide the nerdy math from the main view to reduce friction
 with st.expander("⚙️ Advanced Math Assumptions (Optional)"):
