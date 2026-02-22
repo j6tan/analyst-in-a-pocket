@@ -22,11 +22,13 @@ if st.button("⬅️ Back to Home Dashboard"):
 st.divider()
 
 # --- 2. THEME VARIABLES ---
-PRIMARY_GOLD = "#CEB36F"
+PRIMARY_GOLD = "#CEB36F"   # TFSA Color
+RRSP_COLOR = "#706262"     # RRSP Brown Color
 CHARCOAL = "#2E2B28"
 OFF_WHITE = "#F8F9FA"
 SLATE_ACCENT = "#4A4E5A"
 BORDER_GREY = "#DEE2E6"
+WINNER_GLOW = "#FF9800"    # Bright Orange Glow
 
 # --- 3. DATA INIT & SMART GREETING ---
 prof = st.session_state.app_db.get('profile', {})
@@ -45,23 +47,34 @@ greeting_names = f"{p1_raw} & {p2_raw}" if p1_raw and p2_raw else (p1_raw or "Pr
 current_t4 = float(prof.get('p1_t4', 0)) + float(prof.get('p1_bonus', 0)) + float(prof.get('p1_commission', 0))
 if current_t4 == 0: current_t4 = 90000.0
 
-# Estimate retirement income (from Retire Calc target spend, or default)
+# Estimate retirement income
 retire_inc = float(rc_data.get('monthly_income', 5000)) * 12
 
-# Simple Marginal Tax Estimator (Rough Canadian Averages)
-def get_estimated_tax_rate(income):
+# Canadian Tax Estimators (Federal + Provincial)
+def get_marginal_tax_rate(income):
+    # What you save on the refund today
     if income <= 55867: return 20.0
     elif income <= 111733: return 31.0
     elif income <= 173205: return 40.0
     elif income <= 246752: return 46.0
     else: return 53.0
 
+def get_average_tax_rate(income):
+    # What you actually pay when drawing down slowly in retirement
+    if income <= 30000: return 12.0
+    elif income <= 60000: return 18.0
+    elif income <= 90000: return 22.0
+    elif income <= 120000: return 26.0
+    elif income <= 150000: return 29.0
+    elif income <= 200000: return 33.0
+    else: return 38.0
+
 # Inject safe defaults
 if not tr_data.get('initialized'):
     tr_data['current_income'] = current_t4
     tr_data['retire_income'] = retire_inc
     tr_data['invest_amt'] = 10000.0
-    tr_data['annual_invest'] = 5000.0 # NEW: Annual contribution
+    tr_data['annual_invest'] = 5000.0
     tr_data['years'] = 20.0
     tr_data['expected_return'] = 7.0
     tr_data['initialized'] = True
@@ -88,9 +101,9 @@ st.markdown(f"""
 
 st.markdown(f"""
 <div style="background-color: {OFF_WHITE}; padding: 20px 25px; border-radius: 12px; border: 1px solid {BORDER_GREY}; border-left: 8px solid {PRIMARY_GOLD}; margin-bottom: 25px;">
-    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🍁 The Ultimate Tax Showdown</h3>
+    <h3 style="color: {SLATE_ACCENT}; margin-top: 0; font-size: 1.4em;">🍁 Strategic Drawdown Analysis</h3>
     <p style="color: {SLATE_ACCENT}; font-size: 1.1em; line-height: 1.5; margin-bottom: 0;">
-        Welcome back, <b>{greeting_names}</b>. Should your next dollar go into your TFSA or your RRSP? To make this a fair fight, this calculator assumes that if you use an RRSP, you <b>reinvest your tax refund</b> right back into the market.
+        Welcome back, <b>{greeting_names}</b>. We aren't assuming you cash out your RRSP all at once. This model strategically reinvests your tax refunds today at your <b>Marginal</b> tax rate, and withdraws them slowly in retirement at your much lower <b>Average</b> tax rate.
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -100,19 +113,19 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("💼 The Tax Variables")
-    current_income = cloud_input("Current Annual Income ($)", "tfsa_rrsp", "current_income", step=5000, help="Used to calculate your tax bracket today.")
-    retire_income = cloud_input("Expected Retirement Income ($)", "tfsa_rrsp", "retire_income", step=5000, help="Used to calculate your tax bracket when you withdraw the money.")
+    current_income = cloud_input("Current Annual Income ($)", "tfsa_rrsp", "current_income", step=5000, help="Determines the Marginal tax refund you get today.")
+    retire_income = cloud_input("Expected Retirement Income ($)", "tfsa_rrsp", "retire_income", step=5000, help="Determines the Average tax rate you pay when withdrawing slowly.")
     
     # Auto-calculate rates
-    curr_rate = get_estimated_tax_rate(current_income)
-    ret_rate = get_estimated_tax_rate(retire_income)
+    curr_rate = get_marginal_tax_rate(current_income)
+    ret_rate = get_average_tax_rate(retire_income)
     
-    st.info(f"**Estimated Marginal Rates:**\n* Today: **{curr_rate}%**\n* In Retirement: **{ret_rate}%**")
+    st.info(f"**Tax Strategy Identified:**\n* Today's Marginal Refund Rate: **{curr_rate}%**\n* Retirement Average Withdrawal Rate: **{ret_rate}%**")
 
 with col2:
     st.subheader("📈 The Investment Variables")
     invest_amt = cloud_input("Initial Lump Sum Deposit ($)", "tfsa_rrsp", "invest_amt", step=1000, help="The after-tax cash sitting in your bank right now.")
-    annual_invest = cloud_input("Annual Contribution ($)", "tfsa_rrsp", "annual_invest", step=1000, help="New after-tax money you will add every year (like a yearly bonus).")
+    annual_invest = cloud_input("Annual Contribution ($)", "tfsa_rrsp", "annual_invest", step=1000, help="New after-tax money you will add every year.")
     years = cloud_input("Years to Grow", "tfsa_rrsp", "years", step=1)
     expected_return = cloud_input("Expected Annual Return (%)", "tfsa_rrsp", "expected_return", step=0.1)
 
@@ -131,7 +144,7 @@ else:
 
 tfsa_net = tfsa_future_value # Tax-free withdrawal
 
-# 2. RRSP Math (The Gross-Up)
+# 2. RRSP Math (The Gross-Up + Strategic Drawdown)
 tax_factor = (1 - (curr_rate / 100)) if curr_rate < 100 else 1
 rrsp_deposit = invest_amt / tax_factor
 rrsp_annual = annual_invest / tax_factor
@@ -141,6 +154,7 @@ if r > 0:
 else:
     rrsp_future_value = rrsp_deposit + (rrsp_annual * t)
 
+# TAX CHANGE: Now taxed at the lower, Average Withdrawal Rate!
 rrsp_taxes_owed = rrsp_future_value * (ret_rate / 100)
 rrsp_net = rrsp_future_value - rrsp_taxes_owed
 
@@ -149,18 +163,14 @@ diff = abs(rrsp_net - tfsa_net)
 tfsa_glow = "none"
 rrsp_glow = "none"
 
-RRSP_COLOR = "#2B5C8F"  # Deep professional blue for RRSP
-WINNER_GLOW = "#FF9800" # Bright orange for the glowing outline
-
 if rrsp_net > tfsa_net:
     winner = "RRSP"
     winner_color = RRSP_COLOR 
-    # Made the shadow wider and brighter!
-    rrsp_glow = f"0 0 15px 3px {WINNER_GLOW}" 
+    rrsp_glow = f"0 0 15px 4px {WINNER_GLOW}" # Bright Orange Glow
 elif tfsa_net > rrsp_net:
     winner = "TFSA"
     winner_color = PRIMARY_GOLD
-    tfsa_glow = f"0 0 15px 3px {WINNER_GLOW}" 
+    tfsa_glow = f"0 0 15px 4px {WINNER_GLOW}" # Bright Orange Glow
 else:
     winner = "TIE (Mathematically Identical)"
     winner_color = SLATE_ACCENT
@@ -180,7 +190,7 @@ c1, c2 = st.columns(2)
 with c1:
     st.markdown(f"""
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {PRIMARY_GOLD}; box-shadow: {tfsa_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
-        <h3 style="margin-top:0; color: {CHARCOAL};">TFSA Strategy</h3>
+        <h3 style="margin-top:0; color: {PRIMARY_GOLD};">TFSA Strategy</h3>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Initial Deposit: <b>${tfsa_deposit:,.0f}</b></p>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Annual Added: <b>${tfsa_annual:,.0f} / yr</b></p>
         <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Taxes Owed at Retirement: <b>$0</b></p>
@@ -198,7 +208,7 @@ with c2:
                 <span>Pure Investment:</span>
                 <b>${invest_amt:,.0f} + ${annual_invest:,.0f}/yr</b>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: #5cb85c;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px; color: {RRSP_COLOR};">
                 <span>Reinvested Refunds:</span>
                 <b>+${(rrsp_deposit - invest_amt):,.0f} + ${(rrsp_annual - annual_invest):,.0f}/yr</b>
             </div>
@@ -207,7 +217,7 @@ with c2:
                 <span>${rrsp_future_value:,.0f}</span>
             </div>
         </div>
-        <p style="color: #d9534f; margin-bottom: 5px;">Taxes Owed at Retirement: <b>-${rrsp_taxes_owed:,.0f}</b></p>
+        <p style="color: #d9534f; margin-bottom: 5px;">Taxes Owed (Strategic Drawdown): <b>-${rrsp_taxes_owed:,.0f}</b></p>
         <h2 style="color: {RRSP_COLOR}; margin-top: 10px;">Net: ${rrsp_net:,.0f}</h2>
     </div>
     """, unsafe_allow_html=True)
@@ -220,8 +230,6 @@ st.subheader("📈 Wealth Trajectory & The Retirement Tax Hit")
 years_list = list(range(int(years) + 1))
 tfsa_balances = []
 rrsp_balances = []
-
-r = expected_return / 100
 
 for y in years_list:
     if r > 0:
@@ -242,7 +250,7 @@ rrsp_balances.append(rrsp_net)
 
 fig = go.Figure()
 
-# TFSA Line
+# TFSA Line (Golden)
 fig.add_trace(go.Scatter(
     x=years_list, 
     y=tfsa_balances, 
@@ -251,23 +259,23 @@ fig.add_trace(go.Scatter(
     line=dict(color=PRIMARY_GOLD, width=4)
 ))
 
-# RRSP Line
+# RRSP Line (Brown)
 fig.add_trace(go.Scatter(
     x=years_list, 
     y=rrsp_balances, 
     mode='lines',
     name='RRSP (Gross Value → After-Tax Drop)', 
-    line=dict(color=RRSP_COLOR, width=4) # Updated to the new Blue!
+    line=dict(color=RRSP_COLOR, width=4) 
 ))
 
 fig.update_layout(
     xaxis=dict(
         title="Years Invested",
-        range=[0, drop_year + 0.5] # This forces the chart to not cut off the edge!
+        range=[0, drop_year + 1.5] # The 1.5 padding forces the graph to not cut off!
     ),
     yaxis_title="Portfolio Value ($)",
     height=450,
-    margin=dict(t=20, b=20, l=0, r=0),
+    margin=dict(t=20, b=20, l=0, r=40), # Added a right margin here too to prevent clipping
     hovermode="x unified",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 )
@@ -276,18 +284,8 @@ st.plotly_chart(fig, use_container_width=True)
 
 # THE IRONCLAD RULE EXPLANATION
 st.info("""
-**💡 The Ironclad Rule of Canadian Investing:** If your tax bracket is **higher** today than it will be in retirement, the **RRSP** wins. 
-If your tax bracket is **lower** today than it will be in retirement, the **TFSA** wins. 
-If your tax bracket stays exactly the **same**, they tie!
+**💡 The Canadian Tax Arbitrage:** The true power of the RRSP comes from "Tax Arbitrage". You are securing a tax refund today based on your high **Marginal** tax rate, and withdrawing it later at your much lower **Average** tax rate. Because you draw down an RRSP slowly over decades, you avoid hitting the highest tax brackets in retirement.
 """)
 
 # --- 8. ERRORS & OMISSIONS DISCLAIMER ---
 show_disclaimer()
-
-# --- FOOTER ---
-st.markdown("""
-    <div style="text-align: center; color: #adb5bd; font-size: 0.85em; margin-top: 50px; padding-top: 20px; border-top: 1px solid #dee2e6;">
-        &copy; 2026 FIRE Calculator. All rights reserved. <br>
-        <span style="font-size: 0.9em; font-style: italic;">Empowering Canadian professionals to build wealth.</span>
-    </div>
-""", unsafe_allow_html=True)
