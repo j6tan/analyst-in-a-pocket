@@ -23,33 +23,26 @@ def inject_global_css():
         h1 { font-weight: 800 !important; letter-spacing: -0.04em !important; font-size: 3rem !important; }
         h2, h3 { font-weight: 700 !important; }
 
-        /* 4. BUTTONS - AGGRESSIVE TARGETING */
-        
-        /* The Native Streamlit Button Box */
-        button[data-testid="baseButton-secondary"] {
+        /* 4. BUTTONS - SAFE RESTORE */
+        div.stButton > button {
             background-color: #EDEDED !important;
-            border: 0px solid transparent !important; /* Force kill the faint border */
             border-radius: 50px !important;
+            border: none !important;
             box-shadow: none !important;
             min-height: 42px !important;
-            height: 42px !important; /* Lock the height */
-            padding: 0 2rem !important;
+            white-space: nowrap !important;
         }
         
-        /* The Text Inside the Native Button */
-        button[data-testid="baseButton-secondary"] p {
-            color: #444444 !important;
+        /* Force the text inside the native button to be bold and dark grey */
+        div.stButton > button p {
             font-weight: 600 !important;
             font-size: 14px !important;
+            color: #444444 !important;
             margin: 0 !important;
-            padding: 0 !important;
         }
 
-        /* Hover Effect */
-        button[data-testid="baseButton-secondary"]:hover {
+        div.stButton > button:hover {
             background-color: #D6D6D6 !important;
-            color: #444444 !important;
-            border: 0px solid transparent !important;
         }
 
         /* 5. SIDEBAR FIXES */
@@ -63,43 +56,24 @@ def inject_global_css():
             margin-top: 1.5rem !important;
         }
         
-        /* FIX: Only hide Footer. Do NOT hide Header (it kills the sidebar toggle) */
+        /* FIX: Only hide Footer. Do NOT hide Header */
         footer {visibility: hidden;}
 
         /* 6. PRINT STYLES FOR PDF EXPORT */
         @media print {
-            /* Hide the Streamlit Header and Sidebar */
-            header[data-testid="stHeader"] {
-                display: none !important;
-            }
-            [data-testid="stSidebar"] {
-                display: none !important;
-            }
-            /* Force background to white for clean printing */
-            .stApp {
-                background-color: white !important;
-            }
-            /* Hide specific UI elements you don't want in the report */
-            .stButton > button {
-                display: none !important;
-            }
-            /* Expand the main container to use the full page width */
-            .main .block-container {
-                max-width: 100% !important;
-                padding-top: 0 !important;
-            }
+            header[data-testid="stHeader"] { display: none !important; }
+            [data-testid="stSidebar"] { display: none !important; }
+            .stApp { background-color: white !important; }
+            .stButton > button { display: none !important; }
+            .main .block-container { max-width: 100% !important; padding-top: 0 !important; }
         }
         </style>
     """, unsafe_allow_html=True)
 
 def check_premium_access():
-    """
-    Stops execution if the user is not a Pro member.
-    """
     if st.session_state.get("is_pro", False):
-        return  # Allowed
+        return
 
-    # Paywall UI
     st.markdown("""
     <div style="background-color: #F8F9FA; border: 1px solid #ddd; padding: 40px; border-radius: 15px; text-align: center; margin-top: 50px;">
         <div style="font-size: 60px;">🔒</div>
@@ -119,13 +93,11 @@ def check_premium_access():
     </div>
     """, unsafe_allow_html=True)
     
-    # Upgrade Button
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         if st.button("🚀 Upgrade to Pro (Demo)", type="primary", use_container_width=True):
             st.session_state.is_pro = True
             st.rerun()
-    
     st.stop()
 
 def show_disclaimer():
@@ -155,11 +127,11 @@ def add_pdf_button():
             body { margin: 0; padding: 0; background: transparent; }
             
             .pdf-btn {
-                box-sizing: border-box; /* Stops invisible padding */
+                box-sizing: border-box;
                 background-color: #EDEDED;
                 color: #444444;
                 border: none;
-                height: 42px; /* Locked to 42px */
+                height: 42px;
                 border-radius: 50px;
                 cursor: pointer;
                 font-size: 14px;
