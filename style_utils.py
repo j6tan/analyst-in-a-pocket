@@ -30,8 +30,14 @@ def inject_global_css():
             border-radius: 50px !important;
             padding: 0.6rem 2rem !important;
             border: none !important;
-            font-size: 14px !important; /* Force match */
-            font-weight: 600 !important; /* Force Bold */
+            white-space: nowrap !important; /* Stops the box from shrinking */
+        }
+        /* Force Streamlit's internal text tag to be bold and stay on one line */
+        div.stButton > button p {
+            font-weight: 600 !important; 
+            font-size: 14px !important;
+            white-space: nowrap !important; 
+            margin: 0 !important;
         }
         div.stButton > button:hover { background-color: #333 !important; }
         div.stButton > button[kind="secondary"] {
@@ -146,18 +152,23 @@ def add_pdf_button():
                 padding: 0.6rem 2rem;
                 border-radius: 50px;
                 cursor: pointer;
-                font-size: 14px; /* Dropped to match Streamlit default */
-                font-weight: 600; /* Added Bold */
+                font-size: 14px;
+                font-weight: 600;
                 width: 100%;
                 font-family: 'Inter', sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
+                white-space: nowrap; /* Forces text to stay on one line */
                 transition: background-color 0.2s ease-in-out;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px; /* Adds clean spacing between icon and text */
             }
             .pdf-btn:hover {
                 background-color: #D6D6D6;
                 color: #444444;
             }
         </style>
-        <button class="pdf-btn" onclick="triggerPrint()">📄 Save Report as PDF</button>
+        <button class="pdf-btn" onclick="triggerPrint()">📥 Save to PDF</button>
         """,
         height=50
     )
