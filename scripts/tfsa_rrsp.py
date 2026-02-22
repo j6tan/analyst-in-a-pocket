@@ -105,8 +105,8 @@ with col1:
     curr_rate = get_marginal_tax_rate(current_income)
     base_retire_rate = get_marginal_tax_rate(base_income)
     
-    st.info(f"**Tax Bracket Analysis:**\n* Marginal Rate (today): **{curr_rate}%**\n* Retirement Tax Rate: **{base_retire_rate}%**")
-
+    # Using '  \n' (two spaces + newline) forces a tight line break without paragraph spacing
+    st.info(f"**Tax Bracket Analysis:** \nMarginal Rate (today): **{curr_rate}%** \nRetirement Tax Rate: **{base_retire_rate}%**")
 with col2:
     st.subheader("📈 The Accumulation")
     invest_amt = cloud_input("Initial Lump Sum ($)", "tfsa_rrsp", "invest_amt", step=1000)
