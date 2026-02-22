@@ -161,6 +161,10 @@ total_hidden_tax = rrsp_income_tax + oas_clawback + gis_clawback
 rrsp_net_spendable = rrsp_withdraw - total_hidden_tax
 tfsa_net_spendable = tfsa_withdraw
 
+# Calculate the Effective Rates to show the user
+effective_tax_rate = (rrsp_income_tax / rrsp_withdraw * 100) if rrsp_withdraw > 0 else 0
+effective_clawback_rate = ((oas_clawback + gis_clawback) / rrsp_withdraw * 100) if rrsp_withdraw > 0 else 0
+
 # The Verdict
 diff = abs(rrsp_net_spendable - tfsa_net_spendable)
 tfsa_glow = "none"
@@ -194,9 +198,12 @@ with c1:
     st.markdown(f"""
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {PRIMARY_GOLD}; box-shadow: {tfsa_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {PRIMARY_GOLD};">TFSA Drawdown</h3>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Gross Annual Withdrawal: <b>${tfsa_withdraw:,.0f}</b></p>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Income Tax Hit: <b>$0</b></p>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">OAS / GIS Clawback: <b>$0</b></p>
+        <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 15px; border-bottom: 1px solid {BORDER_GREY}; padding-bottom: 10px;">
+            Gross Portfolio Built: <b>${tfsa_gross:,.0f}</b>
+        </div>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Gross Withdrawal ({swr:.1f}%): <b>${tfsa_withdraw:,.0f}</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Income Tax Hit (0.0%): <b>$0</b></p>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">OAS / GIS Clawback (0.0%): <b>$0</b></p>
         <h2 style="color: {PRIMARY_GOLD}; margin-top: 15px;">Net Spendable: ${tfsa_net_spendable:,.0f} / yr</h2>
     </div>
     """, unsafe_allow_html=True)
@@ -205,9 +212,12 @@ with c2:
     st.markdown(f"""
     <div style="background-color: {OFF_WHITE}; padding: 20px; border-radius: 10px; border: 2px solid {RRSP_COLOR}; box-shadow: {rrsp_glow}; text-align: center; height: 100%; transition: all 0.3s ease;">
         <h3 style="margin-top:0; color: {RRSP_COLOR};">RRSP Drawdown</h3>
-        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Gross Annual Withdrawal: <b>${rrsp_withdraw:,.0f}</b></p>
-        <p style="color: #d9534f; margin-bottom: 5px;">Income Tax Hit: <b>-${rrsp_income_tax:,.0f}</b></p>
-        <p style="color: #d9534f; margin-bottom: 5px;">OAS / GIS Clawback: <b>-${(oas_clawback + gis_clawback):,.0f}</b></p>
+        <div style="font-size: 0.9em; color: {SLATE_ACCENT}; margin-bottom: 15px; border-bottom: 1px solid {BORDER_GREY}; padding-bottom: 10px;">
+            Gross Portfolio Built: <b>${rrsp_gross:,.0f}</b>
+        </div>
+        <p style="color: {SLATE_ACCENT}; margin-bottom: 5px;">Gross Withdrawal ({swr:.1f}%): <b>${rrsp_withdraw:,.0f}</b></p>
+        <p style="color: #d9534f; margin-bottom: 5px;">Income Tax Hit ({effective_tax_rate:.1f}%): <b>-${rrsp_income_tax:,.0f}</b></p>
+        <p style="color: #d9534f; margin-bottom: 5px;">OAS / GIS Clawback ({effective_clawback_rate:.1f}%): <b>-${(oas_clawback + gis_clawback):,.0f}</b></p>
         <h2 style="color: {RRSP_COLOR}; margin-top: 15px;">Net Spendable: ${rrsp_net_spendable:,.0f} / yr</h2>
     </div>
     """, unsafe_allow_html=True)
