@@ -25,24 +25,33 @@ def inject_global_css():
 
         /* 4. BUTTONS */
         div.stButton > button {
-            background-color: #4D4D4D !important;
-            color: white !important;
             border-radius: 50px !important;
-            padding: 0.6rem 2rem !important;
-            border: none !important;
-            white-space: nowrap !important; /* Stops the box from shrinking */
+            white-space: nowrap !important;
+            border: none !important; /* Kills the faint Streamlit border */
+            box-shadow: none !important;
+            min-height: 42px !important; /* Forces equal height */
         }
-        /* Force Streamlit's internal text tag to be bold and stay on one line */
         div.stButton > button p {
-            font-weight: 600 !important; 
+            font-weight: 600 !important;
             font-size: 14px !important;
-            white-space: nowrap !important; 
+            white-space: nowrap !important;
             margin: 0 !important;
         }
-        div.stButton > button:hover { background-color: #333 !important; }
+        
+        /* Primary Buttons */
+        div.stButton > button[kind="primary"] {
+            background-color: #4D4D4D !important;
+        }
+        div.stButton > button[kind="primary"] p {
+            color: white !important;
+        }
+
+        /* Secondary Buttons (Back to Home) */
         div.stButton > button[kind="secondary"] {
             background-color: #EDEDED !important;
-            color: #444 !important;
+        }
+        div.stButton > button[kind="secondary"] p {
+            color: #444444 !important; /* Matches PDF text exactly */
         }
 
         /* 5. SIDEBAR FIXES */
@@ -145,30 +154,32 @@ def add_pdf_button():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
             
+            /* Kills invisible iframe margins for perfect alignment */
+            body { margin: 0; padding: 0; }
+            
             .pdf-btn {
                 background-color: #EDEDED;
                 color: #444444;
                 border: none;
-                padding: 0.6rem 2rem;
+                height: 42px; /* Matches Streamlit exactly */
                 border-radius: 50px;
                 cursor: pointer;
                 font-size: 14px;
                 font-weight: 600;
                 width: 100%;
                 font-family: 'Inter', sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
-                white-space: nowrap; /* Forces text to stay on one line */
+                white-space: nowrap;
                 transition: background-color 0.2s ease-in-out;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                gap: 8px; /* Adds clean spacing between icon and text */
+                gap: 8px;
             }
             .pdf-btn:hover {
                 background-color: #D6D6D6;
-                color: #444444;
             }
         </style>
         <button class="pdf-btn" onclick="triggerPrint()">📥 Save to PDF</button>
         """,
-        height=50
+        height=42
     )
