@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import math
 import os
+import base64
 import json
 import time
 from style_utils import inject_global_css, show_disclaimer 
@@ -78,8 +79,29 @@ if 'rate' not in sm_data:
     market_rate = intel.get("rates", {}).get("five_year_fixed_uninsured", 4.50)
     sm_data['rate'] = float(market_rate)
 
-# --- 2. TITLE SECTION ---
-st.title("🏡 Mortgage Strategy Calculator")
+# --- 2. INLINE LOGO & TITLE ---
+def get_inline_logo(img_name="logo.png", width=75):
+    # Check root directory first, then fallback to looking one folder up
+    img_path = img_name
+    if not os.path.exists(img_path):
+        img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), img_name)
+        
+    if os.path.exists(img_path):
+        with open(img_path, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" style="width: {width}px; flex-shrink: 0;">'
+    return "<span style='font-size: 50px;'>🔥</span>"
+
+logo_html = get_inline_logo(width=75)
+
+st.markdown(f"""
+    <div style='display: flex; align-items: center; justify-content: flex-start; gap: 15px; margin-top: -20px; margin-bottom: 25px;'>
+        {logo_html}
+        <h1 style='margin: 0 !important; padding: 0 !important; line-height: 1 !important;'>Mortgage Calculator</h1>
+    </div>
+""", unsafe_allow_html=True)
+
+
 st.markdown(f"""
 <div style="background-color: #F8F9FA; padding: 20px 25px; border-radius: 12px; border: 1px solid #DEE2E6; border-left: 8px solid #CEB36F; margin-bottom: 25px;">
     <h3 style="color: #4A4E5A; margin-top: 0; font-size: 1.4em;">⏱️ Strategic Brief: {intro_header}</h3>
