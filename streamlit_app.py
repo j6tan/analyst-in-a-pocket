@@ -67,9 +67,6 @@ duel_label, duel_icon = get_pro_meta("Rental vs Stock", "📉", is_pro)
 rental_label, rental_icon = get_pro_meta("Rental Multi-Tool", "🏢", is_pro)
 land_label, land_icon = get_pro_meta("Land Residual Model", "🏗️", is_pro)
 
-pvi_label = "Debt vs. Equity"
-pvi_icon = "📉"
-
 pages = {
     "Overview": [
         st.Page("home.py", title="Home Dashboard", icon="🏠", default=True),
@@ -81,7 +78,7 @@ pages = {
         st.Page("scripts/affordability.py", title="Affordability Calculator", icon="🤔"),
         st.Page("scripts/simple_mortgage.py", title="Mortgage Calculator", icon="🏠"),
         st.Page("scripts/sales_proceeds.py", title="Seller Proceeds", icon="💰"),
-        st.Page("scripts/pay_vs_invest.py", title=pvi_label, icon=pvi_icon), 
+        st.Page("scripts/pay_vs_invest.py", title="Pay Off or Invest", icon="📉"), 
     ],
     "Advanced Wealth Strategy": [
         st.Page("scripts/mortgage_scenario.py", title=mort_label, icon=mort_icon),
@@ -142,5 +139,6 @@ if pg.title in pro_titles and not is_pro:
         st.markdown(card_html, unsafe_allow_html=True)
 
 pg.run()
+
 
 
