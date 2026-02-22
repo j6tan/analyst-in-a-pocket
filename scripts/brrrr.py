@@ -145,16 +145,21 @@ st.subheader("📋 Deal Analysis & Recommendations")
 # Define a softer "Warning" color (a sophisticated Amber/Orange)
 WARNING_AMBER = "#D97706" 
 
+# Calculate DSCR for the recommendation text
+# DSCR = Net Operating Income / Debt Service
+noi_annual = (monthly_rent - opex_buffer) * 12
+debt_service_annual = monthly_piti * 12
+dscr = noi_annual / debt_service_annual if debt_service_annual > 0 else 0
+
 if monthly_net < 0:
-    # We use a standard container or a custom div instead of st.error
     st.markdown(f"""
     <div style="background-color: {WARNING_AMBER}15; padding: 20px; border-radius: 10px; border: 1px solid {WARNING_AMBER};">
         <h4 style="color: {WARNING_AMBER}; margin-top: 0;">⚠️ Cash Flow Sensitivity</h4>
         <p style="color: {SLATE_ACCENT};">This deal is currently showing a monthly deficit of <b>${abs(monthly_net):,.0f}</b>. Here is why this matters for your portfolio growth:</p>
         
         <ul style="color: {SLATE_ACCENT}; line-height: 1.6;">
-            <li><b>Borrowing Power:</b> Lenders look for a <b>DSCR (Debt Service Coverage Ratio)</b> of ~1.2x. A negative cash flow reduces your "Global Cash Flow" and can stop you from getting your next loan.</li>
-            <li><b>The "Repeat" Step:</b> Funding this loss from your personal income slows down your ability to save for the next acquisition.</li>
+            <li><b>Borrowing Power:</b> Your current <b>DSCR is {dscr:.2f}</b>. Lenders typically want to see 1.20 or higher. This negative cash flow can "handcuff" your ability to get your next loan.</li>
+            <li><b>The "Repeat" Step:</b> Funding this loss from your personal income slows down your capital accumulation for Deal #2.</li>
         </ul>
         
         <hr style="border: 0; border-top: 1px solid {WARNING_AMBER}50; margin: 15px 0;">
@@ -162,17 +167,17 @@ if monthly_net < 0:
         <h4 style="color: {WARNING_AMBER};">Ways to Optimize this Deal:</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px;">
             <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                <span style="font-size: 1.2em;">📉</span><br><b>Adjust LTV</b><br><span style="font-size: 0.85em;">Try a {refi_ltv*100 - 5:.0f}% Refi to lower the payment.</span>
+                <span style="font-size: 1.2em;">📉</span><br><b style="color: {CHARCOAL};">Adjust LTV</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Try a {refi_ltv*100 - 5:.0f}% Refi to lower the payment.</span>
             </div>
             <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                <span style="font-size: 1.2em;">🛠️</span><br><b>Lower OpEx</b><br><span style="font-size: 0.85em;">Self-manage or shop insurance for better rates.</span>
+                <span style="font-size: 1.2em;">🛠️</span><br><b style="color: {CHARCOAL};">Lower OpEx</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Self-manage or shop insurance for better rates.</span>
             </div>
             <div style="background: white; padding: 10px; border-radius: 5px; border: 1px solid {WARNING_AMBER}30; text-align: center;">
-                <span style="font-size: 1.2em;">💰</span><br><b>Value-Add</b><br><span style="font-size: 0.85em;">Improve the unit to command a higher market rent.</span>
+                <span style="font-size: 1.2em;">💰</span><br><b style="color: {CHARCOAL};">Value-Add</b><br><span style="font-size: 0.85em; color: {SLATE_ACCENT};">Improve the unit to command a higher market rent.</span>
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    """, unsafe_allow_html=True) # <--- THIS IS THE MAGIC KEY
 
 elif is_infinite:
     st.success("✨ **The Perfect BRRRR:** You've recovered your initial capital. Focus on maintaining high occupancy while looking for your next property.")
