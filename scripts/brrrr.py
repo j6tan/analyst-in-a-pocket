@@ -239,9 +239,7 @@ if arv > 0:
             </div>
         </div>
         """, unsafe_allow_html=True)
-
 show_disclaimer()
-
 # --- FOOTER ---
 st.markdown("""
     <div style="text-align: center; color: #adb5bd; font-size: 0.85em; margin-top: 50px; padding-top: 20px; border-top: 1px solid #dee2e6;">
