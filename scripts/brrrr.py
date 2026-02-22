@@ -164,10 +164,10 @@ if arv > 0:
         grade_color = "#d9534f" # Red
         grade_desc = "You are leaving cash in the deal, you lack equity, and it loses money every month. Walk away or drastically renegotiate."
 
-    # Display Verdict Box
+    # Display Verdict Box (Font size bumped up by 5% to 1.58em)
     st.markdown(f"""
     <div style="background-color: {grade_color}10; padding: 25px; border-radius: 12px; border: 2px solid {grade_color}; margin-bottom: 10px;">
-        <h2 style="color: {grade_color}; margin-top: 0; font-weight: 800; font-size: 1.5em;">{grade_title}</h2>
+        <h2 style="color: {grade_color}; margin-top: 0; font-weight: 800; font-size: 1.58em;">{grade_title}</h2>
         <p style="color: {SLATE_ACCENT}; font-size: 1.15em; line-height: 1.5; margin-bottom: 0;">{grade_desc}</p>
     </div>
     """, unsafe_allow_html=True)
